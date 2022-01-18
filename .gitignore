@@ -131,3 +131,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+api.py
+training2017.zip
+physionet.org/
+physionet.org
+training2017
+training2017/
