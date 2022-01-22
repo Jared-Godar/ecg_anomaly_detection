@@ -7,8 +7,29 @@ from os import listdir
 import wfdb  # PyPi package for loading ecg and annotations
 from sklearn.model_selection import train_test_split
 
+########## SET PARAMETERS   ##############
+
+num_sec = 3
+fs = 360
+
+data_path = '/Users/jaredgodar/codeup-data-science/ecg_anomaly_detection/physionet.org/files/mitdb/1.0.0/'
+
+# list of patients
+pts = ['100', '101', '102', '103', '104', '105', '106', '107',
+       '108', '109', '111', '112', '113', '114', '115', '116',
+       '117', '118', '119', '121', '122', '123', '124', '200',
+       '201', '202', '203', '205', '207', '208', '209', '210',
+       '212', '213', '214', '215', '217', '219', '220', '221',
+       '222', '223', '228', '230', '231', '232', '233', '234']
+
+# list of nonbeat and abnormal annotations
+nonbeat = ['[', '!', ']', 'x', '(', ')', 'p', 't', 'u', '`',
+           '\'', '^', '|', '~', '+', 's', 'T', '*', 'D', '=', '"', '@', 'Q', '?']
+abnormal = ['L', 'R', 'V', '/', 'A', 'f',
+            'F', 'j', 'a', 'E', 'J', 'e', 'S']
 
 #################LOAD FILE FUNCTION##############
+
 
 def load_ecg(file):
     # load the ecg
@@ -48,7 +69,7 @@ def make_dataset(pts, num_sec, fs, abnormal):
         Y_all = binary is abnormal (nbeats, 1)
         sym_all = beat annotation symbol (nbeats,1)
     '''
-
+    data_path = '/Users/jaredgodar/codeup-data-science/ecg_anomaly_detection/physionet.org/files/mitdb/1.0.0/'
     # initialize numpy arrays
     num_cols = 2*num_sec * fs
     X_all = np.zeros((1, num_cols))
@@ -120,6 +141,23 @@ def build_XY(p_signal, df_ann, num_cols, abnormal):
     Y = Y[:max_row, :]
     return X, Y, sym
 
+############## TRAIN VALIDATE TEST##########
+
+
+def split_my_data(X_all, Y_all, sym_all, pct=0.10):
+    '''
+    This splits a dataframe into train, validate, and test sets. 
+    df = dataframe to split
+    pct = size of the test set, 1/2 of size of the validate set
+    Returns three dataframes (train, validate, test)
+    '''
+    X_train_validate, X_test, Y_train_validate, Y_test, sym_train_validate, sym_test = train_test_split(
+        X_all, Y_all, sym_all, test_size=pct, random_state=123)
+    X_train, X_validate, Y_train, Y_validate, sym_train, sym_validate = train_test_split(
+        X_train_validate, Y_train_validate, sym_train_validate, test_size=pct*2, random_state=123)
+    return X_train, X_validate, X_test, Y_train, Y_validate, Y_test, sym_train, sym_validate, sym_test
+
+
 ##################### WRANGLE FUNCTION ############
 
 
@@ -175,7 +213,15 @@ def wrangle():
     X_all, Y_all, sym_all = make_dataset(pts, num_sec, fs, abnormal)
 
     # Create dataframes
-    X_all_df = pd.DataFrame(X_all)
-    Y_all_df = pd.DataFrame(Y_all)
-    sym_all_df = pd.DataFrame(sym_all)
+    X_all = pd.DataFrame(X_all)
+    Y_all = pd.DataFrame(Y_all)
+    sym_all = pd.DataFrame(sym_all)
     print('Dataframes created...')
+
+    print('Splitting train, validate, test...')
+    print('This also takes a while...')
+
+    X_train, X_validate, X_test, Y_train, Y_validate, Y_test, sym_train, sym_validate, sym_test = split_my_data(
+        X_all, Y_all, sym_all)
+    print('All done.')
+    return X_train, X_validate, X_test, Y_train, Y_validate, Y_test, sym_train, sym_validate, sym_test
