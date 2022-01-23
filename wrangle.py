@@ -224,4 +224,4 @@ def wrangle():
     X_train, X_validate, X_test, Y_train, Y_validate, Y_test, sym_train, sym_validate, sym_test = split_my_data(
         X_all, Y_all, sym_all)
     print('All done.')
-    return X_train, X_validate, X_test, Y_train, Y_validate, Y_test, sym_train, sym_validate, sym_test
+    return X_train, X_validate, X_test, Y_train, Y_validate, Y_test, sym_train, sym_validate, sym_test, p_signal, atr_sym, atr_sample, ab_index
