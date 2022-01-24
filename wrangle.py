@@ -7,6 +7,8 @@ from os import listdir
 import wfdb  # PyPi package for loading ecg and annotations
 from sklearn.model_selection import train_test_split
 
+# Sample code for working with this dataset found at https://towardsdatascience.com/detecting-heart-arrhythmias-with-deep-learning-in-keras-with-dense-cnn-and-lstm-add337d9e41f
+
 ########## SET PARAMETERS   ##############
 
 num_sec = 3
