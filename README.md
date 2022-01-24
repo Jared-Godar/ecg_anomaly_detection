@@ -37,7 +37,7 @@ While many different features of the ECGs were annotated, I disregarded annotati
 - What do normal heartbeats looks like?
 - What do abnormal heartbeats look like?
 
-# Data Dictionary
+### Data Dictionary
 
 The data are arranged with individual observations falling into rows not columns. The values in each cell represent the ECG signal intensity at that time point and each column is a signal reading sampled at 360 Hz. The 2160 columns represent a 6-second window of ECG data.
 
