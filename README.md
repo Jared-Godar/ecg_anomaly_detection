@@ -52,6 +52,7 @@ sym | object | Code representing specific type of abnormality
 - [x] Read this README.md
 - [ ] Download the data from https://physionet.org/static/published-projects/mitdb/mit-bih-arrhythmia-database-1.0.0.zip
 - [ ] Download  `wrangle.py` into your working directory.
+- [ ] Ensure you have a local copy of wfdb. (https://www.physionet.org/physiotools/wag/install.htm) `pip install wfdb` should work.
 - [ ] Ensure that the `data_path` in the `wrangle.py` file corresponds to the location you downloaded the data.
 - [ ] Run the `report.ipynb` workbook.
 
