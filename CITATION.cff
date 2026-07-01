@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below and cite the source dataset separately."
+title: "ECG Beat-Window Classification"
+type: software
+authors:
+  - family-names: Godar
+    given-names: Jared
+repository-code: "https://github.com/Jared-Godar/ecg_anomaly_detection"
+license: MIT
+date-released: 2022-01-18
+abstract: >-
+  A historical educational ECG beat-window classification project under
+  incremental modernization as a reproducible data pipeline case study.
+keywords:
+  - data engineering
+  - machine learning
+  - reproducibility
+  - ECG
+  - anomaly classification
