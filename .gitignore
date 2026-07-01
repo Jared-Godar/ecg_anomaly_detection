@@ -1,16 +1,37 @@
-# Byte-compiled / optimized / DLL files
+# macOS and operating-system metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# Editors and local workspaces
+.vscode/
+.idea/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+*~
+*.swp
+*.swo
+
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
 *$py.class
-
-env.py
-
-*.csv
-
-# C extensions
 *.so
+*.dylib
 
-# Distribution / packaging
+# Python environments and local environment configuration
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+env/
+ENV/
+conda-env/
+
+# Packaging and build output
 .Python
 build/
 develop-eggs/
@@ -24,120 +45,104 @@ parts/
 sdist/
 var/
 wheels/
-pip-wheel-metadata/
 share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
+pip-wheel-metadata/
+__pypackages__/
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
+# Test, coverage, lint, and type-check caches
+.cache/
 .coverage
 .coverage.*
-.cache
-nosetests.xml
 coverage.xml
-*.cover
-*.py,cover
+htmlcov/
 .hypothesis/
+.mypy_cache/
+.nox/
 .pytest_cache/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
+.pyre/
+.ruff_cache/
+.tox/
+dmypy.json
+.dmypy.json
+junit.xml
+nosetests.xml
+test-results/
 target/
 
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
+# Jupyter and IPython
+.ipynb_checkpoints/
+*.nbconvert.ipynb
+.jupyter/
 profile_default/
 ipython_config.py
 
-# pyenv
-.python-version
+# Generated documentation sites
+/site/
+docs/_build/
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
+# Logs, temporary files, and local runtime state
+*.log
+*.tmp
+*.temp
+*.bak
+*.pid
+*.seed
+tmp/
+temp/
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
-__pypackages__/
+# Secrets and machine-local configuration
+env.py
+local_settings.py
+secrets/
+credentials/
 
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
+# Raw and derived data. Keep only directory contracts in Git.
+/data/raw/**
+!/data/raw/.gitkeep
+/data/external/**
+!/data/external/.gitkeep
+/data/interim/**
+!/data/interim/.gitkeep
+/data/processed/**
+!/data/processed/.gitkeep
 
-# SageMath parsed files
-*.sage.py
+# Historical local dataset locations
+/physionet.org/
+/training2017/
+/training2017.zip
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# Generated artifacts and reports
+/artifacts/**
+!/artifacts/.gitkeep
+/reports/figures/**
+!/reports/figures/.gitkeep
+*.joblib
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.keras
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.tflite
 
-# Spyder project settings
-.spyderproject
-.spyproject
+# Local tabular exports outside the managed data directories
+/*.csv
+/*.parquet
+/*.feather
+/*.arrow
 
-# Rope project settings
-.ropeproject
+# Tool-specific local output
+.dvc/cache/
+.mlflow/
+mlruns/
+wandb/
 
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-api.py
-training2017.zip
-physionet.org/
-physionet.org
-training2017
-training2017/
-
-# Personal editor workspace
-ecg_anomaly_detection.code-workspace
+# Legacy project-local files that are not part of the supported workflow
+/api.py

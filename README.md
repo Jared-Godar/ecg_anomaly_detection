@@ -23,7 +23,7 @@ The repository currently contains the original notebook-oriented experiment. Its
 | Quality controls | Assertions only | Schema, signal, split, and metric tests |
 | Automation | None | Linting, tests, and notebook checks in CI |
 
-See the [modernization roadmap](docs/modernization-roadmap.md) for the planned phases.
+See the [repository architecture](docs/architecture.md) for directory boundaries and the [modernization roadmap](docs/modernization-roadmap.md) for the planned phases.
 
 ## Historical workflow
 
@@ -63,6 +63,14 @@ Required citations and data-handling notes are in [data provenance](docs/data-pr
 
 | Path | Purpose | Status |
 |---|---|---|
+| `src/ecg_anomaly_detection/` | Modern installable Python package | Scaffolded; implementation pending |
+| `configs/` | Versioned, non-secret pipeline configuration | Scaffolded |
+| `data/` | Ignored raw, external, interim, and processed data stages | Scaffolded with documented contracts |
+| `notebooks/` | Future curated notebooks and historical archive | Scaffolded; legacy notebooks not yet moved |
+| `tests/` | Unit, integration, and synthetic-fixture boundaries | Scaffolded; tests pending |
+| `scripts/` | Thin operational entry points | Scaffolded |
+| `artifacts/` | Ignored generated models and run outputs | Scaffolded |
+| `reports/figures/` | Ignored reproducible figure output | Scaffolded |
 | `report.ipynb` | Original end-to-end narrative and saved results | Historical primary notebook |
 | `wrangle.py` | Original acquisition, windowing, and split functions | Legacy code; hard-coded paths |
 | `explore*.ipynb` | Exploration and model experiments | Historical working notebooks |
@@ -70,7 +78,7 @@ Required citations and data-handling notes are in [data provenance](docs/data-pr
 | `eeg_explore.ipynb` | Alternate dataset experiment | Historical; name and scope are misleading |
 | `wrangle.ipynb` | Incomplete wrangling scratchpad | Historical |
 | `images/` | Presentation and research imagery | Attribution audit in progress |
-| `docs/` | Modernization, provenance, and result documentation | Active |
+| `docs/` | Architecture, modernization, provenance, and result documentation | Active |
 
 No source data, generated feature tables, or trained model artifacts are tracked in Git.
 
