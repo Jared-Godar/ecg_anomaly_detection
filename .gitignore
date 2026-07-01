@@ -143,6 +143,7 @@ credentials/
 .mlflow/
 mlruns/
 wandb/
+.pre-commit-cache/
 
 # Legacy project-local files that are not part of the supported workflow
 /api.py
