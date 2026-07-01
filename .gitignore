@@ -138,3 +138,6 @@ physionet.org/
 physionet.org
 training2017
 training2017/
+
+# Personal editor workspace
+ecg_anomaly_detection.code-workspace
