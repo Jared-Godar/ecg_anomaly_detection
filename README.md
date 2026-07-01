@@ -1,85 +1,106 @@
-# ECG Anomaly **Detection**
+# ECG Beat-Window Classification
 
-![ecg](images/ecg.jpeg)
+> Historical machine-learning project under incremental modernization as a reproducible data pipeline case study.
 
-This repository contains the files for Jared Godar's Codeup project on anomaly detection in ECG data.
+This repository preserves a 2022 educational project that used the public MIT-BIH Arrhythmia Database to classify six-second ECG windows as normal or abnormal. The modernization focuses on reproducible data workflows, environment management, validation, testing, and responsible communication of model results.
 
----
+## Important use limitation
 
-## About the project
+This project is for research, education, and software-engineering demonstration only. It is not medical software, has not been clinically validated, and must not be used for diagnosis, monitoring, treatment, or patient-care decisions.
 
-The improvement in availability and reduction in cost of a variety of sensors have lead to an increased need for automatic signal processing and analysis of the increased data generated.
+The labels are simplified reference-annotation classes from a historical dataset. A model output from this project does not establish whether a person has a medical condition.
 
-Real-world anomaly detection for time series is still a challenging task. This is especially true for periodic or quasi-periodic time series since automated approaches have to learn long-term correlations before they are able to detect anomalies.
+## Project status
 
-This project will look at detecting anomalies in electrocardiogram (ECG) signals.
+The repository currently contains the original notebook-oriented experiment. Its code, outputs, and reported metrics are retained for historical context while the workflow is modernized incrementally.
 
-Until recently, most ECGs were performed in a clinical setting. They were ordered by a healthcare professional and one was on hand to analyze and interpret the results.
+| Area | Current state | Modernization target |
+|---|---|---|
+| Data access | Manual download and local paths | Configured, versioned acquisition with integrity checks |
+| Environment | Undocumented Python 3.8-era environment | Locked, reproducible project environment |
+| Transformation | Notebook and `wrangle.py` logic | Tested package modules and command-line workflow |
+| Evaluation | Random beat-window split | Patient/record-grouped validation |
+| Quality controls | Assertions only | Schema, signal, split, and metric tests |
+| Automation | None | Linting, tests, and notebook checks in CI |
 
-Now, many consumer wearable devices are able to measure ECGs outside of a clinical setting. It is important to be able to quickly and accurately determine abnormalities in these measurements in an automated manner.
+See the [modernization roadmap](docs/modernization-roadmap.md) for the planned phases.
 
-### Project goals
+## Historical workflow
 
-The goal of this project is to detect anomalies in ECG measurements.
+The original experiment:
 
-It is necessary to detect these anomalies in an automated way in order to maximize the benefit of increased access to ECG measurements.
+1. downloaded MIT-BIH waveform and annotation files;
+2. read the data with the WFDB Python package;
+3. selected the first signal channel;
+4. extracted six-second windows centered on annotated beats;
+5. mapped selected annotations into normal and abnormal classes;
+6. randomly divided beat windows into training, validation, and test sets;
+7. trained and tuned random-forest classifiers; and
+8. presented exploration and results in `report.ipynb`.
 
-### Project Description
+The original code depends on absolute local paths and an unrecorded environment, so a clean checkout is not yet reproducible. Reproducible commands will be added in the environment phase rather than suggesting that the legacy workflow currently runs unchanged.
 
-This project provides the opportunity to create and evaluate multiple predictive models as well as implement other essential parts of the data science pipeline.
+## Historical result and its limitation
 
-I have pulled ECG data from an online repository (https://physionet.org/content/mitdb/1.0.0/) and used this data to generate 6-second time windows centered on individual heartbeats. These data were split into train, validate, and test sets. Many random forrest models were created and evaluated using a variety of testing metrics, with a focus on sensitivity as this focuses on clinically-relevant false negative predictions. That is to say, it is important that our model not tell you everything is fine when you actually have a heart condition.
+The 2022 notebook reports 95.3% test accuracy, 85.5% recall for the combined abnormal class, and a 0.2% false-positive rate. These values describe the saved output of the original experiment; they are not validated portfolio benchmarks.
 
-While many different features of the ECGs were annotated, I disregarded annotations that did not pertrain to the actual features of the heartbeat and I added a boolean column which contains a 0 for normal beats and a 1 for abnormal beats, regardless of the typr of abnormality.
+Most importantly, the original split assigns individual beat windows randomly. Windows from the same record—and potentially overlapping windows—can therefore occur in training and test data. This can inflate performance and does not measure generalization to unseen patients. The modernized pipeline will use record-grouped evaluation before publishing a new benchmark.
 
-### Initial questions?
+One historical notebook cell also displays a validation accuracy of 1.00 because it mistakenly scores predictions against themselves. The separately calculated validation accuracy for that model is 0.845. Details are recorded in [historical results](docs/historical-results.md).
 
-- What do normal heartbeats looks like?
-- What do abnormal heartbeats look like?
+## Dataset
 
-### Data Dictionary
+The project uses the [MIT-BIH Arrhythmia Database v1.0.0](https://physionet.org/content/mitdb/1.0.0/) hosted by PhysioNet. It contains 48 half-hour, two-channel ambulatory ECG recordings from 47 subjects, sampled at 360 Hz, with reference beat annotations.
 
-The data are arranged with individual observations falling into rows not columns. The values in each cell represent the ECG signal intensity at that time point and each column is a signal reading sampled at 360 Hz. The 2160 columns represent a 6-second window of ECG data.
+- Dataset DOI: [10.13026/C2F305](https://doi.org/10.13026/C2F305)
+- Upstream data license: [Open Data Commons Attribution License v1.0](https://opendatacommons.org/licenses/by/1-0/)
+- Access: open, subject to the upstream license and attribution requirements
+- Repository policy: source and derived data are not committed
 
-| Feature                    | Datatype               | Description                                                           |
-|:---------------------------|:-----------------------|:----------------------------------------------------------------------|
-abnormal                  |          bool       | 0 for normal heartbeat, 1 for abnormal heartbeats 
-sym | object | Code representing specific type of abnormality
+Required citations and data-handling notes are in [data provenance](docs/data-provenance.md). The repository's MIT license applies to project code and documentation; it does not replace the dataset's license.
 
+## Repository map
 
-### Steps to Reproduce
+| Path | Purpose | Status |
+|---|---|---|
+| `report.ipynb` | Original end-to-end narrative and saved results | Historical primary notebook |
+| `wrangle.py` | Original acquisition, windowing, and split functions | Legacy code; hard-coded paths |
+| `explore*.ipynb` | Exploration and model experiments | Historical working notebooks |
+| `model.ipynb` | Random-forest experiments | Historical working notebook |
+| `eeg_explore.ipynb` | Alternate dataset experiment | Historical; name and scope are misleading |
+| `wrangle.ipynb` | Incomplete wrangling scratchpad | Historical |
+| `images/` | Presentation and research imagery | Attribution audit in progress |
+| `docs/` | Modernization, provenance, and result documentation | Active |
 
-- [x] Read this README.md
-- [ ] Download the data from https://physionet.org/static/published-projects/mitdb/mit-bih-arrhythmia-database-1.0.0.zip
-- [ ] Download  `wrangle.py` into your working directory.
-- [ ] Ensure you have a local copy of wfdb. (https://www.physionet.org/physiotools/wag/install.htm) `pip install wfdb` should work.
-- [ ] Ensure that the `data_path` in the `wrangle.py` file corresponds to the location you downloaded the data.
-- [ ] Run the `report.ipynb` workbook.
+No source data, generated feature tables, or trained model artifacts are tracked in Git.
 
----
+## Known limitations
 
-### The Plan
+- This is a small historical dataset and is not representative of modern deployment populations.
+- The binary target collapses heterogeneous annotations and excludes others.
+- The first signal channel is used without a channel-selection analysis.
+- The original split is not patient/record-grouped or stratified.
+- Adjacent windows may overlap.
+- The original environment and exact dependency versions were not captured.
+- There are no automated tests or CI checks yet.
+- Some exploratory notebooks contain saved errors and duplicated code.
+- Third-party image and tutorial attribution is being audited; see [NOTICE.md](NOTICE.md).
 
-1. **Acquire, clean, prepare, and split the data.**
-    - This was the third dataset I attempted working with. The first had already manipulated the raw data more than I wanted, the second was thousands of individual matlab files, and this dataset seemed to have everything I needed in an accessible format.
-2. **Exploratory data analysis:**
-   - There weren't a lot of 'features' for this data for exploration
-   - The data were primally time-series signal intensity over time for the electrical signature of heartbeats along with a data labeling abnormalities.
-   - I can plot and look at what normal beats look like and what abnormal beats look like.
-3. **Model generation, assessment, and optimization:**
-   - I will be using a variety of random forest models
-   - Tune hyperparameters with a look at acccuracy and specificity as metrics to optimize.
-   - Calculate evaluation metrics to assess the quality of models
-   - Perform evaluation on out-of-sample validate data to look for overfitting
-   - Select highest performing model
-   - Test that model with the previously unused and unseen test data once and only once.
-  4. **Next Steps/Recommendations:**
-    - Continue tuning hypeparameters
-    - Use neural networks for predictions
-      - Autoencoders
-      - Long-Short-Term-Memory (LSTM) Recurring Neural Networks (RNNs)
-    - Build model out into production application that can take in ECG data and make predictions.
+## Modernization principles
 
-# Key Findings
+- Preserve the original work and label it clearly.
+- Separate immutable raw data, derived data, and generated artifacts.
+- Make lineage and configuration explicit.
+- Validate data contracts and split boundaries.
+- Prefer patient/record-level evaluation.
+- Report limitations alongside metrics.
+- Avoid clinical or diagnostic claims.
+- Add cloud-oriented design only where it is implemented or clearly presented as a future extension.
 
-I was able to predict abnormalities with over 95% accuracy (nearly a 40% improvement from baseline) with a false positive rate of 0.2% and false negative rate of 14.5%. Most of the false negatives were from either atrial premature beats or right bundle block beats, so further refinement and optimization will focus on those areas.
+## License
+
+Project code and original documentation are available under the [MIT License](LICENSE). Dataset files and third-party materials retain their own licenses and attribution requirements.
+
+## Citation
+
+If referencing this repository, use the metadata in [CITATION.cff](CITATION.cff). If using the dataset, cite both MIT-BIH and PhysioNet as described in [data provenance](docs/data-provenance.md).
