@@ -2,6 +2,9 @@
 
 This directory is reserved for curated notebooks that call the supported Python package rather than duplicate pipeline behavior.
 
+No curated notebook is implemented yet. The directory contract is documented now so future
+notebooks remain presentation and analysis layers rather than becoming a second pipeline.
+
 The original notebooks are preserved in [`archive/original_2022/`](../archive/original_2022/README.md). They remain available as historical reference material but are not part of the supported modern workflow.
 
 Curated notebooks should:

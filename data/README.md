@@ -11,4 +11,10 @@ This directory defines local data stages; it does not contain source or derived 
 
 The contents of all four directories are ignored except for `.gitkeep` placeholders. Do not place credentials, identifying information, or manually edited source files here.
 
+Pipeline stages must never overwrite raw inputs. Derived outputs should be replaceable from source
+files, versioned configuration, and a recorded code revision. When acquisition is implemented, raw
+files must be accompanied by a local manifest containing the upstream version, retrieval timestamp,
+file inventory, and checksums.
+
 See [data provenance](../docs/data-provenance.md) for the authoritative source, licensing, attribution, and privacy constraints.
+See the [proposed pipeline design](../docs/pipeline-design.md) for lineage and validation contracts.

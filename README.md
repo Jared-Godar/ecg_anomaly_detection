@@ -12,7 +12,18 @@ The labels are simplified reference-annotation classes from a historical dataset
 
 ## Project status
 
-The repository currently contains the original notebook-oriented experiment. Its code, outputs, and reported metrics are retained for historical context while the workflow is modernized incrementally.
+The repository preserves the original notebook-oriented experiment and now provides a modern
+package scaffold, locked Python environment, automated quality gates, and explicit data-directory
+contracts. Supported data processing and model training have not yet been implemented.
+
+## What this case study demonstrates
+
+- incremental modernization without erasing the historical record;
+- reproducible Python environment and package management with `uv`;
+- separation of source data, derived data, code, notebooks, and generated artifacts;
+- automated linting, security scanning, dependency maintenance, and tests;
+- explicit provenance, licensing, lineage, and responsible-use documentation; and
+- an evaluation plan designed around record-grouped splits rather than random beat-window leakage.
 
 | Area | Current state | Modernization target |
 |---|---|---|
@@ -25,7 +36,8 @@ The repository currently contains the original notebook-oriented experiment. Its
 
 See the [repository architecture](docs/architecture.md) for directory boundaries and the [modernization roadmap](docs/modernization-roadmap.md) for the planned phases.
 
-Contributor setup and automated quality checks are documented in the [development workflow](docs/development.md).
+Start with the [documentation guide](docs/README.md). Contributor setup and automated quality
+checks are documented in the [development workflow](docs/development.md).
 
 ## Quick start
 
@@ -53,7 +65,9 @@ The original experiment:
 7. trained and tuned random-forest classifiers; and
 8. presented exploration and results in [`report.ipynb`](archive/original_2022/report.ipynb).
 
-The original code depends on absolute local paths and an unrecorded environment, so a clean checkout is not yet reproducible. Reproducible commands will be added in the environment phase rather than suggesting that the legacy workflow currently runs unchanged.
+The original code depends on absolute local paths and an unrecorded environment. The modern package
+environment is reproducible, but the archived workflow is not supported and is not expected to run
+unchanged from a clean checkout.
 
 ## Historical result and its limitation
 
@@ -78,16 +92,17 @@ Required citations and data-handling notes are in [data provenance](docs/data-pr
 
 | Path | Purpose | Status |
 |---|---|---|
-| `src/ecg_anomaly_detection/` | Modern installable Python package | Scaffolded; implementation pending |
+| `src/ecg_anomaly_detection/` | Modern installable Python package | Package boundary implemented; pipeline modules pending |
 | `configs/` | Versioned, non-secret pipeline configuration | Scaffolded |
 | `data/` | Ignored raw, external, interim, and processed data stages | Scaffolded with documented contracts |
 | `notebooks/` | Future curated notebooks | Scaffolded; curated notebooks pending |
-| `tests/` | Unit, integration, and synthetic-fixture boundaries | Scaffolded; tests pending |
+| `tests/` | Unit, integration, and synthetic-fixture boundaries | Package smoke test implemented; pipeline tests pending |
 | `scripts/` | Thin operational entry points | Scaffolded |
 | `artifacts/` | Ignored generated models and run outputs | Scaffolded |
 | `reports/figures/` | Ignored reproducible figure output | Scaffolded |
 | `archive/original_2022/` | Original notebooks, wrangling code, and presentation images | Preserved; unsupported historical reference |
 | `docs/` | Architecture, modernization, provenance, and result documentation | Active |
+| `pyproject.toml`, `uv.lock` | Package metadata and exact dependency resolution | Implemented |
 
 No source data, generated feature tables, or trained model artifacts are tracked in Git.
 
@@ -115,6 +130,13 @@ No source data, generated feature tables, or trained model artifacts are tracked
 - Avoid clinical or diagnostic claims.
 - Add cloud-oriented design only where it is implemented or clearly presented as a future extension.
 
+## Current next step
+
+The next implementation slice is configuration-driven dataset access with file-inventory and
+checksum validation. It will operate against ignored local data, retain upstream identifiers, and
+add synthetic or metadata-only tests before signal transformations are introduced. The target stage
+contracts are documented in the [proposed pipeline design](docs/pipeline-design.md).
+
 ## License
 
 Project code and original documentation are available under the [MIT License](LICENSE). Dataset files and third-party materials retain their own licenses and attribution requirements.
@@ -122,3 +144,8 @@ Project code and original documentation are available under the [MIT License](LI
 ## Citation
 
 If referencing this repository, use the metadata in [CITATION.cff](CITATION.cff). If using the dataset, cite both MIT-BIH and PhysioNet as described in [data provenance](docs/data-provenance.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the Fish-compatible local workflow, data-safety rules,
+validation commands, and pull request expectations.
