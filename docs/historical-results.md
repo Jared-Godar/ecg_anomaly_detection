@@ -6,7 +6,7 @@ This page records the outputs and known evaluation limitations of the original 2
 
 ## Saved test output
 
-The final random forest in `report.ipynb` uses a maximum depth of 10 and a minimum leaf size of 3. Its saved test confusion matrix is:
+The final random forest in [`report.ipynb`](../archive/original_2022/report.ipynb) uses a maximum depth of 10 and a minimum leaf size of 3. Its saved test confusion matrix is:
 
 | | Predicted normal | Predicted abnormal |
 |---|---:|---:|

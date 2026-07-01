@@ -12,13 +12,13 @@ The project uses third-party Python packages under their respective licenses. A 
 
 ## Historical tutorial influence
 
-`wrangle.py` identifies the Towards Data Science article “Detecting Heart Arrhythmias with Deep Learning in Keras” as sample code used while developing the original dataset workflow. The source file retains the original article URL.
+`archive/original_2022/wrangle.py` identifies the Towards Data Science article “Detecting Heart Arrhythmias with Deep Learning in Keras” as sample code used while developing the original dataset workflow. The source file retains the original article URL.
 
 The precise extent of adaptation has not yet been audited. That audit should occur before the pipeline refactor, with attribution retained where required.
 
 ## Images and notebook research material
 
-The `images/` directory and historical notebooks contain diagrams, photographs, and background material assembled for the original educational presentation. Their authorship and reuse terms are not consistently recorded.
+The `archive/original_2022/images/` directory and historical notebooks contain diagrams, photographs, and background material assembled for the original educational presentation. Their authorship and reuse terms are not consistently recorded.
 
 Until the attribution audit is complete:
 
