@@ -4,19 +4,38 @@
 
 - macOS or Linux
 - Git
-- Python
 - [uv](https://docs.astral.sh/uv/)
 
-The project environment will be defined in a later modernization phase. The quality tooling is
-isolated from the project runtime and can be installed now.
+The repository pins Python 3.12.13 for development in `.python-version`. `uv` installs the requested
+Python version when it is not already available and resolves the exact environment from `uv.lock`.
+
+## Create the project environment
+
+From the repository root, create or update the locked environment:
+
+```fish
+uv sync --locked --dev
+```
+
+Run commands through `uv` so they consistently use the project environment:
+
+```fish
+uv run python -c "import ecg_anomaly_detection; print(ecg_anomaly_detection.__doc__)"
+uv run pytest
+```
+
+Direct activation is optional. When an interactive environment is useful in Fish:
+
+```fish
+source .venv/bin/activate.fish
+```
 
 ## Install commit hooks
 
-From the repository root, install the pinned pre-commit version and its hooks:
+After syncing the project environment, install its Git hooks:
 
 ```fish
-uv tool install pre-commit==4.6.0
-pre-commit install --install-hooks
+uv run pre-commit install --install-hooks
 ```
 
 The hook runs automatically before each commit. Commits to `main` are blocked locally so changes
@@ -27,7 +46,7 @@ go through a review branch and pull request.
 Run the same file-level checks used in CI:
 
 ```fish
-pre-commit run --all-files
+uv run pre-commit run --all-files
 ```
 
 The checks cover:
@@ -46,9 +65,9 @@ historical record is not rewritten. A separate CI job scans the complete Git his
 
 ## Pull request checks
 
-GitHub Actions runs all repository checks for every pull request and every push to `main`. Third-
-party Actions are pinned to immutable commit SHAs, and Dependabot proposes weekly updates for
-Actions and pre-commit hooks.
+GitHub Actions recreates the locked environment, runs the test suite, and runs all repository
+checks for every pull request and every push to `main`. Third-party Actions are pinned to immutable
+commit SHAs, and Dependabot proposes weekly updates for Actions and pre-commit hooks.
 
 The local hook is a fast feedback mechanism, not a replacement for CI. Git hooks can be skipped or
 missing on another machine; the pull request checks are the shared enforcement boundary.

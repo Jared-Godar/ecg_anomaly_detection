@@ -12,8 +12,8 @@ The work is intentionally incremental so that the original project remains inspe
 
 ## Phase 2 — Reproducible environment
 
-- Select a supported Python version and package workflow.
-- Add `pyproject.toml`, development dependencies, and a lock file.
+- [x] Select Python 3.12 and `uv` as the supported environment workflow.
+- [x] Add `pyproject.toml`, development dependencies, and a lock file.
 - Replace absolute paths with configuration.
 - Add repeatable dataset retrieval and integrity checks.
 - Define raw, interim, processed, and artifact locations.
