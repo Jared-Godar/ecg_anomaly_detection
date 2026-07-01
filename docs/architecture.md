@@ -2,9 +2,13 @@
 
 ## Purpose
 
-This document defines the target repository boundaries for the incremental modernization. The directories are scaffolded before implementation so data, source code, notebooks, tests, and generated outputs do not become mixed again.
+This document defines the implemented repository boundaries and target component ownership for the
+incremental modernization. The separation prevents source data, reusable code, notebooks, tests,
+and generated outputs from becoming mixed again.
 
-The original notebooks, `wrangle.py`, and presentation images are preserved together under `archive/original_2022/`. The modern directories remain intentionally sparse until supported behavior and tests are introduced together.
+The original notebooks, `wrangle.py`, and presentation images are preserved together under
+`archive/original_2022/`. The modern package and locked development environment are implemented;
+pipeline modules remain intentionally absent until supported behavior and tests arrive together.
 
 ## Directory map
 
@@ -24,6 +28,8 @@ The original notebooks, `wrangle.py`, and presentation images are preserved toge
 │   └── figures/               # reproducible generated figures; ignored
 ├── scripts/                   # thin operational entry points
 ├── src/ecg_anomaly_detection/ # installable Python package
+├── pyproject.toml             # package metadata and tool configuration
+├── uv.lock                    # exact cross-platform dependency resolution
 └── tests/
     ├── fixtures/              # small synthetic, redistributable fixtures
     ├── integration/           # component-boundary and workflow tests
@@ -65,10 +71,12 @@ Models, serialized objects, run outputs, and generated figures are ignored by de
 
 ## Planned migration sequence
 
-1. add the reproducible Python environment and package metadata;
-2. move reusable wrangling behavior into the source package with tests;
-3. create curated notebooks that call the supported package APIs;
-4. introduce configuration-driven pipeline entry points;
-5. add generated run manifests, validation reports, and CI checks.
+1. **Completed:** add the reproducible Python environment, package metadata, and CI smoke test.
+2. **Next:** define configuration-driven data access and integrity checks.
+3. Move reusable validation and windowing behavior into the source package with tests.
+4. Add record-grouped splitting, run manifests, and machine-readable metrics.
+5. Create curated notebooks that call supported package APIs.
 
-This scaffold represents intended ownership and data flow. It does not imply that the legacy workflow has already been refactored or made reproducible.
+See the [proposed pipeline design](pipeline-design.md) for stage contracts and lineage metadata. The
+directory structure defines ownership; it does not imply that the archived workflow has already
+been refactored or reproduced.

@@ -8,7 +8,10 @@ The source dataset is distributed separately by PhysioNet under the Open Data Co
 
 ## WFDB and Python dependencies
 
-The project uses third-party Python packages under their respective licenses. A dependency inventory and lock file will be added during the reproducible-environment phase.
+The supported package and development dependencies are declared in `pyproject.toml` and resolved in
+`uv.lock`. They remain subject to their respective licenses; the repository's MIT license does not
+relicense them. Dependencies used only by the archived 2022 notebooks are historical references and
+are not part of the supported modern environment.
 
 ## Historical tutorial influence
 

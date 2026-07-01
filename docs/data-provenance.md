@@ -25,14 +25,19 @@ Refer to the dataset landing page for authoritative citation formats and current
 
 Raw waveform and annotation files are intentionally excluded from Git. Derived tables, cached downloads, and trained artifacts should also remain excluded unless a future artifact has an explicit redistribution review and a documented reason to be versioned.
 
-The modernized layout will distinguish:
+The repository layout distinguishes:
 
 - `data/raw/`: immutable upstream files;
 - `data/interim/`: resumable intermediate transformations;
 - `data/processed/`: model-ready, reproducible outputs; and
-- `artifacts/`: generated models, metrics, manifests, and figures.
+- `artifacts/`: generated models, metrics, and run manifests; and
+- `reports/figures/`: reproducible generated figures selected for reporting.
 
 Each generated dataset should carry a manifest containing at least the source dataset name and version, retrieval timestamp, checksums, transformation configuration, code revision, schema version, row counts, and record identifiers included in each split.
+
+The required lineage fields and stage boundaries are expanded in the
+[proposed pipeline design](pipeline-design.md). Those contracts are design requirements until the
+corresponding package modules and tests are implemented.
 
 ## Privacy and responsible use
 

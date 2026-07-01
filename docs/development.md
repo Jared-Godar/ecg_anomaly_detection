@@ -49,6 +49,12 @@ Run the same file-level checks used in CI:
 uv run pre-commit run --all-files
 ```
 
+Build the package artifacts without publishing them:
+
+```fish
+uv build
+```
+
 The checks cover:
 
 - trailing whitespace, final newlines, and consistent line endings;
@@ -71,3 +77,28 @@ commit SHAs, and Dependabot proposes weekly updates for Actions and pre-commit h
 
 The local hook is a fast feedback mechanism, not a replacement for CI. Git hooks can be skipped or
 missing on another machine; the pull request checks are the shared enforcement boundary.
+
+## Dependency changes
+
+Add or update dependencies through `uv` so `pyproject.toml` and `uv.lock` remain synchronized. For
+example, a supported runtime dependency would be added with:
+
+```fish
+uv add package-name
+```
+
+Development-only tools belong in the development dependency group:
+
+```fish
+uv add --dev package-name
+```
+
+After any dependency change, run the tests and all hooks. Commit `uv.lock` with the corresponding
+metadata change. Do not add historical notebook dependencies to the supported package unless a
+modern package module requires them and receives tests in the same change.
+
+## Generated local files
+
+The `.venv/`, Python caches, coverage output, build artifacts, local data, generated models, and
+report outputs are ignored. A clean pull request should contain only intentional source,
+configuration, tests, documentation, and lockfile changes.
