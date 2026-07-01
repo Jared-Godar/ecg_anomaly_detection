@@ -1,0 +1,17 @@
+line-length = 100
+extend-exclude = ["archive/original_2022"]
+
+[lint]
+select = [
+  "B",  # flake8-bugbear
+  "E4", # import and indentation errors
+  "E7", # statement errors
+  "E9", # runtime and syntax errors
+  "F",  # Pyflakes
+  "I",  # import ordering
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

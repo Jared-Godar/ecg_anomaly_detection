@@ -1,0 +1,9 @@
+config:
+  # Prose and tables are intentionally optimized for rendered readability.
+  MD013: false
+  MD060: false
+
+globs:
+  - "**/*.md"
+  - "!archive/original_2022/**"
+  - "!.venv/**"

@@ -25,6 +25,8 @@ The repository currently contains the original notebook-oriented experiment. Its
 
 See the [repository architecture](docs/architecture.md) for directory boundaries and the [modernization roadmap](docs/modernization-roadmap.md) for the planned phases.
 
+Contributor setup and automated quality checks are documented in the [development workflow](docs/development.md).
+
 ## Historical workflow
 
 The original experiment:
