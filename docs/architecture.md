@@ -4,12 +4,13 @@
 
 This document defines the target repository boundaries for the incremental modernization. The directories are scaffolded before implementation so data, source code, notebooks, tests, and generated outputs do not become mixed again.
 
-The original notebooks, `wrangle.py`, and `images/` remain at the repository root for now. Moving them belongs to dedicated, history-preserving notebook and pipeline refactor changes.
+The original notebooks, `wrangle.py`, and presentation images are preserved together under `archive/original_2022/`. The modern directories remain intentionally sparse until supported behavior and tests are introduced together.
 
 ## Directory map
 
 ```text
 .
+├── archive/original_2022/     # preserved, unsupported original project bundle
 ├── artifacts/                 # ignored generated models and run outputs
 ├── configs/                   # versioned pipeline and experiment configuration
 ├── data/
@@ -18,8 +19,7 @@ The original notebooks, `wrangle.py`, and `images/` remain at the repository roo
 │   ├── interim/               # resumable transformations; ignored
 │   └── processed/             # model-ready outputs; ignored
 ├── docs/                      # architecture, provenance, limitations, roadmap
-├── notebooks/
-│   └── archive/original_2022/ # eventual home for preserved legacy notebooks
+├── notebooks/                 # curated notebooks using supported package APIs
 ├── reports/
 │   └── figures/               # reproducible generated figures; ignored
 ├── scripts/                   # thin operational entry points
@@ -53,7 +53,7 @@ Only each directory's `.gitkeep` contract is tracked. Source and derived ECG dat
 
 ### Notebooks
 
-Curated notebooks will eventually live in `notebooks/` and consume package APIs. Original 2022 notebooks will be preserved under `notebooks/archive/original_2022/` only after links and documentation are updated in the same change.
+Curated notebooks will live in `notebooks/` and consume package APIs. Original 2022 notebooks are preserved in `archive/original_2022/`, separate from supported notebooks and without rewriting their historical outputs.
 
 ### Tests
 
@@ -67,7 +67,7 @@ Models, serialized objects, run outputs, and generated figures are ignored by de
 
 1. add the reproducible Python environment and package metadata;
 2. move reusable wrangling behavior into the source package with tests;
-3. preserve original notebooks in the archive and create curated notebooks;
+3. create curated notebooks that call the supported package APIs;
 4. introduce configuration-driven pipeline entry points;
 5. add generated run manifests, validation reports, and CI checks.
 

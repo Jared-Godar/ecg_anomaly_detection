@@ -22,7 +22,7 @@ Exit criterion: a contributor can create the environment and run a lightweight d
 
 ## Phase 3 — Notebook cleanup
 
-- Preserve the original notebooks in a dated archive.
+- Maintain the original notebooks in the dated `archive/original_2022/` bundle.
 - Identify one canonical narrative notebook.
 - Remove duplicated pipeline implementation from curated notebooks.
 - Clear stale errors and excessive outputs.

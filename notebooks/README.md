@@ -2,7 +2,7 @@
 
 This directory is reserved for curated notebooks that call the supported Python package rather than duplicate pipeline behavior.
 
-The original 2022 notebooks remain at the repository root until a dedicated cleanup change can preserve their history, update links, classify exploratory work, and verify the canonical narrative. Their eventual archive location is `archive/original_2022/`.
+The original notebooks are preserved in [`archive/original_2022/`](../archive/original_2022/README.md). They remain available as historical reference material but are not part of the supported modern workflow.
 
 Curated notebooks should:
 

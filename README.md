@@ -18,7 +18,7 @@ The repository currently contains the original notebook-oriented experiment. Its
 |---|---|---|
 | Data access | Manual download and local paths | Configured, versioned acquisition with integrity checks |
 | Environment | Undocumented Python 3.8-era environment | Locked, reproducible project environment |
-| Transformation | Notebook and `wrangle.py` logic | Tested package modules and command-line workflow |
+| Transformation | Archived notebook and `wrangle.py` logic | Tested package modules and command-line workflow |
 | Evaluation | Random beat-window split | Patient/record-grouped validation |
 | Quality controls | Assertions only | Schema, signal, split, and metric tests |
 | Automation | None | Linting, tests, and notebook checks in CI |
@@ -36,7 +36,7 @@ The original experiment:
 5. mapped selected annotations into normal and abnormal classes;
 6. randomly divided beat windows into training, validation, and test sets;
 7. trained and tuned random-forest classifiers; and
-8. presented exploration and results in `report.ipynb`.
+8. presented exploration and results in [`report.ipynb`](archive/original_2022/report.ipynb).
 
 The original code depends on absolute local paths and an unrecorded environment, so a clean checkout is not yet reproducible. Reproducible commands will be added in the environment phase rather than suggesting that the legacy workflow currently runs unchanged.
 
@@ -66,18 +66,12 @@ Required citations and data-handling notes are in [data provenance](docs/data-pr
 | `src/ecg_anomaly_detection/` | Modern installable Python package | Scaffolded; implementation pending |
 | `configs/` | Versioned, non-secret pipeline configuration | Scaffolded |
 | `data/` | Ignored raw, external, interim, and processed data stages | Scaffolded with documented contracts |
-| `notebooks/` | Future curated notebooks and historical archive | Scaffolded; legacy notebooks not yet moved |
+| `notebooks/` | Future curated notebooks | Scaffolded; curated notebooks pending |
 | `tests/` | Unit, integration, and synthetic-fixture boundaries | Scaffolded; tests pending |
 | `scripts/` | Thin operational entry points | Scaffolded |
 | `artifacts/` | Ignored generated models and run outputs | Scaffolded |
 | `reports/figures/` | Ignored reproducible figure output | Scaffolded |
-| `report.ipynb` | Original end-to-end narrative and saved results | Historical primary notebook |
-| `wrangle.py` | Original acquisition, windowing, and split functions | Legacy code; hard-coded paths |
-| `explore*.ipynb` | Exploration and model experiments | Historical working notebooks |
-| `model.ipynb` | Random-forest experiments | Historical working notebook |
-| `eeg_explore.ipynb` | Alternate dataset experiment | Historical; name and scope are misleading |
-| `wrangle.ipynb` | Incomplete wrangling scratchpad | Historical |
-| `images/` | Presentation and research imagery | Attribution audit in progress |
+| `archive/original_2022/` | Original notebooks, wrangling code, and presentation images | Preserved; unsupported historical reference |
 | `docs/` | Architecture, modernization, provenance, and result documentation | Active |
 
 No source data, generated feature tables, or trained model artifacts are tracked in Git.
