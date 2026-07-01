@@ -17,15 +17,28 @@ The repository currently contains the original notebook-oriented experiment. Its
 | Area | Current state | Modernization target |
 |---|---|---|
 | Data access | Manual download and local paths | Configured, versioned acquisition with integrity checks |
-| Environment | Undocumented Python 3.8-era environment | Locked, reproducible project environment |
+| Environment | Python 3.12 project with a committed `uv` lockfile | Add pipeline dependencies as supported modules land |
 | Transformation | Archived notebook and `wrangle.py` logic | Tested package modules and command-line workflow |
 | Evaluation | Random beat-window split | Patient/record-grouped validation |
 | Quality controls | Assertions only | Schema, signal, split, and metric tests |
-| Automation | None | Linting, tests, and notebook checks in CI |
+| Automation | Linting, security scans, and package smoke tests in CI | Add data-independent pipeline and notebook checks |
 
 See the [repository architecture](docs/architecture.md) for directory boundaries and the [modernization roadmap](docs/modernization-roadmap.md) for the planned phases.
 
 Contributor setup and automated quality checks are documented in the [development workflow](docs/development.md).
+
+## Quick start
+
+Install [uv](https://docs.astral.sh/uv/), then create the exact development environment and run the
+current smoke test:
+
+```fish
+uv sync --locked --dev
+uv run pytest
+```
+
+The supported environment installs the modern package scaffold only. It does not make the archived
+2022 notebooks reproducible or download any ECG data.
 
 ## Historical workflow
 
@@ -86,7 +99,8 @@ No source data, generated feature tables, or trained model artifacts are tracked
 - The original split is not patient/record-grouped or stratified.
 - Adjacent windows may overlap.
 - The original environment and exact dependency versions were not captured.
-- There are no automated tests or CI checks yet.
+- Automated coverage currently validates only the package and environment scaffold; pipeline tests
+  will be added with supported transformation behavior.
 - Some exploratory notebooks contain saved errors and duplicated code.
 - Third-party image and tutorial attribution is being audited; see [NOTICE.md](NOTICE.md).
 

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ecg-anomaly-detection"
+version = "0.1.0"
+description = "Historical ECG machine-learning project modernized as a reproducible data-pipeline case study"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = "MIT"
+authors = [{ name = "Jared Godar" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Education",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "pre-commit==4.6.0",
+  "pytest>=8.4,<10",
+  "pytest-cov>=6,<8",
+]
+
+[tool.pytest.ini_options]
+addopts = ["-ra", "--strict-config", "--strict-markers"]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["ecg_anomaly_detection"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
