@@ -1,0 +1,22 @@
+schema_version = 1
+
+[mapping]
+name = "historical-binary"
+version = "1.0.0"
+unknown_symbol_policy = "error"
+
+[[targets]]
+name = "reference_normal"
+value = 0
+symbols = ["N"]
+
+[[targets]]
+name = "selected_other"
+value = 1
+symbols = ["L", "R", "V", "/", "A", "f", "F", "j", "a", "E", "J", "e", "S"]
+
+[exclusions]
+symbols = [
+  "[", "!", "]", "x", "(", ")", "p", "t", "u", "`", "'", "^",
+  "|", "~", "+", "s", "T", "*", "D", "=", "\"", "@", "Q", "?",
+]

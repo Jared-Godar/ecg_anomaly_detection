@@ -9,6 +9,7 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Pipeline design](pipeline-design.md) | Proposed lineage, validation controls, run outputs, and cloud mapping |
 | [Data integrity](data-integrity.md) | Implemented local file inventory, SHA-256 baseline, and trust boundary |
 | [Record validation](record-validation.md) | Implemented WFDB ingestion, validation rules, and report schema |
+| [Annotation mapping](annotation-mapping.md) | Versioned binary target policy, exclusions, and audit report |
 | [Data provenance](data-provenance.md) | Dataset source, license, attribution, privacy, and label provenance |
 | [Historical results](historical-results.md) | Saved 2022 metrics and their known evaluation defects |
 | [Development workflow](development.md) | Locked environment, tests, hooks, and CI behavior |

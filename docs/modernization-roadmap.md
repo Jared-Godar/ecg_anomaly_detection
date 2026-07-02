@@ -37,8 +37,8 @@ Exit criterion: curated notebooks run against package functions and have a clear
 
 - [x] Create an installable `src` package boundary.
 - [ ] Separate acquisition, validation, windowing, splitting, training, and evaluation.
-  Inventory and record validation are implemented; later stages remain open.
-- [x] Retain record identifiers through current inventory and ingestion stages.
+  Inventory, record validation, and annotation mapping are implemented; later stages remain open.
+- [x] Retain record identifiers through current inventory, ingestion, and mapping stages.
 - [ ] Introduce a configuration-driven command-line entry point.
 - [ ] Write run manifests and machine-readable metrics.
 

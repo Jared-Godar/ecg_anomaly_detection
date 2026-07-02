@@ -62,6 +62,10 @@ It also loads individual local WFDB records, preserves physical signals and orig
 validates structural contracts, and writes machine-readable reports. See
 [record validation](docs/record-validation.md).
 
+Original annotation symbols can be mapped through a versioned, closed-world policy that reports
+every inclusion and exclusion and fails on unknown symbols. See
+[annotation mapping](docs/annotation-mapping.md).
+
 ## Historical workflow
 
 The original experiment:
@@ -103,7 +107,7 @@ Required citations and data-handling notes are in [data provenance](docs/data-pr
 | Path | Purpose | Status |
 |---|---|---|
 | `src/ecg_anomaly_detection/` | Modern installable Python package | Inventory and WFDB record validation implemented |
-| `configs/` | Versioned, non-secret pipeline configuration | MIT-BIH v1.0.0 inventory implemented |
+| `configs/` | Versioned, non-secret pipeline configuration | Dataset inventory and annotation mapping implemented |
 | `data/` | Ignored raw, external, interim, and processed data stages | Scaffolded with documented contracts |
 | `notebooks/` | Future curated notebooks | Scaffolded; curated notebooks pending |
 | `tests/` | Unit, integration, and synthetic-fixture boundaries | Package smoke test implemented; pipeline tests pending |
@@ -142,9 +146,9 @@ No source data, generated feature tables, or trained model artifacts are tracked
 
 ## Current next step
 
-The next implementation slice is a versioned annotation-to-target mapping that reports every
-included and excluded source symbol. Window generation remains a later change. The target stage
-contracts are documented in the [proposed pipeline design](docs/pipeline-design.md).
+The next implementation slice is boundary-safe beat-window extraction that preserves record ID,
+source annotation, mapping version, and target value. The target stage contracts are documented in
+the [proposed pipeline design](docs/pipeline-design.md).
 
 ## License
 

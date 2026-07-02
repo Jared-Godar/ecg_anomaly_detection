@@ -15,6 +15,12 @@ from ecg_anomaly_detection.inventory import (
     verify_inventory,
     write_manifest,
 )
+from ecg_anomaly_detection.labels import (
+    AnnotationMappingError,
+    load_annotation_mapping,
+    map_annotations,
+    write_mapping_report,
+)
 from ecg_anomaly_detection.records import (
     RecordValidationError,
     load_wfdb_record,
@@ -48,6 +54,14 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_arguments(record_parser)
     record_parser.add_argument("--record-id", required=True)
     record_parser.add_argument("--output", type=Path, required=True)
+
+    mapping_parser = subparsers.add_parser(
+        "map-annotations", help="validate a WFDB record and audit its configured annotation mapping"
+    )
+    _add_common_arguments(mapping_parser)
+    mapping_parser.add_argument("--mapping-config", type=Path, required=True)
+    mapping_parser.add_argument("--record-id", required=True)
+    mapping_parser.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -66,12 +80,24 @@ def main(arguments: Sequence[str] | None = None) -> int:
             manifest = read_manifest(options.manifest)
             verify_inventory(config, options.data_dir, manifest)
             print(f"verified {len(manifest.files)} files against {options.manifest}")
-        else:
+        elif options.command == "validate-record":
             record = load_wfdb_record(config, options.data_dir, options.record_id)
             report = validate_record(config, record.signal, record.annotations)
             write_validation_report(report, options.output)
             print(f"validated record {options.record_id} in {options.output}")
-    except (ConfigurationError, InventoryError, RecordValidationError) as error:
+        else:
+            record = load_wfdb_record(config, options.data_dir, options.record_id)
+            validate_record(config, record.signal, record.annotations)
+            mapping = load_annotation_mapping(options.mapping_config)
+            result = map_annotations(mapping, record.annotations)
+            write_mapping_report(result.report, options.output)
+            print(f"mapped annotations for record {options.record_id} in {options.output}")
+    except (
+        AnnotationMappingError,
+        ConfigurationError,
+        InventoryError,
+        RecordValidationError,
+    ) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     return 0

@@ -49,4 +49,7 @@ No attempt should be made to identify subjects or combine the records with ident
 
 The original project maps `N` annotations to normal, maps a selected list of annotation symbols to abnormal, and discards annotations outside those lists. This binary target is a project-specific simplification, not a diagnosis and not the full upstream annotation taxonomy.
 
-The modernization must make that mapping a versioned configuration, validate every encountered annotation, and report excluded counts. Changes to the mapping must create a new derived-dataset version.
+The supported mapping is now versioned in `configs/annotation-map-v1.toml`. It validates every
+encountered symbol, fails on unknown symbols, and reports included and excluded counts. See
+[annotation mapping](annotation-mapping.md). Any change to a symbol assignment must create a new
+mapping and derived-dataset version.

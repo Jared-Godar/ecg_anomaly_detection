@@ -53,3 +53,6 @@ metadata only; it is not a clinical validation report.
 Validation confirms structural expectations needed by the next pipeline stage. It does not assess
 signal quality, resolve channel preference, authenticate the upstream download, or establish model
 fitness. Those concerns require separate configuration, evidence, and tests.
+
+The next supported stage applies the [versioned annotation mapping](annotation-mapping.md) without
+altering the original symbols stored by ingestion.

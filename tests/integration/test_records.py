@@ -33,18 +33,7 @@ def test_validate_record_cli_writes_report(tmp_path: Path) -> None:
     _write_synthetic_record(data_dir)
     config_path = tmp_path / "dataset.toml"
     config_path.write_text(
-        """
-schema_version = 1
-[dataset]
-name = "Synthetic fixture"
-slug = "synthetic"
-version = "1.0.0"
-source_url = "https://example.test/synthetic"
-sample_rate_hz = 360
-annotation_extension = "atr"
-record_ids = ["100"]
-required_extensions = ["atr", "dat", "hea"]
-""".strip(),
+        _dataset_config_content(),
         encoding="utf-8",
     )
     output_path = tmp_path / "validation.json"
@@ -65,6 +54,60 @@ required_extensions = ["atr", "dat", "hea"]
 
     assert exit_code == 0
     assert '"sample_count": 16' in output_path.read_text(encoding="utf-8")
+
+
+def test_map_annotations_cli_writes_audit_report(tmp_path: Path) -> None:
+    data_dir = tmp_path / "raw"
+    data_dir.mkdir()
+    _write_synthetic_record(data_dir)
+    dataset_config_path = tmp_path / "dataset.toml"
+    dataset_config_path.write_text(
+        _dataset_config_content(),
+        encoding="utf-8",
+    )
+    mapping_config_path = tmp_path / "mapping.toml"
+    mapping_config_path.write_text(
+        """
+schema_version = 1
+[mapping]
+name = "synthetic"
+version = "1.0.0"
+unknown_symbol_policy = "error"
+[[targets]]
+name = "reference_normal"
+value = 0
+symbols = ["N"]
+[[targets]]
+name = "selected_other"
+value = 1
+symbols = ["V"]
+[exclusions]
+symbols = ["!"]
+""".strip(),
+        encoding="utf-8",
+    )
+    output_path = tmp_path / "mapping-report.json"
+
+    exit_code = main(
+        [
+            "map-annotations",
+            "--config",
+            str(dataset_config_path),
+            "--mapping-config",
+            str(mapping_config_path),
+            "--data-dir",
+            str(data_dir),
+            "--record-id",
+            "100",
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert exit_code == 0
+    report = output_path.read_text(encoding="utf-8")
+    assert '"included_annotation_count": 3' in report
+    assert '"selected_other": 1' in report
 
 
 def _write_synthetic_record(data_dir: Path) -> None:
@@ -101,3 +144,18 @@ def _synthetic_config() -> DatasetConfig:
         record_ids=("100",),
         required_extensions=("atr", "dat", "hea"),
     )
+
+
+def _dataset_config_content() -> str:
+    return """
+schema_version = 1
+[dataset]
+name = "Synthetic fixture"
+slug = "synthetic"
+version = "1.0.0"
+source_url = "https://example.test/synthetic"
+sample_rate_hz = 360
+annotation_extension = "atr"
+record_ids = ["100"]
+required_extensions = ["atr", "dat", "hea"]
+""".strip()
