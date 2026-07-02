@@ -39,6 +39,9 @@ uv run pre-commit run --all-files
 git diff --check
 ```
 
+Dataset commands must target ignored local paths. Generated manifests belong under `artifacts/` and
+must not be staged with source changes.
+
 ## Pull request expectations
 
 A pull request should:

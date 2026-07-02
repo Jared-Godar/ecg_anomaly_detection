@@ -19,6 +19,9 @@ classifiers = [
 ]
 dependencies = []
 
+[project.scripts]
+ecg-data = "ecg_anomaly_detection.cli:main"
+
 [dependency-groups]
 dev = [
   "pre-commit==4.6.0",
