@@ -16,7 +16,8 @@ replacement gains tests and documentation. Checkboxes report repository state, n
 - [x] Select Python 3.12 and `uv` as the supported environment workflow.
 - [x] Add `pyproject.toml`, development dependencies, and a lock file.
 - [ ] Replace absolute paths with configuration.
-- [ ] Add repeatable dataset retrieval and integrity checks.
+- [ ] Add repeatable dataset retrieval from the authoritative source.
+- [x] Add expected-file inventory and local SHA-256 integrity checks.
 - [x] Define raw, external, interim, processed, report, and artifact locations.
 
 Exit criterion: a contributor can create the environment and run a lightweight data-access smoke

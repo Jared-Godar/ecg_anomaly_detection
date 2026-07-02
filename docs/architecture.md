@@ -40,7 +40,10 @@ pipeline modules remain intentionally absent until supported behavior and tests 
 
 ### Source code
 
-Reusable behavior belongs under `src/ecg_anomaly_detection/`. Notebooks and scripts should call package functions rather than carry duplicate implementations. Empty modules are not added until their behavior and tests are introduced together.
+Reusable behavior belongs under `src/ecg_anomaly_detection/`. The package currently implements
+versioned dataset configuration, repository paths, local file inventory, SHA-256 verification, and
+their CLI boundary. Notebooks and scripts should call package functions rather than carry duplicate
+implementations. New modules are added only with supported behavior and tests.
 
 ### Configuration
 
@@ -72,8 +75,8 @@ Models, serialized objects, run outputs, and generated figures are ignored by de
 ## Planned migration sequence
 
 1. **Completed:** add the reproducible Python environment, package metadata, and CI smoke test.
-2. **Next:** define configuration-driven data access and integrity checks.
-3. Move reusable validation and windowing behavior into the source package with tests.
+2. **Completed:** define the expected MIT-BIH file inventory and local integrity checks.
+3. **Next:** load and validate WFDB signals and annotations with synthetic tests.
 4. Add record-grouped splitting, run manifests, and machine-readable metrics.
 5. Create curated notebooks that call supported package APIs.
 
