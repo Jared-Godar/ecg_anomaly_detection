@@ -58,6 +58,10 @@ The package provides a metadata-driven command that validates the 144 required M
 files and records a local SHA-256 integrity baseline. It does not download or redistribute data.
 Commands and trust limitations are documented in [data integrity](docs/data-integrity.md).
 
+It also loads individual local WFDB records, preserves physical signals and original annotations,
+validates structural contracts, and writes machine-readable reports. See
+[record validation](docs/record-validation.md).
+
 ## Historical workflow
 
 The original experiment:
@@ -98,7 +102,7 @@ Required citations and data-handling notes are in [data provenance](docs/data-pr
 
 | Path | Purpose | Status |
 |---|---|---|
-| `src/ecg_anomaly_detection/` | Modern installable Python package | Package boundary implemented; pipeline modules pending |
+| `src/ecg_anomaly_detection/` | Modern installable Python package | Inventory and WFDB record validation implemented |
 | `configs/` | Versioned, non-secret pipeline configuration | MIT-BIH v1.0.0 inventory implemented |
 | `data/` | Ignored raw, external, interim, and processed data stages | Scaffolded with documented contracts |
 | `notebooks/` | Future curated notebooks | Scaffolded; curated notebooks pending |
@@ -138,10 +142,9 @@ No source data, generated feature tables, or trained model artifacts are tracked
 
 ## Current next step
 
-The next implementation slice is validated WFDB signal and annotation ingestion. It will operate
-against ignored local data, retain upstream record identifiers, and use synthetic fixtures in CI
-before window generation is introduced. The target stage contracts are documented in the
-[proposed pipeline design](docs/pipeline-design.md).
+The next implementation slice is a versioned annotation-to-target mapping that reports every
+included and excluded source symbol. Window generation remains a later change. The target stage
+contracts are documented in the [proposed pipeline design](docs/pipeline-design.md).
 
 ## License
 

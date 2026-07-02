@@ -15,6 +15,12 @@ from ecg_anomaly_detection.inventory import (
     verify_inventory,
     write_manifest,
 )
+from ecg_anomaly_detection.records import (
+    RecordValidationError,
+    load_wfdb_record,
+    validate_record,
+    write_validation_report,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,6 +41,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_common_arguments(verify_parser)
     verify_parser.add_argument("--manifest", type=Path, required=True)
+
+    record_parser = subparsers.add_parser(
+        "validate-record", help="load and validate one local WFDB signal and annotation record"
+    )
+    _add_common_arguments(record_parser)
+    record_parser.add_argument("--record-id", required=True)
+    record_parser.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -49,11 +62,16 @@ def main(arguments: Sequence[str] | None = None) -> int:
             manifest = create_inventory(config, options.data_dir)
             write_manifest(manifest, options.output)
             print(f"inventoried {len(manifest.files)} files in {options.output}")
-        else:
+        elif options.command == "verify":
             manifest = read_manifest(options.manifest)
             verify_inventory(config, options.data_dir, manifest)
             print(f"verified {len(manifest.files)} files against {options.manifest}")
-    except (ConfigurationError, InventoryError) as error:
+        else:
+            record = load_wfdb_record(config, options.data_dir, options.record_id)
+            report = validate_record(config, record.signal, record.annotations)
+            write_validation_report(report, options.output)
+            print(f"validated record {options.record_id} in {options.output}")
+    except (ConfigurationError, InventoryError, RecordValidationError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     return 0

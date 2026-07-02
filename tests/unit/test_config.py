@@ -43,6 +43,7 @@ slug = "example"
 version = "1"
 source_url = "https://example.test"
 sample_rate_hz = 1
+annotation_extension = "dat"
 record_ids = ["100", "100"]
 required_extensions = ["dat"]
 """.strip(),

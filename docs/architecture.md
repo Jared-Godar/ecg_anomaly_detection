@@ -41,9 +41,10 @@ pipeline modules remain intentionally absent until supported behavior and tests 
 ### Source code
 
 Reusable behavior belongs under `src/ecg_anomaly_detection/`. The package currently implements
-versioned dataset configuration, repository paths, local file inventory, SHA-256 verification, and
-their CLI boundary. Notebooks and scripts should call package functions rather than carry duplicate
-implementations. New modules are added only with supported behavior and tests.
+versioned dataset configuration, repository paths, local file inventory, SHA-256 verification,
+typed WFDB ingestion, record validation reports, and their CLI boundary. Notebooks and scripts
+should call package functions rather than carry duplicate implementations. New modules are added
+only with supported behavior and tests.
 
 ### Configuration
 
@@ -76,9 +77,10 @@ Models, serialized objects, run outputs, and generated figures are ignored by de
 
 1. **Completed:** add the reproducible Python environment, package metadata, and CI smoke test.
 2. **Completed:** define the expected MIT-BIH file inventory and local integrity checks.
-3. **Next:** load and validate WFDB signals and annotations with synthetic tests.
-4. Add record-grouped splitting, run manifests, and machine-readable metrics.
-5. Create curated notebooks that call supported package APIs.
+3. **Completed:** load and validate WFDB signals and annotations with synthetic tests.
+4. **Next:** add versioned annotation mapping and boundary-safe window extraction.
+5. Add record-grouped splitting, run manifests, and machine-readable metrics.
+6. Create curated notebooks that call supported package APIs.
 
 See the [proposed pipeline design](pipeline-design.md) for stage contracts and lineage metadata. The
 directory structure defines ownership; it does not imply that the archived workflow has already

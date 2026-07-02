@@ -13,6 +13,10 @@ The supported package and development dependencies are declared in `pyproject.to
 relicense them. Dependencies used only by the archived 2022 notebooks are historical references and
 are not part of the supported modern environment.
 
+The supported runtime currently uses NumPy for typed array contracts and WFDB for local signal and
+annotation file access. Their inclusion does not transfer ownership of the source dataset or imply
+endorsement of this project for clinical use.
+
 ## Historical tutorial influence
 
 `archive/original_2022/wrangle.py` identifies the Towards Data Science article “Detecting Heart Arrhythmias with Deep Learning in Keras” as sample code used while developing the original dataset workflow. The source file retains the original article URL.
