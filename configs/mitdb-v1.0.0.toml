@@ -6,6 +6,7 @@ slug = "mitdb"
 version = "1.0.0"
 source_url = "https://physionet.org/content/mitdb/1.0.0/"
 sample_rate_hz = 360
+annotation_extension = "atr"
 required_extensions = ["atr", "dat", "hea"]
 record_ids = [
   "100", "101", "102", "103", "104", "105", "106", "107",

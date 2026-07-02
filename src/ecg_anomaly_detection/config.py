@@ -54,6 +54,7 @@ class DatasetConfig:
     version: str
     source_url: str
     sample_rate_hz: int
+    annotation_extension: str
     record_ids: tuple[str, ...]
     required_extensions: tuple[str, ...]
 
@@ -87,6 +88,7 @@ def load_dataset_config(path: Path) -> DatasetConfig:
         version=_required_string(dataset, "version"),
         source_url=_required_string(dataset, "source_url"),
         sample_rate_hz=_required_positive_int(dataset, "sample_rate_hz"),
+        annotation_extension=_required_string(dataset, "annotation_extension").lstrip("."),
         record_ids=_required_unique_strings(dataset, "record_ids"),
         required_extensions=_required_unique_strings(dataset, "required_extensions"),
     )
@@ -94,6 +96,8 @@ def load_dataset_config(path: Path) -> DatasetConfig:
         "/" in value or "\\" in value for value in (*config.record_ids, *config.required_extensions)
     ):
         raise ConfigurationError("record IDs and extensions must be path segments, not paths")
+    if config.annotation_extension not in config.required_extensions:
+        raise ConfigurationError("dataset.annotation_extension must be a required extension")
     return config
 
 

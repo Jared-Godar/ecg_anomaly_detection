@@ -4,9 +4,9 @@
 
 This document is a target design. The repository currently implements the package boundary,
 locked environment, directory contracts, expected MIT-BIH file inventory, local SHA-256 integrity
-verification, tests, and CI quality gates. Dataset acquisition, signal validation, window
-generation, grouped splitting, training, and evaluation are not yet implemented in the supported
-package.
+verification, typed WFDB ingestion, structural signal and annotation validation, tests, and CI
+quality gates. Dataset acquisition, label mapping, window generation, grouped splitting, training,
+and evaluation are not yet implemented in the supported package.
 
 ## Target local flow
 
