@@ -12,16 +12,21 @@ def test_split_windows_writes_auditable_manifest(tmp_path: Path) -> None:
     config_path = tmp_path / "split.toml"
     config_path.write_text(
         """
-schema_version = 1
+schema_version = 2
 [split]
-name = "synthetic-grouped-split"
-version = "1.0.0"
-strategy = "seeded-record-shuffle"
+name = "synthetic-subject-split"
+version = "2.0.0"
+strategy = "seeded-subject-shuffle"
 seed = 7
 [split.ratios]
 train = 0.5
 validation = 0.25
 test = 0.25
+[record_subjects]
+100 = "subject-a"
+101 = "subject-a"
+102 = "subject-b"
+103 = "subject-c"
 """.strip(),
         encoding="utf-8",
     )
@@ -53,5 +58,14 @@ test = 0.25
     manifest = json.loads(output_path.read_text(encoding="utf-8"))
     assert exit_code == 0
     assert manifest["total_record_count"] == 4
+    assert manifest["total_subject_count"] == 3
     assert manifest["total_window_count"] == 5
     assert set(manifest["partitions"]) == {"train", "validation", "test"}
+    partitions = manifest["partitions"]
+    record_partitions = {
+        record_id: name
+        for name, partition in partitions.items()
+        for record_id in partition["record_ids"]
+    }
+    assert record_partitions["100"] == record_partitions["101"]
+    assert all("subject_ids" in partition for partition in partitions.values())

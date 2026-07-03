@@ -1,0 +1,64 @@
+schema_version = 2
+
+[split]
+name = "subject-aware-holdout"
+version = "2.0.0"
+strategy = "seeded-subject-shuffle"
+seed = 2022
+
+[split.ratios]
+train = 0.70
+validation = 0.15
+test = 0.15
+
+# Opaque subject identifiers. Records 201 and 202 originate from the same
+# source tape and therefore share one subject ID; all other records are unique.
+[record_subjects]
+100 = "subject-100"
+101 = "subject-101"
+102 = "subject-102"
+103 = "subject-103"
+104 = "subject-104"
+105 = "subject-105"
+106 = "subject-106"
+107 = "subject-107"
+108 = "subject-108"
+109 = "subject-109"
+111 = "subject-111"
+112 = "subject-112"
+113 = "subject-113"
+114 = "subject-114"
+115 = "subject-115"
+116 = "subject-116"
+117 = "subject-117"
+118 = "subject-118"
+119 = "subject-119"
+121 = "subject-121"
+122 = "subject-122"
+123 = "subject-123"
+124 = "subject-124"
+200 = "subject-200"
+201 = "subject-201-202"
+202 = "subject-201-202"
+203 = "subject-203"
+205 = "subject-205"
+207 = "subject-207"
+208 = "subject-208"
+209 = "subject-209"
+210 = "subject-210"
+212 = "subject-212"
+213 = "subject-213"
+214 = "subject-214"
+215 = "subject-215"
+217 = "subject-217"
+219 = "subject-219"
+220 = "subject-220"
+221 = "subject-221"
+222 = "subject-222"
+223 = "subject-223"
+228 = "subject-228"
+230 = "subject-230"
+231 = "subject-231"
+232 = "subject-232"
+233 = "subject-233"
+234 = "subject-234"

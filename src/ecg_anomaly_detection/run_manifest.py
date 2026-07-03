@@ -68,9 +68,12 @@ class DatasetEvidence:
 
 @dataclass(frozen=True, slots=True)
 class PartitionEvidence:
-    """Record and window counts copied from one split partition."""
+    """Subject, record, and window evidence copied from one split partition."""
 
+    subject_ids: tuple[str, ...]
+    subject_count: int
     record_ids: tuple[str, ...]
+    record_subjects: dict[str, str]
     record_count: int
     window_count: int
     target_value_counts: dict[str, int]
@@ -88,6 +91,7 @@ class SplitEvidence:
     mapping_version: str
     window_config_name: str
     window_config_version: str
+    total_subject_count: int
     total_record_count: int
     total_window_count: int
     partitions: dict[str, PartitionEvidence]
@@ -242,11 +246,15 @@ def _read_split_evidence(path: Path, split_file: FileEvidence) -> SplitEvidence:
         mapping_version=manifest.mapping_version,
         window_config_name=manifest.window_config_name,
         window_config_version=manifest.window_config_version,
+        total_subject_count=manifest.total_subject_count,
         total_record_count=manifest.total_record_count,
         total_window_count=manifest.total_window_count,
         partitions={
             name: PartitionEvidence(
+                subject_ids=partition.subject_ids,
+                subject_count=partition.subject_count,
                 record_ids=partition.record_ids,
+                record_subjects=partition.record_subjects,
                 record_count=partition.record_count,
                 window_count=partition.window_count,
                 target_value_counts=partition.target_value_counts,

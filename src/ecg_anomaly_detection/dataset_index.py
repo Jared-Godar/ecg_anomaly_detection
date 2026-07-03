@@ -12,7 +12,7 @@ from zipfile import BadZipFile
 
 import numpy as np
 
-from ecg_anomaly_detection.splitting import SplitManifest, read_split_manifest
+from ecg_anomaly_detection.splitting import PartitionSummary, SplitManifest, read_split_manifest
 
 BUFFER_SIZE = 1024 * 1024
 
@@ -35,6 +35,7 @@ class ShardIndex:
     """One immutable record shard assigned to exactly one partition."""
 
     record_id: str
+    subject_id: str
     window_count: int
     target_value_counts: dict[str, int]
     file: IndexedFile
@@ -44,6 +45,8 @@ class ShardIndex:
 class PartitionIndex:
     """Ordered shard membership and aggregate counts for one partition."""
 
+    subject_ids: tuple[str, ...]
+    subject_count: int
     record_count: int
     window_count: int
     target_value_counts: dict[str, int]
@@ -65,6 +68,7 @@ class DatasetIndex:
     channel_index: int
     channel_name: str
     window_samples: int
+    total_subject_count: int
     total_record_count: int
     total_window_count: int
     split_manifest: IndexedFile
@@ -127,19 +131,21 @@ def create_dataset_index(
         )
     identity = _validate_shard_identity(inspected, split_manifest)
     partitions = {
-        name: _build_partition_index(summary.record_ids, summary.target_value_counts, by_record)
+        name: _build_partition_index(summary, by_record)
         for name, summary in split_manifest.partitions.items()
     }
     for name, partition in partitions.items():
         expected = split_manifest.partitions[name]
         if (
-            partition.record_count != expected.record_count
+            partition.subject_count != expected.subject_count
+            or partition.subject_ids != expected.subject_ids
+            or partition.record_count != expected.record_count
             or partition.window_count != expected.window_count
             or partition.target_value_counts != expected.target_value_counts
         ):
             raise DatasetIndexError(f"indexed partition counts do not match split manifest: {name}")
     return DatasetIndex(
-        schema_version=1,
+        schema_version=2,
         split_name=split_manifest.split_name,
         split_version=split_manifest.split_version,
         mapping_name=identity.mapping_name,
@@ -150,6 +156,7 @@ def create_dataset_index(
         channel_index=identity.channel_index,
         channel_name=identity.channel_name,
         window_samples=identity.window_samples,
+        total_subject_count=split_manifest.total_subject_count,
         total_record_count=split_manifest.total_record_count,
         total_window_count=split_manifest.total_window_count,
         split_manifest=_indexed_file(root, split_path),
@@ -252,6 +259,7 @@ def _inspect_shard(repository_root: Path, path: Path) -> _InspectedShard:
     return _InspectedShard(
         index=ShardIndex(
             record_id=record_ids[0],
+            subject_id="",  # populated from the validated split manifest
             window_count=row_count,
             target_value_counts={str(value): counts[value] for value in sorted(counts)},
             file=_indexed_file(repository_root, resolved),
@@ -309,16 +317,26 @@ def _validate_shard_identity(
 
 
 def _build_partition_index(
-    record_ids: tuple[str, ...],
-    expected_target_counts: dict[str, int],
+    summary: PartitionSummary,
     by_record: dict[str, _InspectedShard],
 ) -> PartitionIndex:
-    shards = tuple(by_record[record_id].index for record_id in record_ids)
+    shards = tuple(
+        ShardIndex(
+            record_id=by_record[record_id].index.record_id,
+            subject_id=summary.record_subjects[record_id],
+            window_count=by_record[record_id].index.window_count,
+            target_value_counts=by_record[record_id].index.target_value_counts,
+            file=by_record[record_id].index.file,
+        )
+        for record_id in summary.record_ids
+    )
     target_counts = {
         target: sum(shard.target_value_counts.get(target, 0) for shard in shards)
-        for target in expected_target_counts
+        for target in summary.target_value_counts
     }
     return PartitionIndex(
+        subject_ids=summary.subject_ids,
+        subject_count=summary.subject_count,
         record_count=len(shards),
         window_count=sum(shard.window_count for shard in shards),
         target_value_counts=target_counts,

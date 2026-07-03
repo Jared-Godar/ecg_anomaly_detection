@@ -7,7 +7,7 @@ locked environment, directory contracts, expected MIT-BIH file inventory, local 
 verification, typed WFDB ingestion, structural signal and annotation validation, tests, and CI
 quality gates. A versioned annotation mapping with closed-world symbol validation and audit counts
 and boundary-safe single-channel window extraction with row-level lineage are also implemented.
-Deterministic record-grouped splitting and its machine-readable membership manifest are implemented.
+Deterministic subject-aware splitting and its machine-readable membership manifest are implemented.
 Auditable run manifests now connect repository-relative evidence to code and environment identity.
 Versioned, fail-safe HTTPS acquisition is also implemented. A local sequential orchestrator connects
 all currently supported data stages. A processed dataset index validates and references grouped
@@ -29,7 +29,7 @@ validate records + annotations ---> validation report
 create labeled beat windows ---> data/interim/ (rebuildable, ignored)
           |
           v
-group by record, then split ---> data/processed/ (model-ready, ignored)
+map records to subjects, then split ---> data/processed/ (model-ready, ignored)
           |
           +--------------------> split manifest
           v
@@ -51,7 +51,7 @@ pipelines.
 | Acquire | Dataset URL, version, expected files | HTTP result, file inventory, checksum | Immutable raw files and acquisition manifest |
 | Validate | Raw signals and annotations | Record ID, channel, sample rate, duration, annotation symbols | Validation report and accepted-record inventory |
 | Window | Accepted records, label map, window configuration | Bounds, shape, finite values, excluded-label counts | Windows retaining record and annotation identity |
-| Split | Window metadata and split configuration | No record crosses partitions; class/record counts reported | Train, validation, and test membership manifest |
+| Split | Window metadata, record-to-subject metadata, and split configuration | No subject or record crosses partitions; class/subject/record counts reported | Train, validation, and test membership manifest |
 | Train | Training partition and model configuration | Fit only on training data; deterministic seed recorded | Model artifact and training metadata |
 | Evaluate | Frozen model and validation partition | Verify digests; open no test shards; tested zero-division behavior | Validation metrics and confusion matrix |
 
@@ -65,7 +65,7 @@ The supported run manifest records:
 - source dataset name, version, file inventory, and checksums;
 - configuration content or digest;
 - schema and label-map versions;
-- record IDs and row/window counts by split;
+- subject IDs, record-to-subject mappings, record IDs, and row/window counts by split;
 - split random seeds; and
 - artifact paths and checksums.
 

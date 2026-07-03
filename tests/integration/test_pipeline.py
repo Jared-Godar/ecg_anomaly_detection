@@ -170,16 +170,20 @@ boundary_policy = "exclude"
     )
     (configs / "split.toml").write_text(
         """
-schema_version = 1
+schema_version = 2
 [split]
-name = "synthetic-grouped"
-version = "1.0.0"
-strategy = "seeded-record-shuffle"
+name = "synthetic-subject-grouped"
+version = "2.0.0"
+strategy = "seeded-subject-shuffle"
 seed = 7
 [split.ratios]
 train = 0.6
 validation = 0.2
 test = 0.2
+[record_subjects]
+100 = "subject-100"
+101 = "subject-101"
+102 = "subject-102"
 """.strip(),
         encoding="utf-8",
     )

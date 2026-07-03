@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     split_parser = subparsers.add_parser(
         "split-windows",
-        help="assign complete records to deterministic train, validation, and test partitions",
+        help="assign complete subjects to deterministic train, validation, and test partitions",
     )
     split_parser.add_argument("--split-config", type=Path, required=True)
     split_parser.add_argument("--input", type=Path, action="append", required=True)

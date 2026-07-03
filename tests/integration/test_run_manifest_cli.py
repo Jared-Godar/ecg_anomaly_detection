@@ -66,6 +66,8 @@ def test_create_run_manifest_command_records_local_evidence(tmp_path: Path) -> N
             "user.name=Test User",
             "-c",
             "user.email=test@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
             "commit",
             "--quiet",
             "-m",
