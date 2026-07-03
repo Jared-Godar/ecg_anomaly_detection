@@ -8,7 +8,7 @@ and generated outputs from becoming mixed again.
 
 The original notebooks, `wrangle.py`, and presentation images are preserved together under
 `archive/original_2022/`. The modern package and locked development environment are implemented;
-pipeline modules remain intentionally absent until supported behavior and tests arrive together.
+pipeline modules are added only when supported behavior and tests arrive together.
 
 ## Directory map
 
@@ -52,6 +52,8 @@ The local orchestrator invokes these package boundaries sequentially and isolate
 UUID without moving transformation logic into the CLI.
 The processed dataset index references validated per-record shards rather than duplicating their
 arrays, retaining record-grouped membership and content digests for future lazy-loading consumers.
+The baseline is fit only from indexed training shards. A separate evaluator verifies persisted
+digests, loads only indexed validation shards, and writes deterministic machine-readable metrics.
 Notebooks and scripts should call package functions rather than carry duplicate implementations.
 New modules are added only with supported behavior and tests.
 
@@ -97,8 +99,9 @@ Models, serialized objects, run outputs, and generated figures are ignored by de
 8. **Completed:** add repeatable retrieval from the authoritative dataset source.
 9. **Completed:** orchestrate current stages through one tested local workflow.
 10. **Completed:** index grouped model-ready record shards without concatenating arrays.
-11. **Next:** add deterministic baseline training and held-out metric contracts.
-12. Create curated notebooks that call supported package APIs.
+11. **Completed:** add deterministic baseline training and validation-only metric contracts.
+12. **Next:** define protected test evaluation and model-card policy.
+13. Create curated notebooks that call supported package APIs.
 
 See the [proposed pipeline design](pipeline-design.md) for stage contracts and lineage metadata. The
 directory structure defines ownership; it does not imply that the archived workflow has already

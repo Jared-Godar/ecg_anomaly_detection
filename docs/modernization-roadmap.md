@@ -36,13 +36,13 @@ Exit criterion: curated notebooks run against package functions and have a clear
 ## Phase 4 — Pipeline refactor
 
 - [x] Create an installable `src` package boundary.
-- [ ] Separate acquisition, validation, windowing, splitting, training, and evaluation.
-  Acquisition through grouped splitting is implemented; training and evaluation remain open.
+- [x] Separate acquisition, validation, windowing, splitting, training, and evaluation.
+  Evaluation is intentionally limited to validation; test evaluation remains protected.
 - [x] Retain record identifiers through current inventory, ingestion, mapping, and window stages.
 - [x] Index grouped model-ready record shards with content digests and aggregate counts.
 - [x] Introduce a configuration-driven command-line entry point.
 - [x] Write auditable run manifests for current data-stage evidence.
-- [ ] Write machine-readable metrics when supported evaluation is implemented.
+- [x] Write machine-readable validation metrics with artifact digests.
 
 The supported data stages now run through one configuration-driven local orchestration command and
 produce a grouped model-ready dataset index.
@@ -54,7 +54,7 @@ Exit criterion: the pipeline can be run without editing source files and produce
 - [x] Add synthetic fixtures that do not redistribute source ECG data.
 - [x] Test sample-rate, shape, boundary-window, and label-mapping behavior.
 - [x] Assert that records never cross split boundaries.
-- [ ] Test confusion-matrix and metric calculations.
+- [x] Test confusion-matrix and metric calculations.
 - [x] Add a small end-to-end test for all currently supported data stages.
 
 Exit criterion: core transformations, split integrity, and metrics have automated regression coverage.

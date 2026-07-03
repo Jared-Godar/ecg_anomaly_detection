@@ -11,6 +11,10 @@ from typing import Callable
 from ecg_anomaly_detection.acquisition import Fetcher, acquire_dataset
 from ecg_anomaly_detection.config import load_dataset_config
 from ecg_anomaly_detection.dataset_index import create_dataset_index, write_dataset_index
+from ecg_anomaly_detection.evaluation import (
+    evaluate_validation_from_index,
+    load_evaluation_config,
+)
 from ecg_anomaly_detection.inventory import create_inventory, write_manifest
 from ecg_anomaly_detection.labels import (
     load_annotation_mapping,
@@ -56,6 +60,7 @@ class PipelineRunResult:
     dataset_index_path: Path
     model_path: Path
     training_metadata_path: Path
+    validation_metrics_path: Path
     run_manifest_path: Path
     record_count: int
     window_count: int
@@ -68,12 +73,13 @@ def run_pipeline(
     window_config_path: Path,
     split_config_path: Path,
     training_config_path: Path,
+    evaluation_config_path: Path,
     *,
     fetcher: Fetcher | None = None,
     clock: Callable[[], datetime] | None = None,
     run_id_factory: Callable[[], str] | None = None,
 ) -> PipelineRunResult:
-    """Run acquisition through deterministic fitting without held-out evaluation."""
+    """Run acquisition through fitting and validation-only evaluation."""
     root = repository_root.resolve()
     if not (root / "pyproject.toml").is_file():
         raise PipelineError(f"repository root does not contain pyproject.toml: {root}")
@@ -85,6 +91,7 @@ def run_pipeline(
             window_config_path,
             split_config_path,
             training_config_path,
+            evaluation_config_path,
         )
     )
     dataset_config = load_dataset_config(config_paths[0])
@@ -92,6 +99,7 @@ def run_pipeline(
     window_config = load_window_config(config_paths[2])
     split_config = load_split_config(config_paths[3])
     training_config = load_training_config(config_paths[4])
+    evaluation_config = load_evaluation_config(config_paths[5])
     run_id = _create_run_id(run_id_factory)
     timestamp = clock or (lambda: datetime.now(UTC))
 
@@ -176,6 +184,18 @@ def run_pipeline(
         training_metadata_path,
     )
 
+    evaluation_directory = run_directory / "evaluation"
+    evaluation_directory.mkdir()
+    validation_metrics_path = evaluation_directory / "validation-metrics.json"
+    evaluate_validation_from_index(
+        root,
+        dataset_index_path,
+        model_path,
+        training_metadata_path,
+        evaluation_config,
+        validation_metrics_path,
+    )
+
     run_manifest = create_run_manifest(
         root,
         inventory_manifest_path,
@@ -192,6 +212,7 @@ def run_pipeline(
             dataset_index_path,
             model_path,
             training_metadata_path,
+            validation_metrics_path,
         ),
         clock=timestamp,
         run_id_factory=lambda: run_id,
@@ -209,6 +230,7 @@ def run_pipeline(
         dataset_index_path=dataset_index_path,
         model_path=model_path,
         training_metadata_path=training_metadata_path,
+        validation_metrics_path=validation_metrics_path,
         run_manifest_path=run_manifest_path,
         record_count=len(dataset_config.record_ids),
         window_count=total_windows,

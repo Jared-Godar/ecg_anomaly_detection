@@ -14,6 +14,7 @@ from ecg_anomaly_detection.dataset_index import (
     create_dataset_index,
     write_dataset_index,
 )
+from ecg_anomaly_detection.evaluation import EvaluationError
 from ecg_anomaly_detection.inventory import (
     InventoryError,
     create_inventory,
@@ -138,6 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline_parser.add_argument("--window-config", type=Path, required=True)
     pipeline_parser.add_argument("--split-config", type=Path, required=True)
     pipeline_parser.add_argument("--training-config", type=Path, required=True)
+    pipeline_parser.add_argument("--evaluation-config", type=Path, required=True)
 
     index_parser = subparsers.add_parser(
         "index-dataset",
@@ -176,6 +178,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 options.window_config,
                 options.split_config,
                 options.training_config,
+                options.evaluation_config,
             )
             print(
                 f"completed run {result.run_id}: {result.record_count} records, "
@@ -251,6 +254,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         AnnotationMappingError,
         ConfigurationError,
         DatasetIndexError,
+        EvaluationError,
         InventoryError,
         PipelineError,
         RecordValidationError,

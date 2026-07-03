@@ -11,8 +11,8 @@ Deterministic record-grouped splitting and its machine-readable membership manif
 Auditable run manifests now connect repository-relative evidence to code and environment identity.
 Versioned, fail-safe HTTPS acquisition is also implemented. A local sequential orchestrator connects
 all currently supported data stages. A processed dataset index validates and references grouped
-record shards for lazy loading. Training and evaluation are not yet implemented in the supported
-package.
+record shards for lazy loading. Deterministic baseline fitting and validation-only evaluation are
+implemented; test shards remain reserved for a separate future stage.
 
 ## Target local flow
 
@@ -53,7 +53,7 @@ pipelines.
 | Window | Accepted records, label map, window configuration | Bounds, shape, finite values, excluded-label counts | Windows retaining record and annotation identity |
 | Split | Window metadata and split configuration | No record crosses partitions; class/record counts reported | Train, validation, and test membership manifest |
 | Train | Training partition and model configuration | Fit only on training data; deterministic seed recorded | Model artifact and training metadata |
-| Evaluate | Frozen model and held-out partition | Tested metric definitions; no split mutation | Metrics, confusion matrix, and evaluation report |
+| Evaluate | Frozen model and validation partition | Verify digests; open no test shards; tested zero-division behavior | Validation metrics and confusion matrix |
 
 ## Run manifest minimum
 
@@ -69,8 +69,8 @@ The supported run manifest records:
 - split random seeds; and
 - artifact paths and checksums.
 
-Model parameters and machine-readable metrics will be added when supported training and evaluation
-stages exist.
+Model parameters, training metadata, and machine-readable validation metrics are included as
+digested run artifacts. Test-partition metrics are not produced.
 
 The manifest is operational evidence, not a clinical validation record.
 

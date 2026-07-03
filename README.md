@@ -16,8 +16,8 @@ The labels are simplified reference-annotation classes from a historical dataset
 |---|---|
 | **What is this?** | A responsible modernization of a notebook-oriented ECG classification project into a configuration-driven local data pipeline. |
 | **Why modernize it?** | The original work used absolute paths, an unrecorded environment, and random beat-window splits that cannot establish generalization to unseen patients. |
-| **What is implemented?** | Reproducible setup, authoritative data acquisition, integrity checks, record validation, annotation mapping, boundary-safe windowing, record-grouped splitting, dataset indexing, orchestration, and run manifests. |
-| **What comes next?** | Deterministic baseline training and tested held-out evaluation. No supported modern benchmark exists yet. |
+| **What is implemented?** | Reproducible setup, acquisition, record-grouped preparation, deterministic baseline training, validation-only metrics, orchestration, and run manifests. |
+| **What comes next?** | Protected test-partition evaluation and a model card. No supported modern benchmark exists yet. |
 
 ## Engineering capabilities demonstrated
 
@@ -44,26 +44,27 @@ acquire -> inventory -> validate -> map annotations -> extract windows
                                     record-grouped split -> dataset index
                                                         |
                                                         v
-                                             auditable run manifest
-
-                                  [training -> evaluation -> model card]
-                                             planned, not implemented
+                         training -> validation-only evaluation
+                                      |
+                                      v
+                             auditable run manifest
 ```
 
-The supported workflow is local, sequential, and designed for deterministic evidence and bounded memory use. It includes training-only baseline fitting but does not implement held-out model evaluation, cloud infrastructure, or distributed processing. The [pipeline design](docs/pipeline-design.md) maps these local contracts to a proposed future cloud architecture without claiming that architecture exists today.
+The supported workflow is local and sequential. It fits a deterministic baseline on training shards and evaluates the frozen model only on validation shards. The indexed test partition remains unopened and unreported. It does not implement final test evaluation, cloud infrastructure, or distributed processing.
 
 ## Current status
 
 | Implemented today | Not yet implemented |
 |---|---|
-| Locked package environment and CLI | Supported model training |
-| Versioned, fail-safe dataset retrieval | Held-out model evaluation and tested metrics |
+| Locked package environment and CLI | Test-partition evaluation |
+| Versioned, fail-safe dataset retrieval | Test-evaluation release policy |
 | File inventory and local integrity baseline | Model card and modern benchmark |
 | Typed WFDB ingestion and record validation | Curated narrative notebooks |
 | Auditable annotation mapping and window extraction | Cloud deployment or orchestration |
 | Deterministic record-grouped split manifests | Runtime and resource benchmarks |
 | Model-ready index over immutable record shards | Subject-grouped guarantees across the two records from one person |
 | Run manifests and synthetic end-to-end coverage | Completed historical image and tutorial attribution audit |
+| Deterministic baseline training and validation-only tested metrics | Threshold, ROC/AUC, calibration, and generated figures |
 
 See the [modernization roadmap](docs/modernization-roadmap.md) for phase-level status.
 
@@ -85,7 +86,8 @@ uv run ecg-data run-pipeline \
   --mapping-config configs/annotation-map-v1.toml \
   --window-config configs/windowing-v1.toml \
   --split-config configs/splitting-v1.toml \
-  --training-config configs/training-baseline-v1.toml
+  --training-config configs/training-baseline-v1.toml \
+  --evaluation-config configs/evaluation-baseline-v1.toml
 ```
 
 The first pipeline run retrieves the configured source files from PhysioNet into the ignored raw-data zone. Later runs verify and reuse the acquisition baseline. Generated raw, interim, processed, and run artifacts remain outside Git. See the [orchestration runbook](docs/pipeline-orchestration.md) for outputs and failure behavior.
@@ -94,7 +96,7 @@ The first pipeline run retrieves the configured source files from PhysioNet into
 
 | Path | Responsibility |
 |---|---|
-| `src/ecg_anomaly_detection/` | Installable package for acquisition through model-ready dataset indexing |
+| `src/ecg_anomaly_detection/` | Installable package for acquisition through validation-only evaluation |
 | `configs/` | Versioned, non-secret dataset and transformation configuration |
 | `data/` | Ignored raw, external, interim, and processed data zones |
 | `tests/` | Unit, integration, and synthetic end-to-end coverage |
@@ -117,7 +119,7 @@ The original workflow downloaded MIT-BIH records, selected the first signal chan
 
 The saved 2022 notebook reports 95.3% test accuracy, 85.5% recall for the combined abnormal class, and a 0.2% false-positive rate. These are historical outputs, not validated portfolio benchmarks.
 
-The split was performed after window creation, so windows from the same record—and potentially overlapping windows—could occur in both training and test data. The result may therefore be inflated and does not measure generalization to unseen patients. Record-grouped preparation is now implemented, but no replacement benchmark will be published before supported training and evaluation exist.
+The split was performed after window creation, so windows from the same record—and potentially overlapping windows—could occur in both training and test data. The result may therefore be inflated and does not measure generalization to unseen patients. The modern pipeline now reports validation-only record-grouped metrics, but those exploratory metrics are not a replacement benchmark or evidence of test-set generalization.
 
 One notebook cell also reports validation accuracy of 1.00 because it scores predictions against themselves; the separately calculated value for that model is 0.845. The confusion matrices, metric definitions, and additional caveats are documented in the [historical results audit](docs/historical-results.md).
 
@@ -146,7 +148,7 @@ The repository's [MIT License](LICENSE) applies to project code and original doc
 - Historical metrics use a random beat-window split and do not demonstrate generalization to unseen patients.
 - Record grouping prevents record crossover but does not guarantee subject independence when multiple records belong to one person.
 - The current split balances record counts rather than target distributions.
-- Supported training, evaluation, confusion-matrix tests, and modern metrics are pending.
+- Validation metrics are exploratory; the indexed test partition has not been evaluated.
 
 ### Reproducibility and operations
 
