@@ -1,4 +1,4 @@
-"""Deterministic record-grouped dataset splitting and audit manifests."""
+"""Deterministic subject-grouped dataset splitting and audit manifests."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class SplitError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class SplitConfig:
-    """Versioned record-grouped split policy."""
+    """Versioned grouped split policy and record-to-subject metadata."""
 
     schema_version: int
     name: str
@@ -32,6 +32,7 @@ class SplitConfig:
     train_ratio: float
     validation_ratio: float
     test_ratio: float
+    record_subjects: dict[str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,9 +50,12 @@ class WindowMetadata:
 
 @dataclass(frozen=True, slots=True)
 class PartitionSummary:
-    """Record membership and class counts for one partition."""
+    """Subject and record membership plus class counts for one partition."""
 
+    subject_ids: tuple[str, ...]
+    subject_count: int
     record_ids: tuple[str, ...]
+    record_subjects: dict[str, str]
     record_count: int
     window_count: int
     target_value_counts: dict[str, int]
@@ -71,6 +75,7 @@ class SplitManifest:
     window_config_name: str
     window_config_version: str
     source_artifacts: tuple[str, ...]
+    total_subject_count: int
     total_record_count: int
     total_window_count: int
     partitions: dict[str, PartitionSummary]
@@ -84,6 +89,7 @@ class SplitManifest:
         """Parse and validate a serialized grouped split manifest."""
         try:
             document = json.loads(content)
+            schema_version = document["schema_version"]
             partitions_document = document["partitions"]
             if not isinstance(partitions_document, dict) or set(partitions_document) != {
                 "train",
@@ -92,7 +98,7 @@ class SplitManifest:
             }:
                 raise SplitError("split manifest must define train, validation, and test")
             partitions = {
-                name: _parse_partition_summary(name, partitions_document[name])
+                name: _parse_partition_summary(name, partitions_document[name], schema_version)
                 for name in ("train", "validation", "test")
             }
             source_artifacts_value = document["source_artifacts"]
@@ -104,7 +110,7 @@ class SplitManifest:
             ):
                 raise SplitError("split manifest source_artifacts must be unique non-empty paths")
             manifest = cls(
-                schema_version=document["schema_version"],
+                schema_version=schema_version,
                 split_name=_manifest_string(document, "split_name"),
                 split_version=_manifest_string(document, "split_version"),
                 strategy=_manifest_string(document, "strategy"),
@@ -114,6 +120,11 @@ class SplitManifest:
                 window_config_name=_manifest_string(document, "window_config_name"),
                 window_config_version=_manifest_string(document, "window_config_version"),
                 source_artifacts=tuple(source_artifacts_value),
+                total_subject_count=(
+                    _manifest_nonnegative_int(document, "total_subject_count")
+                    if schema_version == 2
+                    else _manifest_nonnegative_int(document, "total_record_count")
+                ),
                 total_record_count=_manifest_nonnegative_int(document, "total_record_count"),
                 total_window_count=_manifest_nonnegative_int(document, "total_window_count"),
                 partitions=partitions,
@@ -133,14 +144,15 @@ def load_split_config(path: Path) -> SplitConfig:
         raise SplitError(f"could not load split config {path}: {error}") from error
 
     split = document.get("split")
-    if document.get("schema_version") != 1 or not isinstance(split, dict):
-        raise SplitError("split config must use schema_version = 1 and a [split] table")
+    schema_version = document.get("schema_version")
+    if schema_version not in {1, 2} or not isinstance(split, dict):
+        raise SplitError("split config must use schema_version 1 or 2 and a [split] table")
     ratios = split.get("ratios")
     if not isinstance(ratios, dict):
         raise SplitError("split config must contain a [split.ratios] table")
 
     config = SplitConfig(
-        schema_version=1,
+        schema_version=schema_version,
         name=_required_string(split, "name"),
         version=_required_string(split, "version"),
         strategy=_required_string(split, "strategy"),
@@ -148,9 +160,11 @@ def load_split_config(path: Path) -> SplitConfig:
         train_ratio=_required_ratio(ratios, "train"),
         validation_ratio=_required_ratio(ratios, "validation"),
         test_ratio=_required_ratio(ratios, "test"),
+        record_subjects=_record_subject_mapping(document, schema_version),
     )
-    if config.strategy != "seeded-record-shuffle":
-        raise SplitError("split.strategy must be 'seeded-record-shuffle'")
+    expected_strategy = "seeded-subject-shuffle" if schema_version == 2 else "seeded-record-shuffle"
+    if config.strategy != expected_strategy:
+        raise SplitError(f"split.strategy must be '{expected_strategy}'")
     ratio_sum = config.train_ratio + config.validation_ratio + config.test_ratio
     if not np.isclose(ratio_sum, 1.0):
         raise SplitError(f"split ratios must sum to 1.0; got {ratio_sum}")
@@ -233,33 +247,44 @@ def load_window_metadata(artifact_paths: Sequence[Path]) -> WindowMetadata:
 
 
 def create_split_manifest(config: SplitConfig, metadata: WindowMetadata) -> SplitManifest:
-    """Assign complete records and report record and target counts by partition."""
+    """Assign complete subjects and report subject, record, and target counts."""
     if len(metadata.record_ids) != len(metadata.target_values):
         raise SplitError("window metadata record and target row counts must match")
     unique_records = sorted(set(metadata.record_ids))
-    if len(unique_records) < 3:
+    record_subjects = (
+        {record_id: record_id for record_id in unique_records}
+        if config.schema_version == 1
+        else config.record_subjects
+    )
+    if set(record_subjects) != set(unique_records):
         raise SplitError(
-            "record-grouped train/validation/test splitting requires at least 3 records"
+            "record-to-subject metadata must exactly cover window records; "
+            f"missing={sorted(set(unique_records) - set(record_subjects))}, "
+            f"extra={sorted(set(record_subjects) - set(unique_records))}"
         )
+    unique_subjects = sorted(set(record_subjects.values()))
+    if len(unique_subjects) < 3:
+        raise SplitError("subject-grouped splitting requires at least 3 subjects")
 
-    shuffled_records = unique_records.copy()
-    random.Random(config.seed).shuffle(shuffled_records)
+    shuffled_subjects = unique_subjects.copy()
+    random.Random(config.seed).shuffle(shuffled_subjects)
     sizes = _partition_sizes(
-        len(shuffled_records),
+        len(shuffled_subjects),
         (config.train_ratio, config.validation_ratio, config.test_ratio),
     )
     boundaries = (sizes[0], sizes[0] + sizes[1])
-    memberships = {
-        "train": tuple(sorted(shuffled_records[: boundaries[0]])),
-        "validation": tuple(sorted(shuffled_records[boundaries[0] : boundaries[1]])),
-        "test": tuple(sorted(shuffled_records[boundaries[1] :])),
+    subject_memberships = {
+        "train": tuple(sorted(shuffled_subjects[: boundaries[0]])),
+        "validation": tuple(sorted(shuffled_subjects[boundaries[0] : boundaries[1]])),
+        "test": tuple(sorted(shuffled_subjects[boundaries[1] :])),
     }
     partitions = {
-        name: _summarize_partition(records, metadata) for name, records in memberships.items()
+        name: _summarize_partition(subjects, record_subjects, metadata)
+        for name, subjects in subject_memberships.items()
     }
-    _validate_partitions(partitions, set(unique_records))
+    _validate_partitions(partitions, set(unique_subjects), set(unique_records))
     return SplitManifest(
-        schema_version=1,
+        schema_version=config.schema_version,
         split_name=config.name,
         split_version=config.version,
         strategy=config.strategy,
@@ -269,6 +294,7 @@ def create_split_manifest(config: SplitConfig, metadata: WindowMetadata) -> Spli
         window_config_name=metadata.window_config_name,
         window_config_version=metadata.window_config_version,
         source_artifacts=metadata.source_artifacts,
+        total_subject_count=len(unique_subjects),
         total_record_count=len(unique_records),
         total_window_count=len(metadata.record_ids),
         partitions=partitions,
@@ -292,10 +318,12 @@ def read_split_manifest(path: Path) -> SplitManifest:
         raise SplitError(f"could not read split manifest {path}: {error}") from error
 
 
-def _partition_sizes(record_count: int, ratios: tuple[float, float, float]) -> tuple[int, int, int]:
-    exact = [record_count * ratio for ratio in ratios]
+def _partition_sizes(
+    subject_count: int, ratios: tuple[float, float, float]
+) -> tuple[int, int, int]:
+    exact = [subject_count * ratio for ratio in ratios]
     sizes = [int(value) for value in exact]
-    remainder = record_count - sum(sizes)
+    remainder = subject_count - sum(sizes)
     order = sorted(range(3), key=lambda index: (-(exact[index] - sizes[index]), index))
     for index in order[:remainder]:
         sizes[index] += 1
@@ -303,13 +331,23 @@ def _partition_sizes(record_count: int, ratios: tuple[float, float, float]) -> t
         if size == 0:
             donor = max(range(3), key=lambda index: sizes[index])
             if sizes[donor] <= 1:
-                raise SplitError("could not create three non-empty record partitions")
+                raise SplitError("could not create three non-empty subject partitions")
             sizes[donor] -= 1
             sizes[empty_index] += 1
     return sizes[0], sizes[1], sizes[2]
 
 
-def _summarize_partition(records: tuple[str, ...], metadata: WindowMetadata) -> PartitionSummary:
+def _summarize_partition(
+    subjects: tuple[str, ...], record_subjects: dict[str, str], metadata: WindowMetadata
+) -> PartitionSummary:
+    subject_membership = set(subjects)
+    records = tuple(
+        sorted(
+            record_id
+            for record_id, subject_id in record_subjects.items()
+            if subject_id in subject_membership
+        )
+    )
     membership = set(records)
     targets = [
         int(target)
@@ -319,7 +357,10 @@ def _summarize_partition(records: tuple[str, ...], metadata: WindowMetadata) -> 
     counts = Counter(targets)
     observed_values = sorted({int(value) for value in metadata.target_values})
     return PartitionSummary(
+        subject_ids=subjects,
+        subject_count=len(subjects),
         record_ids=records,
+        record_subjects={record_id: record_subjects[record_id] for record_id in records},
         record_count=len(records),
         window_count=len(targets),
         target_value_counts={str(value): counts[value] for value in observed_values},
@@ -327,8 +368,17 @@ def _summarize_partition(records: tuple[str, ...], metadata: WindowMetadata) -> 
 
 
 def _validate_partitions(
-    partitions: dict[str, PartitionSummary], expected_records: set[str]
+    partitions: dict[str, PartitionSummary], expected_subjects: set[str], expected_records: set[str]
 ) -> None:
+    subject_sets = [set(summary.subject_ids) for summary in partitions.values()]
+    if any(
+        left & right
+        for index, left in enumerate(subject_sets)
+        for right in subject_sets[index + 1 :]
+    ):
+        raise SplitError("subject leakage detected across partitions")
+    if set().union(*subject_sets) != expected_subjects:
+        raise SplitError("split partitions do not cover every input subject")
     record_sets = [set(summary.record_ids) for summary in partitions.values()]
     if any(
         left & right for index, left in enumerate(record_sets) for right in record_sets[index + 1 :]
@@ -338,7 +388,7 @@ def _validate_partitions(
         raise SplitError("split partitions do not cover every input record")
 
 
-def _parse_partition_summary(name: str, value: Any) -> PartitionSummary:
+def _parse_partition_summary(name: str, value: Any, schema_version: Any) -> PartitionSummary:
     if not isinstance(value, dict):
         raise SplitError(f"split partition {name} must be an object")
     record_ids = value.get("record_ids")
@@ -358,8 +408,28 @@ def _parse_partition_summary(name: str, value: Any) -> PartitionSummary:
         for key, count in target_counts.items()
     ):
         raise SplitError(f"split partition {name} has invalid target counts")
+    subject_ids_value = value.get("subject_ids") if schema_version == 2 else record_ids
+    record_subjects_value = (
+        value.get("record_subjects") if schema_version == 2 else {item: item for item in record_ids}
+    )
+    if (
+        not isinstance(subject_ids_value, list)
+        or not all(isinstance(item, str) and item for item in subject_ids_value)
+        or len(subject_ids_value) != len(set(subject_ids_value))
+        or not isinstance(record_subjects_value, dict)
+        or set(record_subjects_value) != set(record_ids)
+        or not all(isinstance(item, str) and item for item in record_subjects_value.values())
+    ):
+        raise SplitError(f"split partition {name} has invalid subject metadata")
     return PartitionSummary(
+        subject_ids=tuple(subject_ids_value),
+        subject_count=(
+            _manifest_nonnegative_int(value, "subject_count")
+            if schema_version == 2
+            else len(subject_ids_value)
+        ),
         record_ids=tuple(record_ids),
+        record_subjects=dict(sorted(record_subjects_value.items())),
         record_count=_manifest_nonnegative_int(value, "record_count"),
         window_count=_manifest_nonnegative_int(value, "window_count"),
         target_value_counts=dict(sorted(target_counts.items())),
@@ -370,15 +440,28 @@ def _validate_serialized_manifest(manifest: SplitManifest) -> None:
     if (
         not isinstance(manifest.schema_version, int)
         or isinstance(manifest.schema_version, bool)
-        or manifest.schema_version != 1
+        or manifest.schema_version not in {1, 2}
     ):
-        raise SplitError("split manifest must use schema_version 1")
+        raise SplitError("split manifest must use schema_version 1 or 2")
     record_sets = [set(partition.record_ids) for partition in manifest.partitions.values()]
     if any(
         left & right for index, left in enumerate(record_sets) for right in record_sets[index + 1 :]
     ):
         raise SplitError("split manifest contains record leakage across partitions")
+    subject_sets = [set(partition.subject_ids) for partition in manifest.partitions.values()]
+    if any(
+        left & right
+        for index, left in enumerate(subject_sets)
+        for right in subject_sets[index + 1 :]
+    ):
+        raise SplitError("split manifest contains subject leakage across partitions")
     for name, partition in manifest.partitions.items():
+        if partition.subject_count == 0 or partition.subject_count != len(partition.subject_ids):
+            raise SplitError(f"split partition {name} subject count does not match membership")
+        if set(partition.record_subjects) != set(partition.record_ids):
+            raise SplitError(f"split partition {name} record-to-subject metadata is incomplete")
+        if set(partition.record_subjects.values()) != set(partition.subject_ids):
+            raise SplitError(f"split partition {name} subject membership does not match records")
         if partition.record_count == 0:
             raise SplitError(f"split partition {name} must contain at least one record")
         if partition.record_count != len(partition.record_ids):
@@ -389,6 +472,10 @@ def _validate_serialized_manifest(manifest: SplitManifest) -> None:
         partition.record_count for partition in manifest.partitions.values()
     ):
         raise SplitError("split manifest total record count does not match partitions")
+    if manifest.total_subject_count != sum(
+        partition.subject_count for partition in manifest.partitions.values()
+    ):
+        raise SplitError("split manifest total subject count does not match partitions")
     if manifest.total_window_count != sum(
         partition.window_count for partition in manifest.partitions.values()
     ):
@@ -426,6 +513,22 @@ def _required_nonnegative_int(values: dict[str, Any], key: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise SplitError(f"split.{key} must be a nonnegative integer")
     return value
+
+
+def _record_subject_mapping(document: dict[str, Any], schema_version: int) -> dict[str, str]:
+    if schema_version == 1:
+        return {}
+    subjects = document.get("record_subjects")
+    if (
+        not isinstance(subjects, dict)
+        or not subjects
+        or not all(
+            isinstance(record_id, str) and record_id and isinstance(subject_id, str) and subject_id
+            for record_id, subject_id in subjects.items()
+        )
+    ):
+        raise SplitError("split config v2 must contain a non-empty [record_subjects] table")
+    return dict(sorted(subjects.items()))
 
 
 def _required_ratio(values: dict[str, Any], key: str) -> float:

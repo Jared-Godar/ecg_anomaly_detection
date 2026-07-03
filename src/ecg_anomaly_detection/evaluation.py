@@ -224,8 +224,8 @@ def _build_metrics(
 
 
 def _validation_partition(index: dict[str, Any], model: BaselineModel) -> dict[str, Any]:
-    if index.get("schema_version") != 1:
-        raise EvaluationError("dataset index must use schema_version 1")
+    if index.get("schema_version") not in {1, 2}:
+        raise EvaluationError("dataset index must use schema_version 1 or 2")
     partitions = index.get("partitions")
     if not isinstance(partitions, dict) or set(partitions) != {"train", "validation", "test"}:
         raise EvaluationError("dataset index must contain train, validation, and test partitions")

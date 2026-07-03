@@ -7,8 +7,10 @@ into a model-ready dataset contract. It does not concatenate all windows into on
 Instead, each train, validation, and test partition contains an ordered list of immutable
 record-level NPZ shards with counts, repository-relative paths, sizes, and SHA-256 digests.
 
-This design preserves the record boundary established by splitting, supports lazy one-record-at-a-
-time loading, and avoids duplicating a potentially multi-gigabyte window matrix.
+This design preserves subject-aware membership and record-level lineage, supports lazy one-record-
+at-a-time loading, and avoids duplicating a potentially multi-gigabyte window matrix. Each shard
+descriptor includes both `subject_id` and `record_id`; its NPZ arrays retain window-level record,
+annotation, and center-sample lineage.
 
 ## Pipeline output
 
@@ -52,7 +54,7 @@ automatically.
 
 Before writing the index, the stage verifies:
 
-- the split manifest schema, three partition names, counts, target keys, and record disjointness;
+- the split manifest schema, three partition names, counts, target keys, and subject/record disjointness;
 - exact agreement between split membership and supplied record shards;
 - one and only one record per shard;
 - non-pickle NPZ loading and required lineage fields;
@@ -69,6 +71,6 @@ The output is created once and is not overwritten.
 The baseline training stage opens only train shards. The separate evaluation stage opens only
 validation shards. Test shard descriptors remain reserved and are not resolved or summarized.
 
-The index itself does not train a model, establish subject-level independence, calculate metrics,
-or support clinical use. Record grouping remains distinct from patient grouping when subject identity
-is unavailable.
+The index itself does not train a model, calculate metrics, establish broader population
+generalization, or support clinical use. Its subject-independence guarantee is limited to the
+explicit record-to-subject metadata supplied to split schema v2.

@@ -2,7 +2,7 @@
 
 > A historical ECG machine-learning project being modernized into a reproducible, auditable data-engineering case study.
 
-This repository preserves a 2022 educational experiment built on the public MIT-BIH Arrhythmia Database and incrementally replaces its notebook-bound workflow with tested package boundaries, versioned configuration, explicit lineage, and record-grouped data preparation.
+This repository preserves a 2022 educational experiment built on the public MIT-BIH Arrhythmia Database and incrementally replaces its notebook-bound workflow with tested package boundaries, versioned configuration, explicit lineage, and subject-aware data preparation.
 
 ## Important use limitation
 
@@ -16,7 +16,7 @@ The labels are simplified reference-annotation classes from a historical dataset
 |---|---|
 | **What is this?** | A responsible modernization of a notebook-oriented ECG classification project into a configuration-driven local data pipeline. |
 | **Why modernize it?** | The original work used absolute paths, an unrecorded environment, and random beat-window splits that cannot establish generalization to unseen patients. |
-| **What is implemented?** | Reproducible setup, acquisition, record-grouped preparation, deterministic baseline training, validation-only metrics, orchestration, and run manifests. |
+| **What is implemented?** | Reproducible setup, acquisition, subject-aware preparation, deterministic baseline training, validation-only metrics, orchestration, and run manifests. |
 | **What comes next?** | Protected test-partition evaluation and a model card. No supported modern benchmark exists yet. |
 
 ## Engineering capabilities demonstrated
@@ -26,7 +26,7 @@ The labels are simplified reference-annotation classes from a historical dataset
 | Reproducible development | Python 3.12/3.13 project metadata, committed `uv` lockfile, and documented Fish-compatible workflow |
 | Data provenance and integrity | Versioned PhysioNet acquisition, expected-file inventory, SHA-256 evidence, and explicit trust boundaries |
 | Data contracts | Structural signal and annotation validation, closed-world label mapping, and versioned window geometry |
-| Leakage-aware preparation | Deterministic record-grouped splits with assertions that records do not cross partitions |
+| Leakage-aware preparation | Deterministic subject-aware splits with assertions that subjects and records do not cross partitions |
 | Lineage and auditability | Record identity retained through transformations; run manifests capture code, environment, configuration, inputs, and artifact digests |
 | Pipeline design | One configuration-driven command connects supported stages and isolates every run under a UUID |
 | Testability and automation | Synthetic fixtures, unit and integration tests, CI, formatting, linting, type checks, security scans, and dependency maintenance |
@@ -41,7 +41,7 @@ PhysioNet MIT-BIH v1.0.0
 acquire -> inventory -> validate -> map annotations -> extract windows
                                                         |
                                                         v
-                                    record-grouped split -> dataset index
+                                    subject-aware split -> dataset index
                                                         |
                                                         v
                          training -> validation-only evaluation
@@ -61,7 +61,7 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 | File inventory and local integrity baseline | Model card and modern benchmark |
 | Typed WFDB ingestion and record validation | Curated narrative notebooks |
 | Auditable annotation mapping and window extraction | Cloud deployment or orchestration |
-| Deterministic record-grouped split manifests | Runtime and resource benchmarks |
+| Deterministic subject-aware split manifests | Runtime and resource benchmarks |
 | Model-ready index over immutable record shards | Subject-grouped guarantees across the two records from one person |
 | Run manifests and synthetic end-to-end coverage | Completed historical image and tutorial attribution audit |
 | Deterministic baseline training and validation-only tested metrics | Threshold, ROC/AUC, calibration, and generated figures |
@@ -85,7 +85,7 @@ uv run ecg-data run-pipeline \
   --dataset-config configs/mitdb-v1.0.0.toml \
   --mapping-config configs/annotation-map-v1.toml \
   --window-config configs/windowing-v1.toml \
-  --split-config configs/splitting-v1.toml \
+  --split-config configs/splitting-v2.toml \
   --training-config configs/training-baseline-v1.toml \
   --evaluation-config configs/evaluation-baseline-v1.toml
 ```
@@ -119,7 +119,7 @@ The original workflow downloaded MIT-BIH records, selected the first signal chan
 
 The saved 2022 notebook reports 95.3% test accuracy, 85.5% recall for the combined abnormal class, and a 0.2% false-positive rate. These are historical outputs, not validated portfolio benchmarks.
 
-The split was performed after window creation, so windows from the same record—and potentially overlapping windows—could occur in both training and test data. The result may therefore be inflated and does not measure generalization to unseen patients. The modern pipeline now reports validation-only record-grouped metrics, but those exploratory metrics are not a replacement benchmark or evidence of test-set generalization.
+The split was performed after window creation, so windows from the same record—and potentially overlapping windows—could occur in both training and test data. The result may therefore be inflated and does not measure generalization to unseen subjects. The modern pipeline now reports validation-only subject-aware metrics, but those exploratory metrics are not a replacement benchmark or evidence of test-set generalization. No held-out test benchmark is produced.
 
 One notebook cell also reports validation accuracy of 1.00 because it scores predictions against themselves; the separately calculated value for that model is 0.845. The confusion matrices, metric definitions, and additional caveats are documented in the [historical results audit](docs/historical-results.md).
 

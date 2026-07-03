@@ -180,8 +180,8 @@ def train_from_index(
         document = json.loads(index_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise TrainingError(f"could not read dataset index {index_path}: {error}") from error
-    if document.get("schema_version") != 1:
-        raise TrainingError("dataset index must use schema_version 1")
+    if document.get("schema_version") not in {1, 2}:
+        raise TrainingError("dataset index must use schema_version 1 or 2")
     partitions = document.get("partitions")
     if not isinstance(partitions, dict) or set(partitions) != {"train", "validation", "test"}:
         raise TrainingError("dataset index must contain train, validation, and test partitions")

@@ -21,7 +21,7 @@ uv run ecg-data run-pipeline \
   --dataset-config configs/mitdb-v1.0.0.toml \
   --mapping-config configs/annotation-map-v1.toml \
   --window-config configs/windowing-v1.toml \
-  --split-config configs/splitting-v1.toml \
+  --split-config configs/splitting-v2.toml \
   --training-config configs/training-baseline-v1.toml \
   --evaluation-config configs/evaluation-baseline-v1.toml
 ```

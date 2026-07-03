@@ -32,21 +32,25 @@ def indexed_repository(tmp_path: Path) -> tuple[Path, Path, list[Path]]:
         _write_shard(path, record_id)
         shard_paths.append(path)
     split = SplitManifest(
-        schema_version=1,
+        schema_version=2,
         split_name="grouped",
         split_version="1.0.0",
-        strategy="seeded-record-shuffle",
+        strategy="seeded-subject-shuffle",
         seed=7,
         mapping_name="binary",
         mapping_version="1.0.0",
         window_config_name="four-sample",
         window_config_version="1.0.0",
         source_artifacts=tuple(str(path) for path in shard_paths),
+        total_subject_count=3,
         total_record_count=3,
         total_window_count=6,
         partitions={
             name: PartitionSummary(
+                subject_ids=(f"subject-{record_id}",),
+                subject_count=1,
                 record_ids=(record_id,),
+                record_subjects={record_id: f"subject-{record_id}"},
                 record_count=1,
                 window_count=2,
                 target_value_counts={"0": 1, "1": 1},
@@ -76,6 +80,7 @@ def test_dataset_index_preserves_grouped_shards_without_copying_arrays(
     assert index.total_window_count == 6
     assert index.window_samples == 4
     assert index.partitions["train"].shards[0].record_id == "100"
+    assert index.partitions["train"].shards[0].subject_id == "subject-100"
     assert index.partitions["test"].target_value_counts == {"0": 1, "1": 1}
     assert index.partitions["validation"].shards[0].file.path.endswith("101.npz")
     assert len(index.partitions["train"].shards[0].file.sha256) == 64

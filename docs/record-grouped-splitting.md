@@ -1,69 +1,60 @@
-# Deterministic record-grouped splitting
+# Deterministic subject-aware splitting
 
 ## Scope
 
-The supported split stage assigns complete record IDs to train, validation, and test partitions.
-Every window from a record receives the same membership, preventing overlapping or adjacent windows
-from that record from crossing partition boundaries.
+Split schema v2 assigns complete subject IDs to train, validation, and test partitions. Every record
+and every window belonging to a subject follows that assignment. Record grouping alone prevented one
+record from crossing partitions, but it could still separate records 201 and 202, which the upstream
+database directory identifies as originating from the same source tape.
 
-This is a data-engineering integrity control, not evidence of clinical validity or model
-generalization. Record grouping is not necessarily subject grouping: if multiple records represent
-the same person, additional subject identity would be required to enforce subject-level separation.
+This is a reproducibility and leakage-control boundary for an educational project. It is not evidence
+of clinical validity or generalization to new populations.
 
-## Versioned policy
+## Versioned policy and metadata
 
-`configs/splitting-v1.toml` defines:
+`configs/splitting-v2.toml` uses schema version 2 and `seeded-subject-shuffle`. Its
+`[record_subjects]` table explicitly maps every configured record to an opaque subject ID. Records
+201 and 202 share one ID; other MIT-BIH records have distinct IDs. The splitter requires the mapping
+to cover the input records exactly.
 
-| Setting | Value |
-|---|---:|
-| Strategy | `seeded-record-shuffle` |
-| Seed | `2022` |
-| Train ratio | `0.70` |
-| Validation ratio | `0.15` |
-| Test ratio | `0.15` |
-
-The algorithm sorts unique record IDs, applies a local seeded shuffle, apportions record counts by
-largest remainder, and guarantees three non-empty partitions. At least three records are required.
-The implementation does not mutate global random state.
-
-## Create a split manifest
-
-Pass `--input` once for each generated window artifact:
+The algorithm sorts unique subject IDs, applies a local seeded shuffle, apportions subject counts by
+largest remainder, and guarantees three non-empty partitions. It does not mutate global random
+state. Identical configuration and window metadata produce identical membership.
 
 ```fish
 uv run ecg-data split-windows \
-  --split-config configs/splitting-v1.toml \
+  --split-config configs/splitting-v2.toml \
   --input data/interim/record-100-windows.npz \
   --input data/interim/record-101-windows.npz \
   --input data/interim/record-102-windows.npz \
   --output artifacts/split-manifest.json
 ```
 
-Input NPZ files are opened with `allow_pickle=False`. Each must contain the row-level `record_ids`
-and `target_values` written by the window stage plus matching mapping and window-configuration
-identities. A record appearing in multiple input artifacts is rejected to prevent accidental
-duplicate inputs.
+Input NPZ files retain row-level record IDs, target values, mapping identity, and window
+configuration identity. A record appearing in multiple artifacts is rejected.
 
-## Manifest contract
+## Manifest and validation contract
 
-The JSON manifest records:
+Schema v2 records the split policy, source artifacts, total subject/record/window counts, and these
+fields per partition:
 
-- split policy name, version, strategy, and seed;
-- mapping and window-configuration identities;
-- source artifact paths;
-- total record and window counts;
-- record membership for each partition; and
-- record, window, and target-value counts by partition.
+- `subject_ids` and `subject_count`;
+- `record_ids`, `record_subjects`, and `record_count`; and
+- `window_count` and `target_value_counts`.
 
-The manifest is deterministic for identical configuration, metadata, and input ordering. Generated
-manifests and window artifacts remain ignored by Git because they describe derived record-level
-data.
+Validation rejects subject overlap, record overlap, incomplete coverage, inconsistent counts, and
+record-to-subject mappings that disagree with partition membership. Per-record shards preserve
+window and annotation lineage; the model-ready index adds `subject_id` to every shard descriptor.
 
-## Limitations
+## Migration from v1
 
-The v1 policy balances record counts approximately according to configured ratios; it does not
-stratify by target distribution. Target counts are reported so imbalance remains visible. Any
-future stratified or subject-grouped policy requires a new versioned strategy and regression tests.
+Replace `configs/splitting-v1.toml` with `configs/splitting-v2.toml`. A custom dataset must add an
+exhaustive `[record_subjects]` table, change the strategy from `seeded-record-shuffle` to
+`seeded-subject-shuffle`, and bump `schema_version` to 2. Schema v1 remains readable for historical
+manifests, but new supported runs use v2.
 
-The supported [model-ready dataset index](model-ready-dataset.md) validates these memberships against
-the actual record shards before they can be consumed by future training code.
+## Evaluation limitations
+
+The policy approximately balances subject counts, not targets or windows. Validation metrics remain
+exploratory. This change intentionally does not open, score, or publish results for test shards; a
+held-out benchmark requires a separate, explicitly reviewed evaluation stage.

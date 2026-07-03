@@ -39,6 +39,7 @@ Exit criterion: curated notebooks run against package functions and have a clear
 - [x] Separate acquisition, validation, windowing, splitting, training, and evaluation.
   Evaluation is intentionally limited to validation; test evaluation remains protected.
 - [x] Retain record identifiers through current inventory, ingestion, mapping, and window stages.
+- [x] Add explicit record-to-subject metadata and subject-disjoint split schema v2.
 - [x] Index grouped model-ready record shards with content digests and aggregate counts.
 - [x] Introduce a configuration-driven command-line entry point.
 - [x] Write auditable run manifests for current data-stage evidence.
@@ -54,6 +55,7 @@ Exit criterion: the pipeline can be run without editing source files and produce
 - [x] Add synthetic fixtures that do not redistribute source ECG data.
 - [x] Test sample-rate, shape, boundary-window, and label-mapping behavior.
 - [x] Assert that records never cross split boundaries.
+- [x] Assert that subjects never cross split boundaries, including multi-record synthetic fixtures.
 - [x] Test confusion-matrix and metric calculations.
 - [x] Add a small end-to-end test for all currently supported data stages.
 
@@ -72,7 +74,7 @@ Exit criterion: every proposed change receives automated, data-independent quali
 ## Phase 7 — Portfolio polish
 
 - [x] Document repository architecture and proposed data lineage.
-- [ ] Publish a model card and newly evaluated record-grouped benchmark.
+- [ ] Define a separately reviewed held-out evaluation protocol and publish a model card only after it is run.
 - [ ] Document runtime, resource use, and operational tradeoffs.
 - [x] Describe future-state cloud concerns without claiming implementation.
 - [ ] Review every model and pipeline claim against generated evidence.

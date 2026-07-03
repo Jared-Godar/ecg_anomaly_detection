@@ -21,7 +21,7 @@ uv run ecg-data create-run-manifest \
   --config configs/mitdb-v1.0.0.toml \
   --config configs/annotation-map-v1.toml \
   --config configs/windowing-v1.toml \
-  --config configs/splitting-v1.toml \
+  --config configs/splitting-v2.toml \
   --evidence artifacts/record-100-window-report.json \
   --artifact data/interim/record-100-windows.npz \
   --output artifacts/run-manifest.json
