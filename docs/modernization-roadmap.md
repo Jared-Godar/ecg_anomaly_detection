@@ -43,6 +43,8 @@ Exit criterion: curated notebooks run against package functions and have a clear
 - [x] Write auditable run manifests for current data-stage evidence.
 - [ ] Write machine-readable metrics when supported evaluation is implemented.
 
+The supported data stages now run through one configuration-driven local orchestration command.
+
 Exit criterion: the pipeline can be run without editing source files and produces traceable outputs.
 
 ## Phase 5 — Testing and validation
@@ -51,7 +53,7 @@ Exit criterion: the pipeline can be run without editing source files and produce
 - [x] Test sample-rate, shape, boundary-window, and label-mapping behavior.
 - [x] Assert that records never cross split boundaries.
 - [ ] Test confusion-matrix and metric calculations.
-- [ ] Add a small end-to-end pipeline test.
+- [x] Add a small end-to-end test for all currently supported data stages.
 
 Exit criterion: core transformations, split integrity, and metrics have automated regression coverage.
 
