@@ -1,192 +1,165 @@
-# ECG Beat-Window Classification
+# ECG Data Pipeline Modernization
 
-> Historical machine-learning project under incremental modernization as a reproducible data pipeline case study.
+> A historical ECG machine-learning project being modernized into a reproducible, auditable data-engineering case study.
 
-This repository preserves a 2022 educational project that used the public MIT-BIH Arrhythmia Database to classify six-second ECG windows as normal or abnormal. The modernization focuses on reproducible data workflows, environment management, validation, testing, and responsible communication of model results.
+This repository preserves a 2022 educational experiment built on the public MIT-BIH Arrhythmia Database and incrementally replaces its notebook-bound workflow with tested package boundaries, versioned configuration, explicit lineage, and record-grouped data preparation.
 
 ## Important use limitation
 
 This project is for research, education, and software-engineering demonstration only. It is not medical software, has not been clinically validated, and must not be used for diagnosis, monitoring, treatment, or patient-care decisions.
 
-The labels are simplified reference-annotation classes from a historical dataset. A model output from this project does not establish whether a person has a medical condition.
+The labels are simplified reference-annotation classes from a historical dataset. Model output from this project does not establish whether a person has a medical condition.
 
-## Project status
+## Project at a glance
 
-The repository preserves the original notebook-oriented experiment and now provides a modern
-package scaffold, locked Python environment, automated quality gates, and explicit data-directory
-contracts. Supported stages now inventory and validate local records, map annotations, extract
-boundary-safe windows, and create deterministic record-grouped split manifests. Auditable run
-manifests connect those outputs to code, environment, configuration, and artifact digests. Dataset
-retrieval from the versioned PhysioNet file source is implemented with local integrity evidence.
-A local orchestration command connects all currently supported data stages. Model-ready partition
-indexing is implemented without concatenating large arrays. Model training and model evaluation are
-not yet implemented.
+| Question | Answer |
+|---|---|
+| **What is this?** | A responsible modernization of a notebook-oriented ECG classification project into a configuration-driven local data pipeline. |
+| **Why modernize it?** | The original work used absolute paths, an unrecorded environment, and random beat-window splits that cannot establish generalization to unseen patients. |
+| **What is implemented?** | Reproducible setup, authoritative data acquisition, integrity checks, record validation, annotation mapping, boundary-safe windowing, record-grouped splitting, dataset indexing, orchestration, and run manifests. |
+| **What comes next?** | Deterministic baseline training and tested held-out evaluation. No supported modern benchmark exists yet. |
 
-## What this case study demonstrates
+## Engineering capabilities demonstrated
 
-- incremental modernization without erasing the historical record;
-- reproducible Python environment and package management with `uv`;
-- separation of source data, derived data, code, notebooks, and generated artifacts;
-- automated linting, security scanning, dependency maintenance, and tests;
-- explicit provenance, licensing, lineage, and responsible-use documentation; and
-- an evaluation plan designed around record-grouped splits rather than random beat-window leakage.
+| Capability | Evidence in this repository |
+|---|---|
+| Reproducible development | Python 3.12/3.13 project metadata, committed `uv` lockfile, and documented Fish-compatible workflow |
+| Data provenance and integrity | Versioned PhysioNet acquisition, expected-file inventory, SHA-256 evidence, and explicit trust boundaries |
+| Data contracts | Structural signal and annotation validation, closed-world label mapping, and versioned window geometry |
+| Leakage-aware preparation | Deterministic record-grouped splits with assertions that records do not cross partitions |
+| Lineage and auditability | Record identity retained through transformations; run manifests capture code, environment, configuration, inputs, and artifact digests |
+| Pipeline design | One configuration-driven command connects supported stages and isolates every run under a UUID |
+| Testability and automation | Synthetic fixtures, unit and integration tests, CI, formatting, linting, type checks, security scans, and dependency maintenance |
+| Responsible delivery | Historical results, evaluation defects, dataset licensing, modernization status, and non-clinical limitations are documented explicitly |
 
-| Area | Current state | Modernization target |
-|---|---|---|
-| Data access | Manual download and local paths | Versioned HTTPS acquisition and integrity checks implemented |
-| Environment | Python 3.12 project with a committed `uv` lockfile | Add pipeline dependencies as supported modules land |
-| Transformation | Archived notebook and `wrangle.py` logic | Tested package modules and command-line workflow |
-| Evaluation | Random beat-window split | Record-grouped split implemented; evaluation pending |
-| Quality controls | Assertions only | Schema, signal, window, and split-integrity tests |
-| Automation | Linting, type checks, security scans, and tests in CI | Add data-independent notebook checks |
+## Implemented pipeline
 
-See the [repository architecture](docs/architecture.md) for directory boundaries and the [modernization roadmap](docs/modernization-roadmap.md) for the planned phases.
+```text
+PhysioNet MIT-BIH v1.0.0
+          |
+          v
+acquire -> inventory -> validate -> map annotations -> extract windows
+                                                        |
+                                                        v
+                                    record-grouped split -> dataset index
+                                                        |
+                                                        v
+                                             auditable run manifest
 
-Start with the [documentation guide](docs/README.md). Contributor setup and automated quality
-checks are documented in the [development workflow](docs/development.md).
+                                  [training -> evaluation -> model card]
+                                             planned, not implemented
+```
+
+The supported workflow is local, sequential, and designed for deterministic evidence and bounded memory use. It does not implement cloud infrastructure, distributed processing, model training, or model evaluation. The [pipeline design](docs/pipeline-design.md) maps these local contracts to a proposed future cloud architecture without claiming that architecture exists today.
+
+## Current status
+
+| Implemented today | Not yet implemented |
+|---|---|
+| Locked package environment and CLI | Supported model training |
+| Versioned, fail-safe dataset retrieval | Held-out model evaluation and tested metrics |
+| File inventory and local integrity baseline | Model card and modern benchmark |
+| Typed WFDB ingestion and record validation | Curated narrative notebooks |
+| Auditable annotation mapping and window extraction | Cloud deployment or orchestration |
+| Deterministic record-grouped split manifests | Runtime and resource benchmarks |
+| Model-ready index over immutable record shards | Subject-grouped guarantees across the two records from one person |
+| Run manifests and synthetic end-to-end coverage | Completed historical image and tutorial attribution audit |
+
+See the [modernization roadmap](docs/modernization-roadmap.md) for phase-level status.
 
 ## Quick start
 
-Install [uv](https://docs.astral.sh/uv/), then create the exact development environment and run the
-current smoke test:
+Install [uv](https://docs.astral.sh/uv/), create the locked development environment, and run the data-independent test suite:
 
 ```fish
 uv sync --locked --dev
 uv run pytest
 ```
 
-The supported environment installs the modern package scaffold only. It does not make the archived
-2022 notebooks reproducible or download any ECG data.
+Run the supported pipeline from the repository root:
 
-## Implemented data check
+```fish
+uv run ecg-data run-pipeline \
+  --repository-root . \
+  --dataset-config configs/mitdb-v1.0.0.toml \
+  --mapping-config configs/annotation-map-v1.toml \
+  --window-config configs/windowing-v1.toml \
+  --split-config configs/splitting-v1.toml
+```
 
-The package can retrieve the configured MIT-BIH files from PhysioNet into the ignored canonical raw
-zone using fail-safe, idempotent behavior. See [dataset acquisition](docs/dataset-acquisition.md).
+The first pipeline run retrieves the configured source files from PhysioNet into the ignored raw-data zone. Later runs verify and reuse the acquisition baseline. Generated raw, interim, processed, and run artifacts remain outside Git. See the [orchestration runbook](docs/pipeline-orchestration.md) for outputs and failure behavior.
 
-The package provides a metadata-driven command that validates the 144 required MIT-BIH record
-files and records a local SHA-256 integrity baseline. The inventory command itself does not download
-or redistribute data. Commands and trust limitations are documented in
-[data integrity](docs/data-integrity.md).
+## Architecture and documentation
 
-It also loads individual local WFDB records, preserves physical signals and original annotations,
-validates structural contracts, and writes machine-readable reports. See
-[record validation](docs/record-validation.md).
+| Path | Responsibility |
+|---|---|
+| `src/ecg_anomaly_detection/` | Installable package for acquisition through model-ready dataset indexing |
+| `configs/` | Versioned, non-secret dataset and transformation configuration |
+| `data/` | Ignored raw, external, interim, and processed data zones |
+| `tests/` | Unit, integration, and synthetic end-to-end coverage |
+| `artifacts/` and `reports/` | Ignored generated run evidence, models, and figures |
+| `archive/original_2022/` | Preserved, unsupported historical notebooks and supporting material |
+| `docs/` | Architecture, contracts, provenance, limitations, and roadmap |
 
-Original annotation symbols can be mapped through a versioned, closed-world policy that reports
-every inclusion and exclusion and fails on unknown symbols. See
-[annotation mapping](docs/annotation-mapping.md).
+Start with the [documentation guide](docs/README.md), then use these focused references:
 
-Mapped annotations can be converted into boundary-safe six-second windows with row-level lineage,
-versioned geometry, and overlap reporting. See [window extraction](docs/window-extraction.md).
+- [Repository architecture](docs/architecture.md)
+- [Pipeline orchestration](docs/pipeline-orchestration.md)
+- [Data provenance and licensing](docs/data-provenance.md)
+- [Historical results audit](docs/historical-results.md)
+- [Development workflow](docs/development.md)
+- [Modernization roadmap](docs/modernization-roadmap.md)
 
-One or more window artifacts can be assigned to deterministic train, validation, and test
-partitions without allowing a record to cross boundaries. See
-[record-grouped splitting](docs/record-grouped-splitting.md).
+## Historical experiment and results
 
-Generated stage evidence can be linked to the Git revision, installed environment, dependency lock,
-configuration, dataset inventory, split membership, and artifact checksums. See
-[run manifests](docs/run-manifests.md).
+The original workflow downloaded MIT-BIH records, selected the first signal channel, created six-second windows around annotated beats, mapped selected annotations into normal and abnormal classes, randomly split individual windows, and trained random-forest classifiers. It is preserved in [`archive/original_2022/`](archive/original_2022/) as historical evidence, not as a supported reproducible workflow.
 
-All supported data stages can be executed through one sequential, configuration-driven command. See
-[pipeline orchestration](docs/pipeline-orchestration.md).
+The saved 2022 notebook reports 95.3% test accuracy, 85.5% recall for the combined abnormal class, and a 0.2% false-positive rate. These are historical outputs, not validated portfolio benchmarks.
 
-Grouped partitions are exposed as a model-ready index over validated, immutable record shards. See
-[model-ready dataset](docs/model-ready-dataset.md).
+The split was performed after window creation, so windows from the same record—and potentially overlapping windows—could occur in both training and test data. The result may therefore be inflated and does not measure generalization to unseen patients. Record-grouped preparation is now implemented, but no replacement benchmark will be published before supported training and evaluation exist.
 
-## Historical workflow
+One notebook cell also reports validation accuracy of 1.00 because it scores predictions against themselves; the separately calculated value for that model is 0.845. The confusion matrices, metric definitions, and additional caveats are documented in the [historical results audit](docs/historical-results.md).
 
-The original experiment:
+## Dataset, attribution, and licensing
 
-1. downloaded MIT-BIH waveform and annotation files;
-2. read the data with the WFDB Python package;
-3. selected the first signal channel;
-4. extracted six-second windows centered on annotated beats;
-5. mapped selected annotations into normal and abnormal classes;
-6. randomly divided beat windows into training, validation, and test sets;
-7. trained and tuned random-forest classifiers; and
-8. presented exploration and results in [`report.ipynb`](archive/original_2022/report.ipynb).
-
-The original code depends on absolute local paths and an unrecorded environment. The modern package
-environment is reproducible, but the archived workflow is not supported and is not expected to run
-unchanged from a clean checkout.
-
-## Historical result and its limitation
-
-The 2022 notebook reports 95.3% test accuracy, 85.5% recall for the combined abnormal class, and a 0.2% false-positive rate. These values describe the saved output of the original experiment; they are not validated portfolio benchmarks.
-
-Most importantly, the original split assigns individual beat windows randomly. Windows from the same record—and potentially overlapping windows—can therefore occur in training and test data. This can inflate performance and does not measure generalization to unseen patients. The modernized pipeline now creates record-grouped memberships, but no new benchmark will be published before a supported training and evaluation workflow exists.
-
-One historical notebook cell also displays a validation accuracy of 1.00 because it mistakenly scores predictions against themselves. The separately calculated validation accuracy for that model is 0.845. Details are recorded in [historical results](docs/historical-results.md).
-
-## Dataset
-
-The project uses the [MIT-BIH Arrhythmia Database v1.0.0](https://physionet.org/content/mitdb/1.0.0/) hosted by PhysioNet. It contains 48 half-hour, two-channel ambulatory ECG recordings from 47 subjects, sampled at 360 Hz, with reference beat annotations.
+The project uses the [MIT-BIH Arrhythmia Database v1.0.0](https://physionet.org/content/mitdb/1.0.0/), hosted by PhysioNet. It contains 48 half-hour, two-channel ambulatory ECG recordings from 47 subjects, sampled at 360 Hz, with reference beat annotations.
 
 - Dataset DOI: [10.13026/C2F305](https://doi.org/10.13026/C2F305)
 - Upstream data license: [Open Data Commons Attribution License v1.0](https://opendatacommons.org/licenses/by/1-0/)
-- Access: open, subject to the upstream license and attribution requirements
-- Repository policy: source and derived data are not committed
+- Repository policy: source and derived patient-level data are not committed
+- Citation guidance: [data provenance](docs/data-provenance.md)
 
-Required citations and data-handling notes are in [data provenance](docs/data-provenance.md). The repository's MIT license applies to project code and documentation; it does not replace the dataset's license.
-
-## Repository map
-
-| Path | Purpose | Status |
-|---|---|---|
-| `src/ecg_anomaly_detection/` | Modern installable Python package | Inventory through grouped splitting plus run evidence implemented |
-| `configs/` | Versioned, non-secret pipeline configuration | Dataset, mapping, windowing, and splitting implemented |
-| `data/` | Ignored raw, external, interim, and processed data stages | Scaffolded with documented contracts |
-| `notebooks/` | Future curated notebooks | Scaffolded; curated notebooks pending |
-| `tests/` | Unit, integration, and synthetic-fixture boundaries | Current supported stages tested without ECG data |
-| `scripts/` | Thin operational entry points | Scaffolded |
-| `artifacts/` | Ignored generated models and run outputs | Scaffolded |
-| `reports/figures/` | Ignored reproducible figure output | Scaffolded |
-| `archive/original_2022/` | Original notebooks, wrangling code, and presentation images | Preserved; unsupported historical reference |
-| `docs/` | Architecture, modernization, provenance, and result documentation | Active |
-| `pyproject.toml`, `uv.lock` | Package metadata and exact dependency resolution | Implemented |
-
-No source data, generated feature tables, or trained model artifacts are tracked in Git.
+The repository's [MIT License](LICENSE) applies to project code and original documentation. It does not replace the licenses or attribution requirements for the dataset, dependencies, historical images, tutorials, or other third-party material. Current attribution status is recorded in [NOTICE.md](NOTICE.md).
 
 ## Known limitations
 
-- This is a small historical dataset and is not representative of modern deployment populations.
+### Data and labels
+
+- The dataset is small and is not representative of modern deployment populations.
 - The binary target collapses heterogeneous annotations and excludes others.
 - The first signal channel is used without a channel-selection analysis.
-- The original split is not patient/record-grouped or stratified.
-- Adjacent windows may overlap.
-- The original environment and exact dependency versions were not captured.
-- Record grouping prevents record crossover but does not establish subject-level independence when
-  multiple records represent the same person.
-- Some exploratory notebooks contain saved errors and duplicated code.
-- Third-party image and tutorial attribution is being audited; see [NOTICE.md](NOTICE.md).
+- Adjacent beat-centered windows may overlap.
 
-## Modernization principles
+### Evaluation
 
-- Preserve the original work and label it clearly.
-- Separate immutable raw data, derived data, and generated artifacts.
-- Make lineage and configuration explicit.
-- Validate data contracts and split boundaries.
-- Prefer patient/record-level evaluation.
-- Report limitations alongside metrics.
-- Avoid clinical or diagnostic claims.
-- Add cloud-oriented design only where it is implemented or clearly presented as a future extension.
+- Historical metrics use a random beat-window split and do not demonstrate generalization to unseen patients.
+- Record grouping prevents record crossover but does not guarantee subject independence when multiple records belong to one person.
+- The current split balances record counts rather than target distributions.
+- Supported training, evaluation, confusion-matrix tests, and modern metrics are pending.
 
-## Current next step
+### Reproducibility and operations
 
-The next implementation slice is deterministic baseline training that fits only on the indexed train
-partition and emits machine-readable held-out metrics. Any new benchmark will be reported with its
-record-level limitations. The target contracts are documented in the
-[proposed pipeline design](docs/pipeline-design.md).
+- The archived 2022 environment and exact dependency versions were not captured.
+- The supported pipeline is local and sequential; no production or cloud deployment is implemented.
+- Curated notebooks, runtime benchmarks, and resource-use documentation remain pending.
+- Some archived exploratory notebooks contain saved errors and duplicated implementation.
 
-## License
+### Third-party material
 
-Project code and original documentation are available under the [MIT License](LICENSE). Dataset files and third-party materials retain their own licenses and attribution requirements.
+- Historical image and tutorial attribution remains under audit; unverified assets are not reused in new portfolio material.
 
-## Citation
+## Citation, contribution, and license
 
-If referencing this repository, use the metadata in [CITATION.cff](CITATION.cff). If using the dataset, cite both MIT-BIH and PhysioNet as described in [data provenance](docs/data-provenance.md).
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the Fish-compatible local workflow, data-safety rules,
-validation commands, and pull request expectations.
+- Cite this repository with [CITATION.cff](CITATION.cff) and cite MIT-BIH and PhysioNet separately as described in [data provenance](docs/data-provenance.md).
+- Follow the Fish-compatible setup, data-safety rules, and pull-request checks in [CONTRIBUTING.md](CONTRIBUTING.md).
+- Project code and original documentation are available under the [MIT License](LICENSE); datasets and third-party materials retain their own terms.
