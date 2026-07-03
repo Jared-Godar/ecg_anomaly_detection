@@ -8,7 +8,9 @@ verification, typed WFDB ingestion, structural signal and annotation validation,
 quality gates. A versioned annotation mapping with closed-world symbol validation and audit counts
 and boundary-safe single-channel window extraction with row-level lineage are also implemented.
 Deterministic record-grouped splitting and its machine-readable membership manifest are implemented.
-Dataset acquisition, training, and evaluation are not yet implemented in the supported package.
+Auditable run manifests now connect repository-relative evidence to code and environment identity.
+Dataset acquisition, orchestration, training, and evaluation are not yet implemented in the
+supported package.
 
 ## Target local flow
 
@@ -53,7 +55,7 @@ pipelines.
 
 ## Run manifest minimum
 
-Each supported run should record:
+The supported run manifest records:
 
 - run identifier and UTC timestamp;
 - Git commit and dirty-worktree status;
@@ -62,8 +64,11 @@ Each supported run should record:
 - configuration content or digest;
 - schema and label-map versions;
 - record IDs and row/window counts by split;
-- random seeds and model parameters; and
+- split random seeds; and
 - artifact paths and checksums.
+
+Model parameters and machine-readable metrics will be added when supported training and evaluation
+stages exist.
 
 The manifest is operational evidence, not a clinical validation record.
 

@@ -41,7 +41,8 @@ Exit criterion: curated notebooks run against package functions and have a clear
   acquisition, training, and evaluation remain open.
 - [x] Retain record identifiers through current inventory, ingestion, mapping, and window stages.
 - [ ] Introduce a configuration-driven command-line entry point.
-- [ ] Write run manifests and machine-readable metrics.
+- [x] Write auditable run manifests for current data-stage evidence.
+- [ ] Write machine-readable metrics when supported evaluation is implemented.
 
 Exit criterion: the pipeline can be run without editing source files and produces traceable outputs.
 
