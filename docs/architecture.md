@@ -45,7 +45,8 @@ versioned dataset configuration, repository paths, local file inventory, SHA-256
 typed WFDB ingestion, record validation reports, versioned annotation mapping, and their CLI
 boundaries. Boundary-safe window extraction produces ignored NPZ artifacts with row-level lineage.
 Deterministic record-grouped splitting consumes that lineage and produces an ignored JSON membership
-manifest with record and target counts.
+manifest with record and target counts. Auditable run manifests connect those stage outputs to Git,
+the locked environment, configuration digests, and generated artifact digests.
 Notebooks and scripts should call package functions rather than carry duplicate implementations.
 New modules are added only with supported behavior and tests.
 
@@ -63,9 +64,9 @@ The four data stages have distinct meanings:
 4. `processed`: model-ready tables or arrays produced by the pipeline.
 
 Only each directory's `.gitkeep` contract is tracked. Source and derived ECG data remain ignored.
-Split manifests are generated locally and remain ignored. A future pipeline run manifest should
-connect upstream version, checksums, configuration, code revision, row counts, and record-level
-split membership.
+Split and run manifests are generated locally and remain ignored. Run manifests connect upstream
+version and checksums, configuration, code revision, environment versions, artifact digests, row
+counts, and record-level split membership without embedding ECG data.
 
 ### Notebooks
 
@@ -87,8 +88,9 @@ Models, serialized objects, run outputs, and generated figures are ignored by de
 4. **Completed:** add a versioned, closed-world annotation mapping with audit counts.
 5. **Completed:** add boundary-safe window extraction while retaining source identity.
 6. **Completed:** assign complete records to deterministic grouped dataset partitions.
-7. **Next:** add run manifests that connect inputs, configuration, code, and generated outputs.
-8. Create curated notebooks that call supported package APIs.
+7. **Completed:** add run manifests that connect inputs, configuration, code, and generated outputs.
+8. **Next:** add repeatable retrieval from the authoritative dataset source.
+9. Create curated notebooks that call supported package APIs.
 
 See the [proposed pipeline design](pipeline-design.md) for stage contracts and lineage metadata. The
 directory structure defines ownership; it does not imply that the archived workflow has already

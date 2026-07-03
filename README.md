@@ -15,8 +15,9 @@ The labels are simplified reference-annotation classes from a historical dataset
 The repository preserves the original notebook-oriented experiment and now provides a modern
 package scaffold, locked Python environment, automated quality gates, and explicit data-directory
 contracts. Supported stages now inventory and validate local records, map annotations, extract
-boundary-safe windows, and create deterministic record-grouped split manifests. Dataset retrieval,
-model training, and model evaluation are not yet implemented.
+boundary-safe windows, and create deterministic record-grouped split manifests. Auditable run
+manifests connect those outputs to code, environment, configuration, and artifact digests. Dataset
+retrieval, orchestration, model training, and model evaluation are not yet implemented.
 
 ## What this case study demonstrates
 
@@ -75,6 +76,10 @@ One or more window artifacts can be assigned to deterministic train, validation,
 partitions without allowing a record to cross boundaries. See
 [record-grouped splitting](docs/record-grouped-splitting.md).
 
+Generated stage evidence can be linked to the Git revision, installed environment, dependency lock,
+configuration, dataset inventory, split membership, and artifact checksums. See
+[run manifests](docs/run-manifests.md).
+
 ## Historical workflow
 
 The original experiment:
@@ -115,7 +120,7 @@ Required citations and data-handling notes are in [data provenance](docs/data-pr
 
 | Path | Purpose | Status |
 |---|---|---|
-| `src/ecg_anomaly_detection/` | Modern installable Python package | Inventory through grouped splitting implemented |
+| `src/ecg_anomaly_detection/` | Modern installable Python package | Inventory through grouped splitting plus run evidence implemented |
 | `configs/` | Versioned, non-secret pipeline configuration | Dataset, mapping, windowing, and splitting implemented |
 | `data/` | Ignored raw, external, interim, and processed data stages | Scaffolded with documented contracts |
 | `notebooks/` | Future curated notebooks | Scaffolded; curated notebooks pending |
@@ -155,9 +160,9 @@ No source data, generated feature tables, or trained model artifacts are tracked
 
 ## Current next step
 
-The next implementation slice is a run manifest that connects source checksums, configuration
-versions, code identity, and generated artifacts. Training and evaluation remain later stages. The
-target contracts are documented in the [proposed pipeline design](docs/pipeline-design.md).
+The next implementation slice is repeatable retrieval from the authoritative dataset source with
+explicit version, integrity, and idempotency controls. Training and evaluation remain later stages.
+The target contracts are documented in the [proposed pipeline design](docs/pipeline-design.md).
 
 ## License
 

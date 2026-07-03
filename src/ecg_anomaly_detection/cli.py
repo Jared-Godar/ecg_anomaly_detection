@@ -27,6 +27,11 @@ from ecg_anomaly_detection.records import (
     validate_record,
     write_validation_report,
 )
+from ecg_anomaly_detection.run_manifest import (
+    RunManifestError,
+    create_run_manifest,
+    write_run_manifest,
+)
 from ecg_anomaly_detection.splitting import (
     SplitError,
     create_split_manifest,
@@ -95,6 +100,18 @@ def build_parser() -> argparse.ArgumentParser:
     split_parser.add_argument("--split-config", type=Path, required=True)
     split_parser.add_argument("--input", type=Path, action="append", required=True)
     split_parser.add_argument("--output", type=Path, required=True)
+
+    run_parser = subparsers.add_parser(
+        "create-run-manifest",
+        help="hash run evidence and write an auditable operational manifest",
+    )
+    run_parser.add_argument("--repository-root", type=Path, default=Path.cwd())
+    run_parser.add_argument("--inventory-manifest", type=Path, required=True)
+    run_parser.add_argument("--split-manifest", type=Path, required=True)
+    run_parser.add_argument("--config", type=Path, action="append", required=True)
+    run_parser.add_argument("--evidence", type=Path, action="append", default=[])
+    run_parser.add_argument("--artifact", type=Path, action="append", default=[])
+    run_parser.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -104,6 +121,18 @@ def main(arguments: Sequence[str] | None = None) -> int:
     options = parser.parse_args(arguments)
 
     try:
+        if options.command == "create-run-manifest":
+            manifest = create_run_manifest(
+                options.repository_root,
+                options.inventory_manifest,
+                options.split_manifest,
+                options.config,
+                options.evidence,
+                options.artifact,
+            )
+            write_run_manifest(manifest, options.repository_root, options.output)
+            print(f"recorded run {manifest.run_id} in {options.output}")
+            return 0
         if options.command == "split-windows":
             split_config = load_split_config(options.split_config)
             metadata = load_window_metadata(options.input)
@@ -150,6 +179,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         ConfigurationError,
         InventoryError,
         RecordValidationError,
+        RunManifestError,
         SplitError,
         WindowExtractionError,
     ) as error:
