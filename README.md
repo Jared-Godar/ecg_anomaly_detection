@@ -32,7 +32,7 @@ contracts. Supported data processing and model training have not yet been implem
 | Transformation | Archived notebook and `wrangle.py` logic | Tested package modules and command-line workflow |
 | Evaluation | Random beat-window split | Patient/record-grouped validation |
 | Quality controls | Assertions only | Schema, signal, split, and metric tests |
-| Automation | Linting, security scans, and package smoke tests in CI | Add data-independent pipeline and notebook checks |
+| Automation | Linting, type checks, security scans, and tests in CI | Add data-independent notebook checks |
 
 See the [repository architecture](docs/architecture.md) for directory boundaries and the [modernization roadmap](docs/modernization-roadmap.md) for the planned phases.
 

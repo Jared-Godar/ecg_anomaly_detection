@@ -35,6 +35,7 @@ Before opening a pull request, run:
 
 ```fish
 uv run pytest
+uv run pyright
 uv run pre-commit run --all-files
 git diff --check
 ```
