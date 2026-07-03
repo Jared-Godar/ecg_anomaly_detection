@@ -50,6 +50,8 @@ manifest with record and target counts. Auditable run manifests connect those st
 the locked environment, configuration digests, and generated artifact digests.
 The local orchestrator invokes these package boundaries sequentially and isolates every run under a
 UUID without moving transformation logic into the CLI.
+The processed dataset index references validated per-record shards rather than duplicating their
+arrays, retaining record-grouped membership and content digests for future lazy-loading consumers.
 Notebooks and scripts should call package functions rather than carry duplicate implementations.
 New modules are added only with supported behavior and tests.
 
@@ -94,8 +96,9 @@ Models, serialized objects, run outputs, and generated figures are ignored by de
 7. **Completed:** add run manifests that connect inputs, configuration, code, and generated outputs.
 8. **Completed:** add repeatable retrieval from the authoritative dataset source.
 9. **Completed:** orchestrate current stages through one tested local workflow.
-10. **Next:** materialize grouped model-ready partition artifacts from record-level windows.
-11. Create curated notebooks that call supported package APIs.
+10. **Completed:** index grouped model-ready record shards without concatenating arrays.
+11. **Next:** add deterministic baseline training and held-out metric contracts.
+12. Create curated notebooks that call supported package APIs.
 
 See the [proposed pipeline design](pipeline-design.md) for stage contracts and lineage metadata. The
 directory structure defines ownership; it does not imply that the archived workflow has already

@@ -64,3 +64,6 @@ data.
 The v1 policy balances record counts approximately according to configured ratios; it does not
 stratify by target distribution. Target counts are reported so imbalance remains visible. Any
 future stratified or subject-grouped policy requires a new versioned strategy and regression tests.
+
+The supported [model-ready dataset index](model-ready-dataset.md) validates these memberships against
+the actual record shards before they can be consumed by future training code.

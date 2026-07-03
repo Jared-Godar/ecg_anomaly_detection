@@ -10,8 +10,9 @@ and boundary-safe single-channel window extraction with row-level lineage are al
 Deterministic record-grouped splitting and its machine-readable membership manifest are implemented.
 Auditable run manifests now connect repository-relative evidence to code and environment identity.
 Versioned, fail-safe HTTPS acquisition is also implemented. A local sequential orchestrator connects
-all currently supported data stages. Model-ready partition materialization, training, and evaluation
-are not yet implemented in the supported package.
+all currently supported data stages. A processed dataset index validates and references grouped
+record shards for lazy loading. Training and evaluation are not yet implemented in the supported
+package.
 
 ## Target local flow
 

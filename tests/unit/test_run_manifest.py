@@ -52,6 +52,7 @@ def repository(tmp_path: Path) -> Path:
                 "mapping_version": "1.0.0",
                 "window_config_name": "six-second",
                 "window_config_version": "1.0.0",
+                "source_artifacts": ["data/interim/windows.npz"],
                 "total_record_count": 3,
                 "total_window_count": 6,
                 "partitions": {

@@ -39,11 +39,13 @@ Exit criterion: curated notebooks run against package functions and have a clear
 - [ ] Separate acquisition, validation, windowing, splitting, training, and evaluation.
   Acquisition through grouped splitting is implemented; training and evaluation remain open.
 - [x] Retain record identifiers through current inventory, ingestion, mapping, and window stages.
+- [x] Index grouped model-ready record shards with content digests and aggregate counts.
 - [x] Introduce a configuration-driven command-line entry point.
 - [x] Write auditable run manifests for current data-stage evidence.
 - [ ] Write machine-readable metrics when supported evaluation is implemented.
 
-The supported data stages now run through one configuration-driven local orchestration command.
+The supported data stages now run through one configuration-driven local orchestration command and
+produce a grouped model-ready dataset index.
 
 Exit criterion: the pipeline can be run without editing source files and produces traceable outputs.
 

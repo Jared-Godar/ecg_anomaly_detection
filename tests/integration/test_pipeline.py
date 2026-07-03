@@ -68,12 +68,19 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
         assert len(tuple((run_directory / "windows").glob("*.json"))) == 3
         split = json.loads((run_directory / "split.json").read_text(encoding="utf-8"))
         manifest = json.loads((run_directory / "run-manifest.json").read_text(encoding="utf-8"))
+        dataset_index = json.loads(
+            (
+                tmp_path / "data" / "processed" / "runs" / run_directory.name / "dataset-index.json"
+            ).read_text(encoding="utf-8")
+        )
         assert split["total_record_count"] == 3
         assert split["total_window_count"] == 9
         assert manifest["run_id"] == run_directory.name
         assert manifest["git"]["dirty"] is False
         assert manifest["dataset"]["dataset_slug"] == "synthetic"
-        assert len(manifest["artifact_files"]) == 3
+        assert dataset_index["total_record_count"] == 3
+        assert dataset_index["total_window_count"] == 9
+        assert len(manifest["artifact_files"]) == 4
         assert len(manifest["evidence_files"]) == 10
 
 
@@ -81,11 +88,12 @@ def _initialize_repository(root: Path, record_ids: tuple[str, ...]) -> None:
     (root / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     (root / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     (root / ".gitignore").write_text(
-        "/data/raw/**\n/data/interim/**\n/artifacts/**\n",
+        "/data/raw/**\n/data/interim/**\n/data/processed/**\n/artifacts/**\n",
         encoding="utf-8",
     )
     (root / "data" / "raw").mkdir(parents=True)
     (root / "data" / "interim").mkdir()
+    (root / "data" / "processed").mkdir()
     (root / "artifacts").mkdir()
     configs = root / "configs"
     configs.mkdir()

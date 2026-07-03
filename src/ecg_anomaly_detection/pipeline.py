@@ -10,6 +10,7 @@ from typing import Callable
 
 from ecg_anomaly_detection.acquisition import Fetcher, acquire_dataset
 from ecg_anomaly_detection.config import load_dataset_config
+from ecg_anomaly_detection.dataset_index import create_dataset_index, write_dataset_index
 from ecg_anomaly_detection.inventory import create_inventory, write_manifest
 from ecg_anomaly_detection.labels import (
     load_annotation_mapping,
@@ -47,9 +48,11 @@ class PipelineRunResult:
     run_id: str
     run_directory: Path
     interim_directory: Path
+    processed_directory: Path
     acquisition_manifest_path: Path
     inventory_manifest_path: Path
     split_manifest_path: Path
+    dataset_index_path: Path
     run_manifest_path: Path
     record_count: int
     window_count: int
@@ -101,7 +104,7 @@ def run_pipeline(
         clock=timestamp,
     )
 
-    run_directory, interim_directory = _create_run_directories(root, run_id)
+    run_directory, interim_directory, processed_directory = _create_run_directories(root, run_id)
     validation_directory = run_directory / "validation"
     mapping_directory = run_directory / "mapping"
     window_report_directory = run_directory / "windows"
@@ -151,6 +154,10 @@ def run_pipeline(
     if split_manifest.total_window_count != total_windows:
         raise PipelineError("split window count does not match per-record extraction reports")
 
+    dataset_index = create_dataset_index(root, split_manifest_path, window_artifact_paths)
+    dataset_index_path = processed_directory / "dataset-index.json"
+    write_dataset_index(dataset_index, root, dataset_index_path)
+
     run_manifest = create_run_manifest(
         root,
         inventory_manifest_path,
@@ -162,7 +169,7 @@ def run_pipeline(
             *mapping_paths,
             *window_report_paths,
         ),
-        artifact_paths=window_artifact_paths,
+        artifact_paths=(*window_artifact_paths, dataset_index_path),
         clock=timestamp,
         run_id_factory=lambda: run_id,
     )
@@ -172,9 +179,11 @@ def run_pipeline(
         run_id=run_id,
         run_directory=run_directory,
         interim_directory=interim_directory,
+        processed_directory=processed_directory,
         acquisition_manifest_path=acquisition_manifest_path,
         inventory_manifest_path=inventory_manifest_path,
         split_manifest_path=split_manifest_path,
+        dataset_index_path=dataset_index_path,
         run_manifest_path=run_manifest_path,
         record_count=len(dataset_config.record_ids),
         window_count=total_windows,
@@ -208,19 +217,22 @@ def _create_run_id(run_id_factory: Callable[[], str] | None) -> str:
     return candidate
 
 
-def _create_run_directories(repository_root: Path, run_id: str) -> tuple[Path, Path]:
+def _create_run_directories(repository_root: Path, run_id: str) -> tuple[Path, Path, Path]:
     artifact_runs = _prepare_run_parent(repository_root / "artifacts")
     interim_runs = _prepare_run_parent(repository_root / "data" / "interim")
+    processed_runs = _prepare_run_parent(repository_root / "data" / "processed")
     run_directory = artifact_runs / run_id
     interim_directory = interim_runs / run_id
+    processed_directory = processed_runs / run_id
     try:
         run_directory.mkdir()
         interim_directory.mkdir()
+        processed_directory.mkdir()
     except FileExistsError as error:
         raise PipelineError(f"pipeline run ID already exists: {run_id}") from error
     except OSError as error:
         raise PipelineError(f"could not create pipeline run directories: {error}") from error
-    return run_directory, interim_directory
+    return run_directory, interim_directory, processed_directory
 
 
 def _prepare_run_parent(base_directory: Path) -> Path:

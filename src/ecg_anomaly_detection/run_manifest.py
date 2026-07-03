@@ -13,12 +13,12 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Callable, Sequence
 
 from ecg_anomaly_detection.inventory import InventoryError, InventoryManifest, read_manifest
+from ecg_anomaly_detection.splitting import SplitError, read_split_manifest
 
 BUFFER_SIZE = 1024 * 1024
-PARTITION_NAMES = ("train", "validation", "test")
 
 
 class RunManifestError(ValueError):
@@ -230,84 +230,31 @@ def _dataset_evidence(
 
 def _read_split_evidence(path: Path, split_file: FileEvidence) -> SplitEvidence:
     try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(document, dict) or document.get("schema_version") != 1:
-            raise RunManifestError("split manifest must be a schema_version 1 object")
-        partitions_document = document["partitions"]
-        if not isinstance(partitions_document, dict) or set(partitions_document) != set(
-            PARTITION_NAMES
-        ):
-            raise RunManifestError("split manifest must define train, validation, and test")
-        partitions = {
-            name: _parse_partition(name, partitions_document[name]) for name in PARTITION_NAMES
-        }
-        evidence = SplitEvidence(
-            split_name=_required_string(document, "split_name"),
-            split_version=_required_string(document, "split_version"),
-            strategy=_required_string(document, "strategy"),
-            seed=_required_nonnegative_int(document, "seed"),
-            mapping_name=_required_string(document, "mapping_name"),
-            mapping_version=_required_string(document, "mapping_version"),
-            window_config_name=_required_string(document, "window_config_name"),
-            window_config_version=_required_string(document, "window_config_version"),
-            total_record_count=_required_nonnegative_int(document, "total_record_count"),
-            total_window_count=_required_nonnegative_int(document, "total_window_count"),
-            partitions=partitions,
-            split_manifest=split_file,
-        )
-    except (KeyError, OSError, json.JSONDecodeError) as error:
+        manifest = read_split_manifest(path)
+    except SplitError as error:
         raise RunManifestError(f"invalid split manifest {path}: {error}") from error
-    _validate_split_evidence(evidence)
-    return evidence
-
-
-def _parse_partition(name: str, value: Any) -> PartitionEvidence:
-    if not isinstance(value, dict):
-        raise RunManifestError(f"split partition {name} must be an object")
-    record_ids_value = value.get("record_ids")
-    target_counts_value = value.get("target_value_counts")
-    if (
-        not isinstance(record_ids_value, list)
-        or not all(isinstance(item, str) and item for item in record_ids_value)
-        or len(record_ids_value) != len(set(record_ids_value))
-    ):
-        raise RunManifestError(f"split partition {name} has invalid record_ids")
-    if not isinstance(target_counts_value, dict) or not all(
-        isinstance(key, str)
-        and key
-        and isinstance(count, int)
-        and not isinstance(count, bool)
-        and count >= 0
-        for key, count in target_counts_value.items()
-    ):
-        raise RunManifestError(f"split partition {name} has invalid target counts")
-    return PartitionEvidence(
-        record_ids=tuple(record_ids_value),
-        record_count=_required_nonnegative_int(value, "record_count"),
-        window_count=_required_nonnegative_int(value, "window_count"),
-        target_value_counts=dict(sorted(target_counts_value.items())),
+    return SplitEvidence(
+        split_name=manifest.split_name,
+        split_version=manifest.split_version,
+        strategy=manifest.strategy,
+        seed=manifest.seed,
+        mapping_name=manifest.mapping_name,
+        mapping_version=manifest.mapping_version,
+        window_config_name=manifest.window_config_name,
+        window_config_version=manifest.window_config_version,
+        total_record_count=manifest.total_record_count,
+        total_window_count=manifest.total_window_count,
+        partitions={
+            name: PartitionEvidence(
+                record_ids=partition.record_ids,
+                record_count=partition.record_count,
+                window_count=partition.window_count,
+                target_value_counts=partition.target_value_counts,
+            )
+            for name, partition in manifest.partitions.items()
+        },
+        split_manifest=split_file,
     )
-
-
-def _validate_split_evidence(evidence: SplitEvidence) -> None:
-    record_sets = [set(partition.record_ids) for partition in evidence.partitions.values()]
-    if any(
-        left & right for index, left in enumerate(record_sets) for right in record_sets[index + 1 :]
-    ):
-        raise RunManifestError("split manifest contains record leakage across partitions")
-    for name, partition in evidence.partitions.items():
-        if partition.record_count != len(partition.record_ids):
-            raise RunManifestError(f"split partition {name} record count does not match membership")
-        if partition.window_count != sum(partition.target_value_counts.values()):
-            raise RunManifestError(f"split partition {name} window and target counts do not match")
-    if evidence.total_record_count != sum(
-        partition.record_count for partition in evidence.partitions.values()
-    ):
-        raise RunManifestError("split manifest total record count does not match partitions")
-    if evidence.total_window_count != sum(
-        partition.window_count for partition in evidence.partitions.values()
-    ):
-        raise RunManifestError("split manifest total window count does not match partitions")
 
 
 def _capture_git_state(repository_root: Path) -> GitState:
@@ -378,17 +325,3 @@ def _require_within_root(repository_root: Path, path: Path, description: str) ->
         path.relative_to(repository_root)
     except ValueError as error:
         raise RunManifestError(f"{description} must stay within repository root") from error
-
-
-def _required_string(values: dict[str, Any], key: str) -> str:
-    value = values.get(key)
-    if not isinstance(value, str) or not value.strip():
-        raise RunManifestError(f"split manifest {key} must be a non-empty string")
-    return value.strip()
-
-
-def _required_nonnegative_int(values: dict[str, Any], key: str) -> int:
-    value = values.get(key)
-    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-        raise RunManifestError(f"split manifest {key} must be a nonnegative integer")
-    return value
