@@ -27,6 +27,13 @@ from ecg_anomaly_detection.records import (
     validate_record,
     write_validation_report,
 )
+from ecg_anomaly_detection.windows import (
+    WindowExtractionError,
+    extract_windows,
+    load_window_config,
+    write_window_artifact,
+    write_window_report,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -62,6 +69,17 @@ def build_parser() -> argparse.ArgumentParser:
     mapping_parser.add_argument("--mapping-config", type=Path, required=True)
     mapping_parser.add_argument("--record-id", required=True)
     mapping_parser.add_argument("--output", type=Path, required=True)
+
+    window_parser = subparsers.add_parser(
+        "extract-windows",
+        help="extract configured beat windows and write an NPZ artifact and report",
+    )
+    _add_common_arguments(window_parser)
+    window_parser.add_argument("--mapping-config", type=Path, required=True)
+    window_parser.add_argument("--window-config", type=Path, required=True)
+    window_parser.add_argument("--record-id", required=True)
+    window_parser.add_argument("--output", type=Path, required=True)
+    window_parser.add_argument("--report", type=Path, required=True)
     return parser
 
 
@@ -85,18 +103,29 @@ def main(arguments: Sequence[str] | None = None) -> int:
             report = validate_record(config, record.signal, record.annotations)
             write_validation_report(report, options.output)
             print(f"validated record {options.record_id} in {options.output}")
-        else:
+        elif options.command == "map-annotations":
             record = load_wfdb_record(config, options.data_dir, options.record_id)
             validate_record(config, record.signal, record.annotations)
             mapping = load_annotation_mapping(options.mapping_config)
             result = map_annotations(mapping, record.annotations)
             write_mapping_report(result.report, options.output)
             print(f"mapped annotations for record {options.record_id} in {options.output}")
+        else:
+            record = load_wfdb_record(config, options.data_dir, options.record_id)
+            validate_record(config, record.signal, record.annotations)
+            mapping = load_annotation_mapping(options.mapping_config)
+            mapped = map_annotations(mapping, record.annotations)
+            window_config = load_window_config(options.window_config)
+            extracted = extract_windows(window_config, mapping, record.signal, mapped)
+            write_window_artifact(extracted.window_set, options.output)
+            write_window_report(extracted.report, options.report)
+            print(f"extracted {extracted.report.emitted_window_count} windows in {options.output}")
     except (
         AnnotationMappingError,
         ConfigurationError,
         InventoryError,
         RecordValidationError,
+        WindowExtractionError,
     ) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

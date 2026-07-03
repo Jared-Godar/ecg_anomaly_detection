@@ -110,6 +110,58 @@ symbols = ["!"]
     assert '"selected_other": 1' in report
 
 
+def test_extract_windows_cli_writes_npz_and_report(tmp_path: Path) -> None:
+    data_dir = tmp_path / "raw"
+    data_dir.mkdir()
+    _write_synthetic_record(data_dir)
+    dataset_config_path = tmp_path / "dataset.toml"
+    dataset_config_path.write_text(_dataset_config_content(), encoding="utf-8")
+    mapping_config_path = tmp_path / "mapping.toml"
+    mapping_config_path.write_text(_mapping_config_content(), encoding="utf-8")
+    window_config_path = tmp_path / "window.toml"
+    window_config_path.write_text(
+        """
+schema_version = 1
+[window]
+name = "synthetic-two-sample"
+version = "1.0.0"
+pre_seconds = 0.002777777777777778
+post_seconds = 0.002777777777777778
+channel_index = 0
+boundary_policy = "exclude"
+""".strip(),
+        encoding="utf-8",
+    )
+    output_path = tmp_path / "windows.npz"
+    report_path = tmp_path / "windows.json"
+
+    exit_code = main(
+        [
+            "extract-windows",
+            "--config",
+            str(dataset_config_path),
+            "--mapping-config",
+            str(mapping_config_path),
+            "--window-config",
+            str(window_config_path),
+            "--data-dir",
+            str(data_dir),
+            "--record-id",
+            "100",
+            "--output",
+            str(output_path),
+            "--report",
+            str(report_path),
+        ]
+    )
+
+    assert exit_code == 0
+    with np.load(output_path, allow_pickle=False) as artifact:
+        assert artifact["windows"].shape == (3, 2)
+        assert artifact["record_ids"].tolist() == ["100", "100", "100"]
+    assert '"emitted_window_count": 3' in report_path.read_text(encoding="utf-8")
+
+
 def _write_synthetic_record(data_dir: Path) -> None:
     sample_axis = np.linspace(0.0, 1.0, 16, endpoint=False)
     physical_signals = np.column_stack(
@@ -158,4 +210,24 @@ sample_rate_hz = 360
 annotation_extension = "atr"
 record_ids = ["100"]
 required_extensions = ["atr", "dat", "hea"]
+""".strip()
+
+
+def _mapping_config_content() -> str:
+    return """
+schema_version = 1
+[mapping]
+name = "synthetic"
+version = "1.0.0"
+unknown_symbol_policy = "error"
+[[targets]]
+name = "reference_normal"
+value = 0
+symbols = ["N"]
+[[targets]]
+name = "selected_other"
+value = 1
+symbols = ["V"]
+[exclusions]
+symbols = ["!"]
 """.strip()

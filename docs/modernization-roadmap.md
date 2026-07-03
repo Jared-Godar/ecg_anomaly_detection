@@ -37,8 +37,8 @@ Exit criterion: curated notebooks run against package functions and have a clear
 
 - [x] Create an installable `src` package boundary.
 - [ ] Separate acquisition, validation, windowing, splitting, training, and evaluation.
-  Inventory, record validation, and annotation mapping are implemented; later stages remain open.
-- [x] Retain record identifiers through current inventory, ingestion, and mapping stages.
+  Inventory, record validation, mapping, and window extraction are implemented; later stages remain open.
+- [x] Retain record identifiers through current inventory, ingestion, mapping, and window stages.
 - [ ] Introduce a configuration-driven command-line entry point.
 - [ ] Write run manifests and machine-readable metrics.
 
@@ -47,7 +47,7 @@ Exit criterion: the pipeline can be run without editing source files and produce
 ## Phase 5 — Testing and validation
 
 - [ ] Add synthetic fixtures that do not redistribute source ECG data.
-- [ ] Test sample-rate, shape, boundary-window, and label-mapping behavior.
+- [x] Test sample-rate, shape, boundary-window, and label-mapping behavior.
 - [ ] Assert that records never cross split boundaries.
 - [ ] Test confusion-matrix and metric calculations.
 - [ ] Add a small end-to-end pipeline test.

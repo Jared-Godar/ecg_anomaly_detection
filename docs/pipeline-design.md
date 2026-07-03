@@ -6,8 +6,9 @@ This document is a target design. The repository currently implements the packag
 locked environment, directory contracts, expected MIT-BIH file inventory, local SHA-256 integrity
 verification, typed WFDB ingestion, structural signal and annotation validation, tests, and CI
 quality gates. A versioned annotation mapping with closed-world symbol validation and audit counts
-is also implemented. Dataset acquisition, window generation, grouped splitting, training, and
-evaluation are not yet implemented in the supported package.
+and boundary-safe single-channel window extraction with row-level lineage are also implemented.
+Dataset acquisition, grouped splitting, training, and evaluation are not yet implemented in the
+supported package.
 
 ## Target local flow
 
