@@ -1,0 +1,8 @@
+schema_version = 1
+
+[evaluation]
+name = "validation-baseline-metrics"
+version = "1.0.0"
+evaluator = "random-projection-nearest-centroid"
+partition = "validation"
+zero_division = 0.0

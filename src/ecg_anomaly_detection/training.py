@@ -61,6 +61,58 @@ class BaselineModel:
         return json.dumps(asdict(self), indent=2, sort_keys=True, allow_nan=False) + "\n"
 
 
+def load_baseline_model(path: Path) -> BaselineModel:
+    """Load and strictly validate a persisted baseline without fitting it."""
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise TrainingError(f"could not load baseline model {path}: {error}") from error
+    if not isinstance(document, dict) or document.get("schema_version") != 1:
+        raise TrainingError("baseline model must be an object using schema_version 1")
+    expected_fields = {
+        "schema_version",
+        "estimator",
+        "training_name",
+        "training_version",
+        "seed",
+        "input_features",
+        "projection_components",
+        "classes",
+        "projection",
+        "centroids",
+    }
+    if set(document) != expected_fields:
+        raise TrainingError("baseline model fields do not match schema version 1")
+    try:
+        model = BaselineModel(
+            schema_version=1,
+            estimator=_model_string(document, "estimator"),
+            training_name=_model_string(document, "training_name"),
+            training_version=_model_string(document, "training_version"),
+            seed=_model_integer(document, "seed", minimum=0),
+            input_features=_model_integer(document, "input_features", minimum=1),
+            projection_components=_model_integer(document, "projection_components", minimum=1),
+            classes=_model_integer_vector(document, "classes"),
+            projection=_model_matrix(document, "projection"),
+            centroids=_model_matrix(document, "centroids"),
+        )
+    except (TypeError, ValueError) as error:
+        raise TrainingError(f"malformed baseline model: {error}") from error
+    if model.estimator != SUPPORTED_ESTIMATOR:
+        raise TrainingError(f"baseline model estimator must be {SUPPORTED_ESTIMATOR!r}")
+    if len(model.classes) < 2 or tuple(sorted(set(model.classes))) != model.classes:
+        raise TrainingError("baseline model classes must be at least two unique sorted integers")
+    projection = np.asarray(model.projection, dtype=np.float64)
+    centroids = np.asarray(model.centroids, dtype=np.float64)
+    if projection.shape != (model.input_features, model.projection_components):
+        raise TrainingError("baseline model projection shape does not match its metadata")
+    if centroids.shape != (len(model.classes), model.projection_components):
+        raise TrainingError("baseline model centroid shape does not match its classes")
+    if not np.isfinite(projection).all() or not np.isfinite(centroids).all():
+        raise TrainingError("baseline model parameters must be finite")
+    return model
+
+
 @dataclass(frozen=True, slots=True)
 class TrainingMetadata:
     """Fitting-only lineage without held-out metrics."""
@@ -273,6 +325,47 @@ def _integer(values: dict[str, Any], key: str, *, minimum: int) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
         raise TrainingError(f"training.{key} must be an integer >= {minimum}")
     return value
+
+
+def _model_string(values: dict[str, Any], key: str) -> str:
+    value = values.get(key)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{key} must be a non-empty string")
+    return value
+
+
+def _model_integer(values: dict[str, Any], key: str, *, minimum: int) -> int:
+    value = values.get(key)
+    if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+        raise ValueError(f"{key} must be an integer >= {minimum}")
+    return value
+
+
+def _model_integer_vector(values: dict[str, Any], key: str) -> tuple[int, ...]:
+    value = values.get(key)
+    if not isinstance(value, list) or any(
+        not isinstance(item, int) or isinstance(item, bool) for item in value
+    ):
+        raise ValueError(f"{key} must be an integer array")
+    return tuple(value)
+
+
+def _model_matrix(values: dict[str, Any], key: str) -> tuple[tuple[float, ...], ...]:
+    value = values.get(key)
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"{key} must be a non-empty numeric matrix")
+    rows: list[tuple[float, ...]] = []
+    for row in value:
+        if (
+            not isinstance(row, list)
+            or not row
+            or any(not isinstance(item, (int, float)) or isinstance(item, bool) for item in row)
+        ):
+            raise ValueError(f"{key} must be a non-empty numeric matrix")
+        rows.append(tuple(float(item) for item in row))
+    if len({len(row) for row in rows}) != 1:
+        raise ValueError(f"{key} rows must have equal length")
+    return tuple(rows)
 
 
 def _input_path(root: Path, path: Path, prefix: tuple[str, ...], description: str) -> Path:

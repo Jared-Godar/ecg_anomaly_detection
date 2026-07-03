@@ -5,10 +5,11 @@
 The supported orchestration command connects the implemented data stages through one
 configuration-driven workflow. It acquires and inventories the configured dataset, validates every
 record, maps annotations, extracts windows, assigns complete records to grouped partitions, and
-writes an auditable run manifest, and fits a deterministic training-only baseline.
+writes an auditable run manifest, fits a deterministic training-only baseline, and evaluates the
+frozen model on validation shards only.
 
-The workflow creates a model-ready grouped shard index and stops after fitting, before held-out
-evaluation. Completing a run does not report model quality or establish clinical suitability.
+The workflow does not open or report the indexed test partition. Validation metrics are exploratory
+pipeline evidence and do not establish final model quality or clinical suitability.
 
 ## Run the supported workflow
 
@@ -21,7 +22,8 @@ uv run ecg-data run-pipeline \
   --mapping-config configs/annotation-map-v1.toml \
   --window-config configs/windowing-v1.toml \
   --split-config configs/splitting-v1.toml \
-  --training-config configs/training-baseline-v1.toml
+  --training-config configs/training-baseline-v1.toml \
+  --evaluation-config configs/evaluation-baseline-v1.toml
 ```
 
 The first run retrieves the configured source files. Later runs verify and reuse the acquisition
@@ -43,6 +45,8 @@ artifacts/
     ├── training/
     │   ├── model.json
     │   └── training-metadata.json
+    ├── evaluation/
+    │   └── validation-metrics.json
     └── run-manifest.json
 
 data/interim/runs/<run-id>/
@@ -53,9 +57,11 @@ data/processed/runs/<run-id>/
 ```
 
 The final run manifest hashes every configuration, report, window artifact, processed dataset
-index, fitted model, and training metadata. The split manifest retains record membership;
+index, fitted model, training metadata, and validation metrics. The split manifest retains record
+membership;
 individual NPZ artifacts retain row-level record and annotation lineage. Only training shards are
-opened by the fitting stage.
+opened by fitting, and only validation shards are opened by evaluation. Test descriptors are not
+resolved, opened, scored, summarized, or reported.
 
 ## Execution and failure behavior
 
@@ -77,4 +83,4 @@ the network transport; CI never downloads MIT-BIH data.
 - The workflow is local and sequential; no cloud orchestrator is implemented.
 - The model-ready index references record shards rather than concatenating arrays.
 - The v1 split balances record counts, not target distributions.
-- Held-out evaluation, metrics, model selection, and model-card generation remain unimplemented.
+- Test-partition evaluation, model selection, and model-card generation remain unimplemented.

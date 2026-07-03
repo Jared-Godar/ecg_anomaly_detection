@@ -54,6 +54,8 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
         "configs/split.toml",
         "--training-config",
         "configs/training.toml",
+        "--evaluation-config",
+        "configs/evaluation.toml",
     ]
 
     first_exit_code = main(arguments)
@@ -87,11 +89,20 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
         )
         assert training_metadata["partition"] == "train"
         assert (run_directory / "training" / "model.json").is_file()
-        assert len(manifest["artifact_files"]) == 6
+        metrics = json.loads(
+            (run_directory / "evaluation" / "validation-metrics.json").read_text(encoding="utf-8")
+        )
+        assert metrics["partition"] == "validation"
+        assert metrics["window_count"] == 3
+        assert len(manifest["artifact_files"]) == 7
         assert any(
             item["path"].endswith("training/model.json") for item in manifest["artifact_files"]
         )
         assert len(manifest["evidence_files"]) == 10
+        assert any(
+            item["path"].endswith("evaluation/validation-metrics.json")
+            for item in manifest["artifact_files"]
+        )
 
 
 def _initialize_repository(root: Path, record_ids: tuple[str, ...]) -> None:
@@ -184,6 +195,18 @@ projection_components = 2
 """.strip(),
         encoding="utf-8",
     )
+    (configs / "evaluation.toml").write_text(
+        """
+schema_version = 1
+[evaluation]
+name = "synthetic-validation"
+version = "1.0.0"
+evaluator = "random-projection-nearest-centroid"
+partition = "validation"
+zero_division = 0.0
+""".strip(),
+        encoding="utf-8",
+    )
     subprocess.run(["git", "init", "--quiet"], cwd=root, check=True)
     subprocess.run(["git", "add", "."], cwd=root, check=True)
     subprocess.run(
@@ -193,6 +216,8 @@ projection_components = 2
             "user.name=Test User",
             "-c",
             "user.email=test@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
             "commit",
             "--quiet",
             "-m",

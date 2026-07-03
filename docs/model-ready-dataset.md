@@ -66,8 +66,8 @@ The output is created once and is not overwritten.
 
 ## Training boundary
 
-The baseline training stage consumes partition membership from this index and opens only train
-shards. Validation and test remain reserved for a future, separate evaluation stage.
+The baseline training stage opens only train shards. The separate evaluation stage opens only
+validation shards. Test shard descriptors remain reserved and are not resolved or summarized.
 
 The index itself does not train a model, establish subject-level independence, calculate metrics,
 or support clinical use. Record grouping remains distinct from patient grouping when subject identity
