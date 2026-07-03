@@ -21,4 +21,5 @@ def test_pipeline_rejects_configuration_outside_repository(
             Path("configs/mapping.toml"),
             Path("configs/window.toml"),
             Path("configs/split.toml"),
+            Path("configs/training.toml"),
         )

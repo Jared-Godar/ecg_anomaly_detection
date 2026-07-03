@@ -5,10 +5,10 @@
 The supported orchestration command connects the implemented data stages through one
 configuration-driven workflow. It acquires and inventories the configured dataset, validates every
 record, maps annotations, extracts windows, assigns complete records to grouped partitions, and
-writes an auditable run manifest.
+writes an auditable run manifest, and fits a deterministic training-only baseline.
 
-The workflow creates a model-ready grouped shard index and stops before training or evaluation.
-Completing a run does not validate a model or establish clinical suitability.
+The workflow creates a model-ready grouped shard index and stops after fitting, before held-out
+evaluation. Completing a run does not report model quality or establish clinical suitability.
 
 ## Run the supported workflow
 
@@ -20,7 +20,8 @@ uv run ecg-data run-pipeline \
   --dataset-config configs/mitdb-v1.0.0.toml \
   --mapping-config configs/annotation-map-v1.toml \
   --window-config configs/windowing-v1.toml \
-  --split-config configs/splitting-v1.toml
+  --split-config configs/splitting-v1.toml \
+  --training-config configs/training-baseline-v1.toml
 ```
 
 The first run retrieves the configured source files. Later runs verify and reuse the acquisition
@@ -39,6 +40,9 @@ artifacts/
     ├── mapping/<record-id>.json
     ├── windows/<record-id>.json
     ├── split.json
+    ├── training/
+    │   ├── model.json
+    │   └── training-metadata.json
     └── run-manifest.json
 
 data/interim/runs/<run-id>/
@@ -48,9 +52,10 @@ data/processed/runs/<run-id>/
 └── dataset-index.json
 ```
 
-The final run manifest hashes every configuration, report, window artifact, and processed dataset
-index and records the Git and environment identity. The split manifest retains record membership;
-individual NPZ artifacts retain row-level record and annotation lineage.
+The final run manifest hashes every configuration, report, window artifact, processed dataset
+index, fitted model, and training metadata. The split manifest retains record membership;
+individual NPZ artifacts retain row-level record and annotation lineage. Only training shards are
+opened by the fitting stage.
 
 ## Execution and failure behavior
 
@@ -72,4 +77,4 @@ the network transport; CI never downloads MIT-BIH data.
 - The workflow is local and sequential; no cloud orchestrator is implemented.
 - The model-ready index references record shards rather than concatenating arrays.
 - The v1 split balances record counts, not target distributions.
-- Training, metrics, model selection, and model-card generation remain unimplemented.
+- Held-out evaluation, metrics, model selection, and model-card generation remain unimplemented.

@@ -52,6 +52,8 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
         "configs/window.toml",
         "--split-config",
         "configs/split.toml",
+        "--training-config",
+        "configs/training.toml",
     ]
 
     first_exit_code = main(arguments)
@@ -80,7 +82,15 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
         assert manifest["dataset"]["dataset_slug"] == "synthetic"
         assert dataset_index["total_record_count"] == 3
         assert dataset_index["total_window_count"] == 9
-        assert len(manifest["artifact_files"]) == 4
+        training_metadata = json.loads(
+            (run_directory / "training" / "training-metadata.json").read_text(encoding="utf-8")
+        )
+        assert training_metadata["partition"] == "train"
+        assert (run_directory / "training" / "model.json").is_file()
+        assert len(manifest["artifact_files"]) == 6
+        assert any(
+            item["path"].endswith("training/model.json") for item in manifest["artifact_files"]
+        )
         assert len(manifest["evidence_files"]) == 10
 
 
@@ -159,6 +169,18 @@ seed = 7
 train = 0.6
 validation = 0.2
 test = 0.2
+""".strip(),
+        encoding="utf-8",
+    )
+    (configs / "training.toml").write_text(
+        """
+schema_version = 1
+[training]
+name = "synthetic-baseline"
+version = "1.0.0"
+estimator = "random-projection-nearest-centroid"
+seed = 7
+projection_components = 2
 """.strip(),
         encoding="utf-8",
     )

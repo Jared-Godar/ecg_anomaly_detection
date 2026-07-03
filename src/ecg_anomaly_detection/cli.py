@@ -46,6 +46,7 @@ from ecg_anomaly_detection.splitting import (
     load_window_metadata,
     write_split_manifest,
 )
+from ecg_anomaly_detection.training import TrainingError
 from ecg_anomaly_detection.windows import (
     WindowExtractionError,
     extract_windows,
@@ -136,6 +137,7 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline_parser.add_argument("--mapping-config", type=Path, required=True)
     pipeline_parser.add_argument("--window-config", type=Path, required=True)
     pipeline_parser.add_argument("--split-config", type=Path, required=True)
+    pipeline_parser.add_argument("--training-config", type=Path, required=True)
 
     index_parser = subparsers.add_parser(
         "index-dataset",
@@ -173,6 +175,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 options.mapping_config,
                 options.window_config,
                 options.split_config,
+                options.training_config,
             )
             print(
                 f"completed run {result.run_id}: {result.record_count} records, "
@@ -253,6 +256,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         RecordValidationError,
         RunManifestError,
         SplitError,
+        TrainingError,
         WindowExtractionError,
     ) as error:
         print(f"error: {error}", file=sys.stderr)

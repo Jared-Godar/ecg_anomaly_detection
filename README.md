@@ -50,7 +50,7 @@ acquire -> inventory -> validate -> map annotations -> extract windows
                                              planned, not implemented
 ```
 
-The supported workflow is local, sequential, and designed for deterministic evidence and bounded memory use. It does not implement cloud infrastructure, distributed processing, model training, or model evaluation. The [pipeline design](docs/pipeline-design.md) maps these local contracts to a proposed future cloud architecture without claiming that architecture exists today.
+The supported workflow is local, sequential, and designed for deterministic evidence and bounded memory use. It includes training-only baseline fitting but does not implement held-out model evaluation, cloud infrastructure, or distributed processing. The [pipeline design](docs/pipeline-design.md) maps these local contracts to a proposed future cloud architecture without claiming that architecture exists today.
 
 ## Current status
 
@@ -84,7 +84,8 @@ uv run ecg-data run-pipeline \
   --dataset-config configs/mitdb-v1.0.0.toml \
   --mapping-config configs/annotation-map-v1.toml \
   --window-config configs/windowing-v1.toml \
-  --split-config configs/splitting-v1.toml
+  --split-config configs/splitting-v1.toml \
+  --training-config configs/training-baseline-v1.toml
 ```
 
 The first pipeline run retrieves the configured source files from PhysioNet into the ignored raw-data zone. Later runs verify and reuse the acquisition baseline. Generated raw, interim, processed, and run artifacts remain outside Git. See the [orchestration runbook](docs/pipeline-orchestration.md) for outputs and failure behavior.
