@@ -48,6 +48,8 @@ with row-level lineage.
 Deterministic record-grouped splitting consumes that lineage and produces an ignored JSON membership
 manifest with record and target counts. Auditable run manifests connect those stage outputs to Git,
 the locked environment, configuration digests, and generated artifact digests.
+The local orchestrator invokes these package boundaries sequentially and isolates every run under a
+UUID without moving transformation logic into the CLI.
 Notebooks and scripts should call package functions rather than carry duplicate implementations.
 New modules are added only with supported behavior and tests.
 
@@ -91,8 +93,9 @@ Models, serialized objects, run outputs, and generated figures are ignored by de
 6. **Completed:** assign complete records to deterministic grouped dataset partitions.
 7. **Completed:** add run manifests that connect inputs, configuration, code, and generated outputs.
 8. **Completed:** add repeatable retrieval from the authoritative dataset source.
-9. **Next:** orchestrate current stages through one tested local workflow.
-10. Create curated notebooks that call supported package APIs.
+9. **Completed:** orchestrate current stages through one tested local workflow.
+10. **Next:** materialize grouped model-ready partition artifacts from record-level windows.
+11. Create curated notebooks that call supported package APIs.
 
 See the [proposed pipeline design](pipeline-design.md) for stage contracts and lineage metadata. The
 directory structure defines ownership; it does not imply that the archived workflow has already

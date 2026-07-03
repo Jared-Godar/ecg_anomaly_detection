@@ -18,7 +18,8 @@ contracts. Supported stages now inventory and validate local records, map annota
 boundary-safe windows, and create deterministic record-grouped split manifests. Auditable run
 manifests connect those outputs to code, environment, configuration, and artifact digests. Dataset
 retrieval from the versioned PhysioNet file source is implemented with local integrity evidence.
-End-to-end orchestration, model training, and model evaluation are not yet implemented.
+A local orchestration command connects all currently supported data stages. Model-ready partition
+materialization, model training, and model evaluation are not yet implemented.
 
 ## What this case study demonstrates
 
@@ -84,6 +85,9 @@ partitions without allowing a record to cross boundaries. See
 Generated stage evidence can be linked to the Git revision, installed environment, dependency lock,
 configuration, dataset inventory, split membership, and artifact checksums. See
 [run manifests](docs/run-manifests.md).
+
+All supported data stages can be executed through one sequential, configuration-driven command. See
+[pipeline orchestration](docs/pipeline-orchestration.md).
 
 ## Historical workflow
 
@@ -165,10 +169,9 @@ No source data, generated feature tables, or trained model artifacts are tracked
 
 ## Current next step
 
-The next implementation slice is a tested local orchestration command that connects acquisition,
-inventory, validation, mapping, windowing, splitting, and run evidence without notebook-only glue.
-Training and evaluation remain later stages. The target contracts are documented in the
-[proposed pipeline design](docs/pipeline-design.md).
+The next implementation slice is model-ready partition materialization that follows the grouped
+split manifest without duplicating or leaking records. Training and evaluation remain later stages.
+The target contracts are documented in the [proposed pipeline design](docs/pipeline-design.md).
 
 ## License
 

@@ -22,6 +22,7 @@ from ecg_anomaly_detection.labels import (
     map_annotations,
     write_mapping_report,
 )
+from ecg_anomaly_detection.pipeline import PipelineError, run_pipeline
 from ecg_anomaly_detection.records import (
     RecordValidationError,
     load_wfdb_record,
@@ -52,7 +53,7 @@ from ecg_anomaly_detection.windows import (
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ecg-data",
-        description="Inventory and verify ignored local ECG dataset files.",
+        description="Run supported local ECG data-pipeline stages.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -120,6 +121,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--evidence", type=Path, action="append", default=[])
     run_parser.add_argument("--artifact", type=Path, action="append", default=[])
     run_parser.add_argument("--output", type=Path, required=True)
+
+    pipeline_parser = subparsers.add_parser(
+        "run-pipeline",
+        help="run supported data stages from acquisition through auditable run evidence",
+    )
+    pipeline_parser.add_argument("--repository-root", type=Path, default=Path.cwd())
+    pipeline_parser.add_argument("--dataset-config", type=Path, required=True)
+    pipeline_parser.add_argument("--mapping-config", type=Path, required=True)
+    pipeline_parser.add_argument("--window-config", type=Path, required=True)
+    pipeline_parser.add_argument("--split-config", type=Path, required=True)
     return parser
 
 
@@ -129,6 +140,19 @@ def main(arguments: Sequence[str] | None = None) -> int:
     options = parser.parse_args(arguments)
 
     try:
+        if options.command == "run-pipeline":
+            result = run_pipeline(
+                options.repository_root,
+                options.dataset_config,
+                options.mapping_config,
+                options.window_config,
+                options.split_config,
+            )
+            print(
+                f"completed run {result.run_id}: {result.record_count} records, "
+                f"{result.window_count} windows, manifest {result.run_manifest_path}"
+            )
+            return 0
         if options.command == "create-run-manifest":
             manifest = create_run_manifest(
                 options.repository_root,
@@ -198,6 +222,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         AnnotationMappingError,
         ConfigurationError,
         InventoryError,
+        PipelineError,
         RecordValidationError,
         RunManifestError,
         SplitError,
