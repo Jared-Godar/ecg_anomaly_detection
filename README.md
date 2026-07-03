@@ -14,7 +14,9 @@ The labels are simplified reference-annotation classes from a historical dataset
 
 The repository preserves the original notebook-oriented experiment and now provides a modern
 package scaffold, locked Python environment, automated quality gates, and explicit data-directory
-contracts. Supported data processing and model training have not yet been implemented.
+contracts. Supported stages now inventory and validate local records, map annotations, extract
+boundary-safe windows, and create deterministic record-grouped split manifests. Dataset retrieval,
+model training, and model evaluation are not yet implemented.
 
 ## What this case study demonstrates
 
@@ -30,8 +32,8 @@ contracts. Supported data processing and model training have not yet been implem
 | Data access | Manual download and local paths | Configured, versioned acquisition with integrity checks |
 | Environment | Python 3.12 project with a committed `uv` lockfile | Add pipeline dependencies as supported modules land |
 | Transformation | Archived notebook and `wrangle.py` logic | Tested package modules and command-line workflow |
-| Evaluation | Random beat-window split | Patient/record-grouped validation |
-| Quality controls | Assertions only | Schema, signal, split, and metric tests |
+| Evaluation | Random beat-window split | Record-grouped split implemented; evaluation pending |
+| Quality controls | Assertions only | Schema, signal, window, and split-integrity tests |
 | Automation | Linting, type checks, security scans, and tests in CI | Add data-independent notebook checks |
 
 See the [repository architecture](docs/architecture.md) for directory boundaries and the [modernization roadmap](docs/modernization-roadmap.md) for the planned phases.
@@ -69,6 +71,10 @@ every inclusion and exclusion and fails on unknown symbols. See
 Mapped annotations can be converted into boundary-safe six-second windows with row-level lineage,
 versioned geometry, and overlap reporting. See [window extraction](docs/window-extraction.md).
 
+One or more window artifacts can be assigned to deterministic train, validation, and test
+partitions without allowing a record to cross boundaries. See
+[record-grouped splitting](docs/record-grouped-splitting.md).
+
 ## Historical workflow
 
 The original experiment:
@@ -90,7 +96,7 @@ unchanged from a clean checkout.
 
 The 2022 notebook reports 95.3% test accuracy, 85.5% recall for the combined abnormal class, and a 0.2% false-positive rate. These values describe the saved output of the original experiment; they are not validated portfolio benchmarks.
 
-Most importantly, the original split assigns individual beat windows randomly. Windows from the same record—and potentially overlapping windows—can therefore occur in training and test data. This can inflate performance and does not measure generalization to unseen patients. The modernized pipeline will use record-grouped evaluation before publishing a new benchmark.
+Most importantly, the original split assigns individual beat windows randomly. Windows from the same record—and potentially overlapping windows—can therefore occur in training and test data. This can inflate performance and does not measure generalization to unseen patients. The modernized pipeline now creates record-grouped memberships, but no new benchmark will be published before a supported training and evaluation workflow exists.
 
 One historical notebook cell also displays a validation accuracy of 1.00 because it mistakenly scores predictions against themselves. The separately calculated validation accuracy for that model is 0.845. Details are recorded in [historical results](docs/historical-results.md).
 
@@ -109,11 +115,11 @@ Required citations and data-handling notes are in [data provenance](docs/data-pr
 
 | Path | Purpose | Status |
 |---|---|---|
-| `src/ecg_anomaly_detection/` | Modern installable Python package | Inventory, validation, mapping, and windowing implemented |
-| `configs/` | Versioned, non-secret pipeline configuration | Dataset inventory and annotation mapping implemented |
+| `src/ecg_anomaly_detection/` | Modern installable Python package | Inventory through grouped splitting implemented |
+| `configs/` | Versioned, non-secret pipeline configuration | Dataset, mapping, windowing, and splitting implemented |
 | `data/` | Ignored raw, external, interim, and processed data stages | Scaffolded with documented contracts |
 | `notebooks/` | Future curated notebooks | Scaffolded; curated notebooks pending |
-| `tests/` | Unit, integration, and synthetic-fixture boundaries | Package smoke test implemented; pipeline tests pending |
+| `tests/` | Unit, integration, and synthetic-fixture boundaries | Current supported stages tested without ECG data |
 | `scripts/` | Thin operational entry points | Scaffolded |
 | `artifacts/` | Ignored generated models and run outputs | Scaffolded |
 | `reports/figures/` | Ignored reproducible figure output | Scaffolded |
@@ -131,8 +137,8 @@ No source data, generated feature tables, or trained model artifacts are tracked
 - The original split is not patient/record-grouped or stratified.
 - Adjacent windows may overlap.
 - The original environment and exact dependency versions were not captured.
-- Automated coverage currently validates only the package and environment scaffold; pipeline tests
-  will be added with supported transformation behavior.
+- Record grouping prevents record crossover but does not establish subject-level independence when
+  multiple records represent the same person.
 - Some exploratory notebooks contain saved errors and duplicated code.
 - Third-party image and tutorial attribution is being audited; see [NOTICE.md](NOTICE.md).
 
@@ -149,10 +155,9 @@ No source data, generated feature tables, or trained model artifacts are tracked
 
 ## Current next step
 
-The next implementation slice is record-grouped train, validation, and test membership. Complete
-record IDs—not individual windows—will be assigned to exactly one partition before model work
-begins. The target stage contracts are documented in the
-[proposed pipeline design](docs/pipeline-design.md).
+The next implementation slice is a run manifest that connects source checksums, configuration
+versions, code identity, and generated artifacts. Training and evaluation remain later stages. The
+target contracts are documented in the [proposed pipeline design](docs/pipeline-design.md).
 
 ## License
 

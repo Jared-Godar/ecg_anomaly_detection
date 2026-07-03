@@ -7,8 +7,8 @@ locked environment, directory contracts, expected MIT-BIH file inventory, local 
 verification, typed WFDB ingestion, structural signal and annotation validation, tests, and CI
 quality gates. A versioned annotation mapping with closed-world symbol validation and audit counts
 and boundary-safe single-channel window extraction with row-level lineage are also implemented.
-Dataset acquisition, grouped splitting, training, and evaluation are not yet implemented in the
-supported package.
+Deterministic record-grouped splitting and its machine-readable membership manifest are implemented.
+Dataset acquisition, training, and evaluation are not yet implemented in the supported package.
 
 ## Target local flow
 

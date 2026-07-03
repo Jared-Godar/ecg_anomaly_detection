@@ -1,0 +1,12 @@
+schema_version = 1
+
+[split]
+name = "record-grouped-holdout"
+version = "1.0.0"
+strategy = "seeded-record-shuffle"
+seed = 2022
+
+[split.ratios]
+train = 0.70
+validation = 0.15
+test = 0.15
