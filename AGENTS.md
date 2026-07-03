@@ -16,6 +16,30 @@
 - When a command invokes a script whose language is Bash, keep the script itself valid for its declared interpreter, but show Fish syntax around the invocation.
 - Prefer macOS-compatible utilities and flags. Do not assume GNU-specific behavior unless the required GNU tool is installed and documented.
 
+## Codex operating mode and cost control
+
+- Default operating mode:
+  - Model: GPT-5.5
+  - Reasoning: Medium
+  - Speed: Standard
+- Use lower-cost settings for:
+  - README edits
+  - markdown cleanup
+  - issue drafting
+  - changelog updates
+  - simple formatting
+  - small documentation changes
+- Use higher reasoning only for:
+  - architecture changes
+  - multi-file refactors
+  - dependency conflicts
+  - test failures
+  - notebook-to-package restructuring
+  - final review before merge
+- Avoid Fast mode unless the task is blocked, unusually complex, or time-sensitive.
+- Prefer feature-based commits and PRs over noisy one-line commits.
+- Big rewrites are acceptable when they improve maintainability, reproducibility, or clarity, but they should be scoped to a coherent feature.
+
 ## Git workflow
 
 - Preserve unrelated user changes in the worktree.
@@ -50,3 +74,10 @@
 - Distinguish the repository's MIT-licensed work from third-party datasets, images, tutorial material, and package licenses.
 - Do not reuse historical images in new portfolio material until their source and reuse terms are verified.
 - Label future-state cloud architecture as proposed unless it is actually implemented and tested.
+
+## Portfolio presentation
+
+- Present the project as a responsible modernization case study.
+- Emphasize reproducibility, data pipeline hygiene, grouped evaluation, testability, and documentation.
+- Avoid overclaiming model quality or medical applicability.
+- Prefer clear architecture notes, runbooks, limitations, and decision records over flashy claims.
