@@ -100,6 +100,16 @@ local_settings.py
 secrets/
 credentials/
 
+# Local AI assistant / coding-agent configuration
+# Keep durable project instructions in AGENTS.md or docs/, not local tool configs.
+.codex/
+.claude/
+.cursor/
+.github-copilot/
+.continue/
+.aider*
+*.aider.chat.history.md
+
 # Raw and derived data. Keep only directory contracts in Git.
 /data/raw/**
 !/data/raw/.gitkeep
