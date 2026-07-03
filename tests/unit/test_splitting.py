@@ -13,6 +13,7 @@ from ecg_anomaly_detection.splitting import (
     create_split_manifest,
     load_split_config,
     load_window_metadata,
+    read_split_manifest,
     write_split_manifest,
 )
 
@@ -80,6 +81,7 @@ def test_split_is_deterministic_complete_and_record_disjoint(
         set(summary.target_value_counts) == {"0", "1"} for summary in first.partitions.values()
     )
     assert '"strategy": "seeded-record-shuffle"' in output_path.read_text(encoding="utf-8")
+    assert read_split_manifest(output_path) == first
 
 
 def test_three_records_produce_three_nonempty_partitions(split_config: SplitConfig) -> None:

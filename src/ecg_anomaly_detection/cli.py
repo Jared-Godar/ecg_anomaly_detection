@@ -9,6 +9,11 @@ from typing import Sequence
 
 from ecg_anomaly_detection.acquisition import AcquisitionError, acquire_dataset
 from ecg_anomaly_detection.config import ConfigurationError, load_dataset_config
+from ecg_anomaly_detection.dataset_index import (
+    DatasetIndexError,
+    create_dataset_index,
+    write_dataset_index,
+)
 from ecg_anomaly_detection.inventory import (
     InventoryError,
     create_inventory,
@@ -131,6 +136,15 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline_parser.add_argument("--mapping-config", type=Path, required=True)
     pipeline_parser.add_argument("--window-config", type=Path, required=True)
     pipeline_parser.add_argument("--split-config", type=Path, required=True)
+
+    index_parser = subparsers.add_parser(
+        "index-dataset",
+        help="validate record shards and write a model-ready grouped dataset index",
+    )
+    index_parser.add_argument("--repository-root", type=Path, default=Path.cwd())
+    index_parser.add_argument("--split-manifest", type=Path, required=True)
+    index_parser.add_argument("--input", type=Path, action="append", required=True)
+    index_parser.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -140,6 +154,18 @@ def main(arguments: Sequence[str] | None = None) -> int:
     options = parser.parse_args(arguments)
 
     try:
+        if options.command == "index-dataset":
+            index = create_dataset_index(
+                options.repository_root,
+                options.split_manifest,
+                options.input,
+            )
+            write_dataset_index(index, options.repository_root, options.output)
+            print(
+                f"indexed {index.total_record_count} records and "
+                f"{index.total_window_count} windows in {options.output}"
+            )
+            return 0
         if options.command == "run-pipeline":
             result = run_pipeline(
                 options.repository_root,
@@ -221,6 +247,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         AcquisitionError,
         AnnotationMappingError,
         ConfigurationError,
+        DatasetIndexError,
         InventoryError,
         PipelineError,
         RecordValidationError,

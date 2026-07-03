@@ -19,7 +19,8 @@ boundary-safe windows, and create deterministic record-grouped split manifests. 
 manifests connect those outputs to code, environment, configuration, and artifact digests. Dataset
 retrieval from the versioned PhysioNet file source is implemented with local integrity evidence.
 A local orchestration command connects all currently supported data stages. Model-ready partition
-materialization, model training, and model evaluation are not yet implemented.
+indexing is implemented without concatenating large arrays. Model training and model evaluation are
+not yet implemented.
 
 ## What this case study demonstrates
 
@@ -88,6 +89,9 @@ configuration, dataset inventory, split membership, and artifact checksums. See
 
 All supported data stages can be executed through one sequential, configuration-driven command. See
 [pipeline orchestration](docs/pipeline-orchestration.md).
+
+Grouped partitions are exposed as a model-ready index over validated, immutable record shards. See
+[model-ready dataset](docs/model-ready-dataset.md).
 
 ## Historical workflow
 
@@ -169,9 +173,10 @@ No source data, generated feature tables, or trained model artifacts are tracked
 
 ## Current next step
 
-The next implementation slice is model-ready partition materialization that follows the grouped
-split manifest without duplicating or leaking records. Training and evaluation remain later stages.
-The target contracts are documented in the [proposed pipeline design](docs/pipeline-design.md).
+The next implementation slice is deterministic baseline training that fits only on the indexed train
+partition and emits machine-readable held-out metrics. Any new benchmark will be reported with its
+record-level limitations. The target contracts are documented in the
+[proposed pipeline design](docs/pipeline-design.md).
 
 ## License
 

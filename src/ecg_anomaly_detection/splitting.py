@@ -79,6 +79,50 @@ class SplitManifest:
         """Serialize with deterministic keys and formatting."""
         return json.dumps(asdict(self), indent=2, sort_keys=True) + "\n"
 
+    @classmethod
+    def from_json(cls, content: str) -> SplitManifest:
+        """Parse and validate a serialized grouped split manifest."""
+        try:
+            document = json.loads(content)
+            partitions_document = document["partitions"]
+            if not isinstance(partitions_document, dict) or set(partitions_document) != {
+                "train",
+                "validation",
+                "test",
+            }:
+                raise SplitError("split manifest must define train, validation, and test")
+            partitions = {
+                name: _parse_partition_summary(name, partitions_document[name])
+                for name in ("train", "validation", "test")
+            }
+            source_artifacts_value = document["source_artifacts"]
+            if (
+                not isinstance(source_artifacts_value, list)
+                or not source_artifacts_value
+                or not all(isinstance(item, str) and item for item in source_artifacts_value)
+                or len(source_artifacts_value) != len(set(source_artifacts_value))
+            ):
+                raise SplitError("split manifest source_artifacts must be unique non-empty paths")
+            manifest = cls(
+                schema_version=document["schema_version"],
+                split_name=_manifest_string(document, "split_name"),
+                split_version=_manifest_string(document, "split_version"),
+                strategy=_manifest_string(document, "strategy"),
+                seed=_manifest_nonnegative_int(document, "seed"),
+                mapping_name=_manifest_string(document, "mapping_name"),
+                mapping_version=_manifest_string(document, "mapping_version"),
+                window_config_name=_manifest_string(document, "window_config_name"),
+                window_config_version=_manifest_string(document, "window_config_version"),
+                source_artifacts=tuple(source_artifacts_value),
+                total_record_count=_manifest_nonnegative_int(document, "total_record_count"),
+                total_window_count=_manifest_nonnegative_int(document, "total_window_count"),
+                partitions=partitions,
+            )
+        except (KeyError, TypeError, json.JSONDecodeError) as error:
+            raise SplitError(f"invalid split manifest: {error}") from error
+        _validate_serialized_manifest(manifest)
+        return manifest
+
 
 def load_split_config(path: Path) -> SplitConfig:
     """Load and validate a versioned split configuration."""
@@ -240,6 +284,14 @@ def write_split_manifest(manifest: SplitManifest, output_path: Path) -> None:
     output_path.write_text(manifest.to_json(), encoding="utf-8")
 
 
+def read_split_manifest(path: Path) -> SplitManifest:
+    """Read and validate a grouped split manifest from disk."""
+    try:
+        return SplitManifest.from_json(path.read_text(encoding="utf-8"))
+    except OSError as error:
+        raise SplitError(f"could not read split manifest {path}: {error}") from error
+
+
 def _partition_sizes(record_count: int, ratios: tuple[float, float, float]) -> tuple[int, int, int]:
     exact = [record_count * ratio for ratio in ratios]
     sizes = [int(value) for value in exact]
@@ -284,6 +336,82 @@ def _validate_partitions(
         raise SplitError("record leakage detected across partitions")
     if set().union(*record_sets) != expected_records:
         raise SplitError("split partitions do not cover every input record")
+
+
+def _parse_partition_summary(name: str, value: Any) -> PartitionSummary:
+    if not isinstance(value, dict):
+        raise SplitError(f"split partition {name} must be an object")
+    record_ids = value.get("record_ids")
+    target_counts = value.get("target_value_counts")
+    if (
+        not isinstance(record_ids, list)
+        or not all(isinstance(item, str) and item for item in record_ids)
+        or len(record_ids) != len(set(record_ids))
+    ):
+        raise SplitError(f"split partition {name} has invalid record IDs")
+    if not isinstance(target_counts, dict) or not all(
+        isinstance(key, str)
+        and key
+        and isinstance(count, int)
+        and not isinstance(count, bool)
+        and count >= 0
+        for key, count in target_counts.items()
+    ):
+        raise SplitError(f"split partition {name} has invalid target counts")
+    return PartitionSummary(
+        record_ids=tuple(record_ids),
+        record_count=_manifest_nonnegative_int(value, "record_count"),
+        window_count=_manifest_nonnegative_int(value, "window_count"),
+        target_value_counts=dict(sorted(target_counts.items())),
+    )
+
+
+def _validate_serialized_manifest(manifest: SplitManifest) -> None:
+    if (
+        not isinstance(manifest.schema_version, int)
+        or isinstance(manifest.schema_version, bool)
+        or manifest.schema_version != 1
+    ):
+        raise SplitError("split manifest must use schema_version 1")
+    record_sets = [set(partition.record_ids) for partition in manifest.partitions.values()]
+    if any(
+        left & right for index, left in enumerate(record_sets) for right in record_sets[index + 1 :]
+    ):
+        raise SplitError("split manifest contains record leakage across partitions")
+    for name, partition in manifest.partitions.items():
+        if partition.record_count == 0:
+            raise SplitError(f"split partition {name} must contain at least one record")
+        if partition.record_count != len(partition.record_ids):
+            raise SplitError(f"split partition {name} record count does not match membership")
+        if partition.window_count != sum(partition.target_value_counts.values()):
+            raise SplitError(f"split partition {name} window and target counts do not match")
+    if manifest.total_record_count != sum(
+        partition.record_count for partition in manifest.partitions.values()
+    ):
+        raise SplitError("split manifest total record count does not match partitions")
+    if manifest.total_window_count != sum(
+        partition.window_count for partition in manifest.partitions.values()
+    ):
+        raise SplitError("split manifest total window count does not match partitions")
+    target_key_sets = {
+        frozenset(partition.target_value_counts) for partition in manifest.partitions.values()
+    }
+    if len(target_key_sets) != 1 or not next(iter(target_key_sets)):
+        raise SplitError("split partitions must report one consistent set of target values")
+
+
+def _manifest_string(values: dict[str, Any], key: str) -> str:
+    value = values.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise SplitError(f"split manifest {key} must be a non-empty string")
+    return value.strip()
+
+
+def _manifest_nonnegative_int(values: dict[str, Any], key: str) -> int:
+    value = values.get(key)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise SplitError(f"split manifest {key} must be a nonnegative integer")
+    return value
 
 
 def _required_string(values: dict[str, Any], key: str) -> str:

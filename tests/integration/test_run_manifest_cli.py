@@ -39,6 +39,7 @@ def test_create_run_manifest_command_records_local_evidence(tmp_path: Path) -> N
                 "mapping_version": "1",
                 "window_config_name": "window",
                 "window_config_version": "1",
+                "source_artifacts": ["data/interim/windows.npz"],
                 "total_record_count": 3,
                 "total_window_count": 3,
                 "partitions": {

@@ -7,8 +7,8 @@ configuration-driven workflow. It acquires and inventories the configured datase
 record, maps annotations, extracts windows, assigns complete records to grouped partitions, and
 writes an auditable run manifest.
 
-The workflow stops before model-ready partition materialization, training, or evaluation. Completing
-a run does not validate a model or establish clinical suitability.
+The workflow creates a model-ready grouped shard index and stops before training or evaluation.
+Completing a run does not validate a model or establish clinical suitability.
 
 ## Run the supported workflow
 
@@ -43,11 +43,14 @@ artifacts/
 
 data/interim/runs/<run-id>/
 └── windows/<record-id>.npz
+
+data/processed/runs/<run-id>/
+└── dataset-index.json
 ```
 
-The final run manifest hashes every configuration, report, and window artifact and records the Git
-and environment identity. The split manifest retains record membership; individual NPZ artifacts
-retain row-level record and annotation lineage.
+The final run manifest hashes every configuration, report, window artifact, and processed dataset
+index and records the Git and environment identity. The split manifest retains record membership;
+individual NPZ artifacts retain row-level record and annotation lineage.
 
 ## Execution and failure behavior
 
@@ -67,7 +70,6 @@ the network transport; CI never downloads MIT-BIH data.
 ## Current limitations
 
 - The workflow is local and sequential; no cloud orchestrator is implemented.
-- Window artifacts remain separated by record and are not yet materialized into model-ready
-  partition datasets.
+- The model-ready index references record shards rather than concatenating arrays.
 - The v1 split balances record counts, not target distributions.
 - Training, metrics, model selection, and model-card generation remain unimplemented.
