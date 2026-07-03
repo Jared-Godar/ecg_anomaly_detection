@@ -19,3 +19,4 @@ file inventory, and checksums.
 See [data provenance](../docs/data-provenance.md) for the authoritative source, licensing, attribution, and privacy constraints.
 See the [proposed pipeline design](../docs/pipeline-design.md) for lineage and validation contracts.
 See [data integrity](../docs/data-integrity.md) for the implemented inventory and SHA-256 commands.
+See [window extraction](../docs/window-extraction.md) for the ignored interim NPZ contract.

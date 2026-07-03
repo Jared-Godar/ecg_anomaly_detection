@@ -54,6 +54,9 @@ The generated JSON report records:
 Reports under `artifacts/` remain ignored. The mapped arrays retain record ID, source sample index,
 original source symbol, and integer target value for downstream window generation.
 
+The next supported stage uses these fields for
+[boundary-safe window extraction](window-extraction.md).
+
 ## Change control
 
 Changing a symbol assignment changes the derived target definition. Such a change must use a new
