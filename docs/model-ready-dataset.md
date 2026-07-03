@@ -66,9 +66,8 @@ The output is created once and is not overwritten.
 
 ## Training boundary
 
-Future training code should consume partition membership from this index and load shards lazily. It
-must fit preprocessing and models using only the train partition, use validation only for declared
-selection decisions, and reserve test for final held-out evaluation.
+The baseline training stage consumes partition membership from this index and opens only train
+shards. Validation and test remain reserved for a future, separate evaluation stage.
 
 The index itself does not train a model, establish subject-level independence, calculate metrics,
 or support clinical use. Record grouping remains distinct from patient grouping when subject identity

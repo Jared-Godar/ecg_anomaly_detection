@@ -29,6 +29,7 @@ from ecg_anomaly_detection.splitting import (
     load_window_metadata,
     write_split_manifest,
 )
+from ecg_anomaly_detection.training import load_training_config, train_from_index
 from ecg_anomaly_detection.windows import (
     extract_windows,
     load_window_config,
@@ -53,6 +54,8 @@ class PipelineRunResult:
     inventory_manifest_path: Path
     split_manifest_path: Path
     dataset_index_path: Path
+    model_path: Path
+    training_metadata_path: Path
     run_manifest_path: Path
     record_count: int
     window_count: int
@@ -64,12 +67,13 @@ def run_pipeline(
     mapping_config_path: Path,
     window_config_path: Path,
     split_config_path: Path,
+    training_config_path: Path,
     *,
     fetcher: Fetcher | None = None,
     clock: Callable[[], datetime] | None = None,
     run_id_factory: Callable[[], str] | None = None,
 ) -> PipelineRunResult:
-    """Run acquisition through evidence generation without training a model."""
+    """Run acquisition through deterministic fitting without held-out evaluation."""
     root = repository_root.resolve()
     if not (root / "pyproject.toml").is_file():
         raise PipelineError(f"repository root does not contain pyproject.toml: {root}")
@@ -80,12 +84,14 @@ def run_pipeline(
             mapping_config_path,
             window_config_path,
             split_config_path,
+            training_config_path,
         )
     )
     dataset_config = load_dataset_config(config_paths[0])
     mapping_config = load_annotation_mapping(config_paths[1])
     window_config = load_window_config(config_paths[2])
     split_config = load_split_config(config_paths[3])
+    training_config = load_training_config(config_paths[4])
     run_id = _create_run_id(run_id_factory)
     timestamp = clock or (lambda: datetime.now(UTC))
 
@@ -158,6 +164,18 @@ def run_pipeline(
     dataset_index_path = processed_directory / "dataset-index.json"
     write_dataset_index(dataset_index, root, dataset_index_path)
 
+    training_directory = run_directory / "training"
+    training_directory.mkdir()
+    model_path = training_directory / "model.json"
+    training_metadata_path = training_directory / "training-metadata.json"
+    train_from_index(
+        root,
+        dataset_index_path,
+        training_config,
+        model_path,
+        training_metadata_path,
+    )
+
     run_manifest = create_run_manifest(
         root,
         inventory_manifest_path,
@@ -169,7 +187,12 @@ def run_pipeline(
             *mapping_paths,
             *window_report_paths,
         ),
-        artifact_paths=(*window_artifact_paths, dataset_index_path),
+        artifact_paths=(
+            *window_artifact_paths,
+            dataset_index_path,
+            model_path,
+            training_metadata_path,
+        ),
         clock=timestamp,
         run_id_factory=lambda: run_id,
     )
@@ -184,6 +207,8 @@ def run_pipeline(
         inventory_manifest_path=inventory_manifest_path,
         split_manifest_path=split_manifest_path,
         dataset_index_path=dataset_index_path,
+        model_path=model_path,
+        training_metadata_path=training_metadata_path,
         run_manifest_path=run_manifest_path,
         record_count=len(dataset_config.record_ids),
         window_count=total_windows,

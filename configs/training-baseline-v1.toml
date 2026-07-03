@@ -1,0 +1,8 @@
+schema_version = 1
+
+[training]
+name = "seeded-random-projection-nearest-centroid"
+version = "1.0.0"
+estimator = "random-projection-nearest-centroid"
+seed = 2022
+projection_components = 32
