@@ -42,8 +42,9 @@ pipeline modules remain intentionally absent until supported behavior and tests 
 
 Reusable behavior belongs under `src/ecg_anomaly_detection/`. The package currently implements
 versioned dataset configuration, repository paths, local file inventory, SHA-256 verification,
-typed WFDB ingestion, record validation reports, versioned annotation mapping, and their CLI
-boundaries. Boundary-safe window extraction produces ignored NPZ artifacts with row-level lineage.
+fail-safe HTTPS acquisition, typed WFDB ingestion, record validation reports, versioned annotation
+mapping, and their CLI boundaries. Boundary-safe window extraction produces ignored NPZ artifacts
+with row-level lineage.
 Deterministic record-grouped splitting consumes that lineage and produces an ignored JSON membership
 manifest with record and target counts. Auditable run manifests connect those stage outputs to Git,
 the locked environment, configuration digests, and generated artifact digests.
@@ -89,8 +90,9 @@ Models, serialized objects, run outputs, and generated figures are ignored by de
 5. **Completed:** add boundary-safe window extraction while retaining source identity.
 6. **Completed:** assign complete records to deterministic grouped dataset partitions.
 7. **Completed:** add run manifests that connect inputs, configuration, code, and generated outputs.
-8. **Next:** add repeatable retrieval from the authoritative dataset source.
-9. Create curated notebooks that call supported package APIs.
+8. **Completed:** add repeatable retrieval from the authoritative dataset source.
+9. **Next:** orchestrate current stages through one tested local workflow.
+10. Create curated notebooks that call supported package APIs.
 
 See the [proposed pipeline design](pipeline-design.md) for stage contracts and lineage metadata. The
 directory structure defines ownership; it does not imply that the archived workflow has already

@@ -7,6 +7,7 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Project README](../README.md) | Portfolio overview, current status, quick start, and limitations |
 | [Architecture](architecture.md) | Implemented repository boundaries and target component ownership |
 | [Pipeline design](pipeline-design.md) | Proposed lineage, validation controls, run outputs, and cloud mapping |
+| [Dataset acquisition](dataset-acquisition.md) | Versioned HTTPS retrieval, idempotency, recovery, and trust boundary |
 | [Data integrity](data-integrity.md) | Implemented local file inventory, SHA-256 baseline, and trust boundary |
 | [Record validation](record-validation.md) | Implemented WFDB ingestion, validation rules, and report schema |
 | [Annotation mapping](annotation-mapping.md) | Versioned binary target policy, exclusions, and audit report |

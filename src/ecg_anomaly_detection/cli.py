@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from ecg_anomaly_detection.acquisition import AcquisitionError, acquire_dataset
 from ecg_anomaly_detection.config import ConfigurationError, load_dataset_config
 from ecg_anomaly_detection.inventory import (
     InventoryError,
@@ -54,6 +55,13 @@ def build_parser() -> argparse.ArgumentParser:
         description="Inventory and verify ignored local ECG dataset files.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    acquire_parser = subparsers.add_parser(
+        "acquire", help="retrieve the configured public dataset into the ignored raw-data zone"
+    )
+    _add_common_arguments(acquire_parser)
+    acquire_parser.add_argument("--repository-root", type=Path, default=Path.cwd())
+    acquire_parser.add_argument("--output", type=Path, required=True)
 
     inventory_parser = subparsers.add_parser(
         "inventory", help="hash every required file and write a local baseline manifest"
@@ -144,7 +152,18 @@ def main(arguments: Sequence[str] | None = None) -> int:
             )
             return 0
         config = load_dataset_config(options.config)
-        if options.command == "inventory":
+        if options.command == "acquire":
+            result = acquire_dataset(
+                config,
+                options.repository_root,
+                options.data_dir,
+                options.output,
+            )
+            print(
+                f"acquired {result.downloaded_file_count} and reused "
+                f"{result.reused_file_count} files in {options.data_dir}"
+            )
+        elif options.command == "inventory":
             manifest = create_inventory(config, options.data_dir)
             write_manifest(manifest, options.output)
             print(f"inventoried {len(manifest.files)} files in {options.output}")
@@ -175,6 +194,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             write_window_report(extracted.report, options.report)
             print(f"extracted {extracted.report.emitted_window_count} windows in {options.output}")
     except (
+        AcquisitionError,
         AnnotationMappingError,
         ConfigurationError,
         InventoryError,

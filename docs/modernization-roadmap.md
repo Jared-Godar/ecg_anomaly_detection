@@ -15,13 +15,13 @@ replacement gains tests and documentation. Checkboxes report repository state, n
 
 - [x] Select Python 3.12 and `uv` as the supported environment workflow.
 - [x] Add `pyproject.toml`, development dependencies, and a lock file.
-- [ ] Replace absolute paths with configuration.
-- [ ] Add repeatable dataset retrieval from the authoritative source.
+- [x] Replace absolute paths with configuration in the supported workflow.
+- [x] Add repeatable dataset retrieval from the authoritative source.
 - [x] Add expected-file inventory and local SHA-256 integrity checks.
 - [x] Define raw, external, interim, processed, report, and artifact locations.
 
-Exit criterion: a contributor can create the environment and run a lightweight data-access smoke
-test from documented commands. Environment creation is complete; data access remains open.
+Exit criterion: a contributor can create the environment and run documented, configuration-driven
+data access with synthetic CI coverage. Complete.
 
 ## Phase 3 — Notebook cleanup
 
@@ -37,10 +37,9 @@ Exit criterion: curated notebooks run against package functions and have a clear
 
 - [x] Create an installable `src` package boundary.
 - [ ] Separate acquisition, validation, windowing, splitting, training, and evaluation.
-  Inventory, record validation, mapping, window extraction, and grouped splitting are implemented;
-  acquisition, training, and evaluation remain open.
+  Acquisition through grouped splitting is implemented; training and evaluation remain open.
 - [x] Retain record identifiers through current inventory, ingestion, mapping, and window stages.
-- [ ] Introduce a configuration-driven command-line entry point.
+- [x] Introduce a configuration-driven command-line entry point.
 - [x] Write auditable run manifests for current data-stage evidence.
 - [ ] Write machine-readable metrics when supported evaluation is implemented.
 
@@ -48,7 +47,7 @@ Exit criterion: the pipeline can be run without editing source files and produce
 
 ## Phase 5 — Testing and validation
 
-- [ ] Add synthetic fixtures that do not redistribute source ECG data.
+- [x] Add synthetic fixtures that do not redistribute source ECG data.
 - [x] Test sample-rate, shape, boundary-window, and label-mapping behavior.
 - [x] Assert that records never cross split boundaries.
 - [ ] Test confusion-matrix and metric calculations.

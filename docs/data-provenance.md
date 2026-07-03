@@ -35,9 +35,12 @@ The repository layout distinguishes:
 
 Each generated dataset should carry a manifest containing at least the source dataset name and version, retrieval timestamp, checksums, transformation configuration, code revision, schema version, row counts, and record identifiers included in each split.
 
+The supported [acquisition command](dataset-acquisition.md) retrieves the configured record files
+from PhysioNet's versioned HTTPS file directory and records an ignored local baseline. It does not
+redistribute the source files through this repository.
+
 The required lineage fields and stage boundaries are expanded in the
-[proposed pipeline design](pipeline-design.md). Those contracts are design requirements until the
-corresponding package modules and tests are implemented.
+[proposed pipeline design](pipeline-design.md). Unimplemented stages remain identified there.
 
 ## Privacy and responsible use
 
