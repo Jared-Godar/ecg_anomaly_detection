@@ -6,6 +6,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 
 class ConfigurationError(ValueError):
@@ -53,6 +54,7 @@ class DatasetConfig:
     slug: str
     version: str
     source_url: str
+    download_url: str
     sample_rate_hz: int
     annotation_extension: str
     record_ids: tuple[str, ...]
@@ -86,7 +88,8 @@ def load_dataset_config(path: Path) -> DatasetConfig:
         name=_required_string(dataset, "name"),
         slug=_required_string(dataset, "slug"),
         version=_required_string(dataset, "version"),
-        source_url=_required_string(dataset, "source_url"),
+        source_url=_required_https_url(dataset, "source_url"),
+        download_url=_required_https_url(dataset, "download_url", require_trailing_slash=True),
         sample_rate_hz=_required_positive_int(dataset, "sample_rate_hz"),
         annotation_extension=_required_string(dataset, "annotation_extension").lstrip("."),
         record_ids=_required_unique_strings(dataset, "record_ids"),
@@ -112,6 +115,29 @@ def _required_positive_int(values: dict[str, Any], key: str) -> int:
     value = values.get(key)
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         raise ConfigurationError(f"dataset.{key} must be a positive integer")
+    return value
+
+
+def _required_https_url(
+    values: dict[str, Any], key: str, *, require_trailing_slash: bool = False
+) -> str:
+    value = _required_string(values, key).strip()
+    try:
+        parsed = urlsplit(value)
+        _ = parsed.port
+    except ValueError as error:
+        raise ConfigurationError(f"dataset.{key} must be a valid HTTPS URL") from error
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ConfigurationError(f"dataset.{key} must be an HTTPS URL without credentials or query")
+    if require_trailing_slash and not parsed.path.endswith("/"):
+        raise ConfigurationError(f"dataset.{key} must end with a slash")
     return value
 
 

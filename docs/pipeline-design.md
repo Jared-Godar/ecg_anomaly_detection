@@ -9,8 +9,8 @@ quality gates. A versioned annotation mapping with closed-world symbol validatio
 and boundary-safe single-channel window extraction with row-level lineage are also implemented.
 Deterministic record-grouped splitting and its machine-readable membership manifest are implemented.
 Auditable run manifests now connect repository-relative evidence to code and environment identity.
-Dataset acquisition, orchestration, training, and evaluation are not yet implemented in the
-supported package.
+Versioned, fail-safe HTTPS acquisition is also implemented. End-to-end orchestration, training, and
+evaluation are not yet implemented in the supported package.
 
 ## Target local flow
 

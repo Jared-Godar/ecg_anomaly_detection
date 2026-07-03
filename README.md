@@ -17,7 +17,8 @@ package scaffold, locked Python environment, automated quality gates, and explic
 contracts. Supported stages now inventory and validate local records, map annotations, extract
 boundary-safe windows, and create deterministic record-grouped split manifests. Auditable run
 manifests connect those outputs to code, environment, configuration, and artifact digests. Dataset
-retrieval, orchestration, model training, and model evaluation are not yet implemented.
+retrieval from the versioned PhysioNet file source is implemented with local integrity evidence.
+End-to-end orchestration, model training, and model evaluation are not yet implemented.
 
 ## What this case study demonstrates
 
@@ -30,7 +31,7 @@ retrieval, orchestration, model training, and model evaluation are not yet imple
 
 | Area | Current state | Modernization target |
 |---|---|---|
-| Data access | Manual download and local paths | Configured, versioned acquisition with integrity checks |
+| Data access | Manual download and local paths | Versioned HTTPS acquisition and integrity checks implemented |
 | Environment | Python 3.12 project with a committed `uv` lockfile | Add pipeline dependencies as supported modules land |
 | Transformation | Archived notebook and `wrangle.py` logic | Tested package modules and command-line workflow |
 | Evaluation | Random beat-window split | Record-grouped split implemented; evaluation pending |
@@ -57,9 +58,13 @@ The supported environment installs the modern package scaffold only. It does not
 
 ## Implemented data check
 
+The package can retrieve the configured MIT-BIH files from PhysioNet into the ignored canonical raw
+zone using fail-safe, idempotent behavior. See [dataset acquisition](docs/dataset-acquisition.md).
+
 The package provides a metadata-driven command that validates the 144 required MIT-BIH record
-files and records a local SHA-256 integrity baseline. It does not download or redistribute data.
-Commands and trust limitations are documented in [data integrity](docs/data-integrity.md).
+files and records a local SHA-256 integrity baseline. The inventory command itself does not download
+or redistribute data. Commands and trust limitations are documented in
+[data integrity](docs/data-integrity.md).
 
 It also loads individual local WFDB records, preserves physical signals and original annotations,
 validates structural contracts, and writes machine-readable reports. See
@@ -160,9 +165,10 @@ No source data, generated feature tables, or trained model artifacts are tracked
 
 ## Current next step
 
-The next implementation slice is repeatable retrieval from the authoritative dataset source with
-explicit version, integrity, and idempotency controls. Training and evaluation remain later stages.
-The target contracts are documented in the [proposed pipeline design](docs/pipeline-design.md).
+The next implementation slice is a tested local orchestration command that connects acquisition,
+inventory, validation, mapping, windowing, splitting, and run evidence without notebook-only glue.
+Training and evaluation remain later stages. The target contracts are documented in the
+[proposed pipeline design](docs/pipeline-design.md).
 
 ## License
 

@@ -15,6 +15,7 @@ name = "Synthetic fixture"
 slug = "synthetic"
 version = "1.0.0"
 source_url = "https://example.test/synthetic"
+download_url = "https://example.test/files/synthetic/"
 sample_rate_hz = 360
 annotation_extension = "atr"
 record_ids = ["100"]

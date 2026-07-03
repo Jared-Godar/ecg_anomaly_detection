@@ -2,9 +2,10 @@
 
 ## Scope
 
-The supported package can validate the expected MIT-BIH v1.0.0 file inventory and create a local
-SHA-256 baseline. It does not download the dataset, commit data, or establish that local files are
-authentic copies of the PhysioNet source.
+The supported package can retrieve the expected MIT-BIH v1.0.0 files, validate their inventory, and
+create separate acquisition and local-integrity baselines. Acquisition is documented in
+[dataset acquisition](dataset-acquisition.md). These controls do not commit data or independently
+establish authenticity beyond the configured versioned source and HTTPS transport.
 
 The versioned configuration at `configs/mitdb-v1.0.0.toml` defines 48 record IDs and three required
 file types per record:
@@ -18,8 +19,7 @@ may be present locally; they are outside this pipeline contract and are not hash
 
 ## Create a local baseline
 
-After retrieving the dataset from the authoritative source into an ignored local directory, create
-an integrity manifest:
+After acquisition, create a separate current-state integrity manifest:
 
 ```fish
 uv run ecg-data inventory \
@@ -46,10 +46,9 @@ file is missing, or a file's size or SHA-256 digest changed.
 
 ## Trust boundary
 
-This is a local integrity control: it detects change relative to the first recorded baseline. It is
-not a substitute for trusted checksums or signatures published by the dataset owner. Acquisition
-work should validate upstream authenticity when authoritative digest material is available and
-record how the source was retrieved.
+This inventory is a local integrity control: it detects change relative to the recorded baseline.
+The acquisition manifest separately records how the source was retrieved. Neither is a substitute
+for trusted checksums or signatures published by the dataset owner.
 
 No ECG files or generated inventory manifests are required by CI. Tests build small synthetic files
 inside temporary directories.
