@@ -11,6 +11,7 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Record validation](record-validation.md) | Implemented WFDB ingestion, validation rules, and report schema |
 | [Annotation mapping](annotation-mapping.md) | Versioned binary target policy, exclusions, and audit report |
 | [Window extraction](window-extraction.md) | Boundary-safe geometry, lineage-preserving NPZ output, and overlap audit |
+| [Record-grouped splitting](record-grouped-splitting.md) | Deterministic partition membership, leakage controls, and split manifest |
 | [Data provenance](data-provenance.md) | Dataset source, license, attribution, privacy, and label provenance |
 | [Historical results](historical-results.md) | Saved 2022 metrics and their known evaluation defects |
 | [Development workflow](development.md) | Locked environment, tests, hooks, and CI behavior |

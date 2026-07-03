@@ -1,4 +1,4 @@
-"""Command-line interface for local dataset inventory checks."""
+"""Command-line interface for supported local data-pipeline stages."""
 
 from __future__ import annotations
 
@@ -26,6 +26,13 @@ from ecg_anomaly_detection.records import (
     load_wfdb_record,
     validate_record,
     write_validation_report,
+)
+from ecg_anomaly_detection.splitting import (
+    SplitError,
+    create_split_manifest,
+    load_split_config,
+    load_window_metadata,
+    write_split_manifest,
 )
 from ecg_anomaly_detection.windows import (
     WindowExtractionError,
@@ -80,6 +87,14 @@ def build_parser() -> argparse.ArgumentParser:
     window_parser.add_argument("--record-id", required=True)
     window_parser.add_argument("--output", type=Path, required=True)
     window_parser.add_argument("--report", type=Path, required=True)
+
+    split_parser = subparsers.add_parser(
+        "split-windows",
+        help="assign complete records to deterministic train, validation, and test partitions",
+    )
+    split_parser.add_argument("--split-config", type=Path, required=True)
+    split_parser.add_argument("--input", type=Path, action="append", required=True)
+    split_parser.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -89,6 +104,16 @@ def main(arguments: Sequence[str] | None = None) -> int:
     options = parser.parse_args(arguments)
 
     try:
+        if options.command == "split-windows":
+            split_config = load_split_config(options.split_config)
+            metadata = load_window_metadata(options.input)
+            manifest = create_split_manifest(split_config, metadata)
+            write_split_manifest(manifest, options.output)
+            print(
+                f"assigned {manifest.total_record_count} records "
+                f"across 3 partitions in {options.output}"
+            )
+            return 0
         config = load_dataset_config(options.config)
         if options.command == "inventory":
             manifest = create_inventory(config, options.data_dir)
@@ -110,7 +135,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             result = map_annotations(mapping, record.annotations)
             write_mapping_report(result.report, options.output)
             print(f"mapped annotations for record {options.record_id} in {options.output}")
-        else:
+        elif options.command == "extract-windows":
             record = load_wfdb_record(config, options.data_dir, options.record_id)
             validate_record(config, record.signal, record.annotations)
             mapping = load_annotation_mapping(options.mapping_config)
@@ -125,6 +150,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         ConfigurationError,
         InventoryError,
         RecordValidationError,
+        SplitError,
         WindowExtractionError,
     ) as error:
         print(f"error: {error}", file=sys.stderr)

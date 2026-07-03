@@ -44,6 +44,8 @@ Reusable behavior belongs under `src/ecg_anomaly_detection/`. The package curren
 versioned dataset configuration, repository paths, local file inventory, SHA-256 verification,
 typed WFDB ingestion, record validation reports, versioned annotation mapping, and their CLI
 boundaries. Boundary-safe window extraction produces ignored NPZ artifacts with row-level lineage.
+Deterministic record-grouped splitting consumes that lineage and produces an ignored JSON membership
+manifest with record and target counts.
 Notebooks and scripts should call package functions rather than carry duplicate implementations.
 New modules are added only with supported behavior and tests.
 
@@ -60,7 +62,10 @@ The four data stages have distinct meanings:
 3. `interim`: reproducible but non-final transformations; and
 4. `processed`: model-ready tables or arrays produced by the pipeline.
 
-Only each directory's `.gitkeep` contract is tracked. Source and derived ECG data remain ignored. A future pipeline run manifest should record upstream version, checksums, configuration, code revision, row counts, and record-level split membership.
+Only each directory's `.gitkeep` contract is tracked. Source and derived ECG data remain ignored.
+Split manifests are generated locally and remain ignored. A future pipeline run manifest should
+connect upstream version, checksums, configuration, code revision, row counts, and record-level
+split membership.
 
 ### Notebooks
 
@@ -81,8 +86,8 @@ Models, serialized objects, run outputs, and generated figures are ignored by de
 3. **Completed:** load and validate WFDB signals and annotations with synthetic tests.
 4. **Completed:** add a versioned, closed-world annotation mapping with audit counts.
 5. **Completed:** add boundary-safe window extraction while retaining source identity.
-6. **Next:** assign complete records to grouped dataset partitions.
-7. Add run manifests and machine-readable evaluation metrics.
+6. **Completed:** assign complete records to deterministic grouped dataset partitions.
+7. **Next:** add run manifests that connect inputs, configuration, code, and generated outputs.
 8. Create curated notebooks that call supported package APIs.
 
 See the [proposed pipeline design](pipeline-design.md) for stage contracts and lineage metadata. The

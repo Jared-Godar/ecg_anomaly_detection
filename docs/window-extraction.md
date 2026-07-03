@@ -6,7 +6,7 @@ The supported package extracts fixed-width, single-channel windows centered on m
 locations. It preserves row-level source identity, excludes incomplete boundary windows, records
 overlap counts, and writes an ignored NPZ artifact plus a JSON audit report.
 
-This stage does not split records, train a model, assess signal quality, or establish that the
+This stage does not itself split records, train a model, assess signal quality, or establish that the
 configured channel and window geometry are appropriate for another purpose.
 
 ## Versioned historical configuration
@@ -62,8 +62,8 @@ exclusions, output counts by target, configured geometry, selected channel, and 
 adjacent emitted windows that overlap.
 
 Overlap is expected when annotations are closer than six seconds. It is reported because overlapping
-windows must never be allowed to cross future train, validation, or test boundaries. The planned
-split stage will assign complete records before any model evaluation.
+windows must never be allowed to cross train, validation, or test boundaries. The supported
+[split stage](record-grouped-splitting.md) assigns complete records before any future model work.
 
 ## Change control
 
