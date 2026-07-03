@@ -22,6 +22,7 @@ Run commands through `uv` so they consistently use the project environment:
 ```fish
 uv run python -c "import ecg_anomaly_detection; print(ecg_anomaly_detection.__doc__)"
 uv run pytest
+uv run pyright
 ```
 
 Direct activation is optional. When an interactive environment is useful in Fish:
@@ -62,6 +63,7 @@ The checks cover:
 - JSON, TOML, and YAML syntax;
 - private keys and secret patterns;
 - Python linting, import ordering, and formatting with Ruff;
+- Python type checking in Basic mode with Pyright;
 - Markdown style;
 - GitHub Actions security with zizmor; and
 - staged secret scanning with Gitleaks.
@@ -72,8 +74,21 @@ historical record is not rewritten. A separate CI job scans the complete Git his
 ## Pull request checks
 
 GitHub Actions recreates the locked environment, runs the test suite, and runs all repository
-checks for every pull request and every push to `main`. Third-party Actions are pinned to immutable
-commit SHAs, and Dependabot proposes weekly updates for Actions and pre-commit hooks.
+type checks and repository checks for every pull request and every push to `main`. Third-party
+Actions are pinned to immutable commit SHAs, and Dependabot proposes weekly updates for Actions and
+pre-commit hooks.
+
+## Type checking
+
+Pyright runs in Basic mode across `src/` and `tests/`. This matches the current Pylance editor mode
+without committing personal VS Code settings. Run it directly with:
+
+```fish
+uv run pyright
+```
+
+Basic mode is an enforced baseline, not the final target. Strict mode should be considered only
+after third-party WFDB boundaries and future pipeline interfaces can pass without broad ignores.
 
 The local hook is a fast feedback mechanism, not a replacement for CI. Git hooks can be skipped or
 missing on another machine; the pull request checks are the shared enforcement boundary.

@@ -57,7 +57,7 @@ Exit criterion: core transformations, split integrity, and metrics have automate
 ## Phase 6 — CI/CD
 
 - [x] Run formatting, linting, security checks, and tests in CI.
-- [ ] Add static type checking once supported pipeline interfaces exist.
+- [x] Add Pyright Basic static type checking for source and tests.
 - [ ] Validate curated notebooks without downloading the complete dataset.
 - [x] Add dependency updates and secret scanning.
 - [ ] Build documentation or package artifacts without automatic external publication.

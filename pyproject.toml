@@ -28,6 +28,7 @@ ecg-data = "ecg_anomaly_detection.cli:main"
 [dependency-groups]
 dev = [
   "pre-commit==4.6.0",
+  "pyright>=1.1.411",
   "pytest>=8.4,<10",
   "pytest-cov>=6,<8",
 ]
@@ -43,3 +44,15 @@ source = ["ecg_anomaly_detection"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
+
+[tool.pyright]
+include = ["src", "tests"]
+exclude = ["archive", ".venv", "build", "dist"]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+useLibraryCodeForTypes = true
+reportMissingTypeStubs = false
+
+[[tool.pyright.executionEnvironments]]
+root = "src"
+extraPaths = ["src"]

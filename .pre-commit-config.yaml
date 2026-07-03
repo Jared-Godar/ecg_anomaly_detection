@@ -34,6 +34,15 @@ repos:
       - id: ruff-format
         files: ^(scripts|src|tests)/
 
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright type checking
+        entry: uv run pyright
+        language: system
+        pass_filenames: false
+        always_run: true
+
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.23.0
     hooks:
