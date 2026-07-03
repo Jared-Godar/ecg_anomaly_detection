@@ -157,3 +157,6 @@ wandb/
 
 # Legacy project-local files that are not part of the supported workflow
 /api.py
+
+# Local credential/plugin state
+.op/
