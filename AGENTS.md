@@ -49,6 +49,16 @@
 - Prefer non-interactive Git output in instructions when practical. For example, use `git --no-pager show <commit>` when the user only needs to inspect a commit.
 - Never use destructive Git commands unless the user explicitly requests them and the consequences are clear.
 
+## Pull request metadata
+
+- Every pull request created or updated by Codex must receive repository metadata before handoff.
+- Assign labels from `.github/labels.json`, including one `type:*` label, at least one `area:*` label, and any useful modernization, portfolio, risk, size, or dependency labels.
+- Assign the delivery milestone that the work is required to complete. Do not use milestones as topic labels.
+- Add the pull request to the `ECG Pipeline Modernization` GitHub Project when it contributes to the tracked roadmap.
+- Set the project status to `In Progress` for an open pull request and `Done` after it is merged or closed as completed.
+- Verify labels, milestone, project membership, and project status after creating the pull request; do not infer success from the creation command alone.
+- When metadata is ambiguous, report the unresolved choice instead of inventing a classification.
+
 ## Project positioning
 
 - Treat this repository as a historical educational ECG machine-learning project being modernized into a data-engineering portfolio case study.
