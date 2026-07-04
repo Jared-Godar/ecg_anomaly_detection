@@ -71,6 +71,9 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
         assert len(tuple((run_directory / "mapping").glob("*.json"))) == 3
         assert len(tuple((run_directory / "windows").glob("*.json"))) == 3
         split = json.loads((run_directory / "split.json").read_text(encoding="utf-8"))
+        split_quality = json.loads(
+            (run_directory / "split_quality_summary.json").read_text(encoding="utf-8")
+        )
         manifest = json.loads((run_directory / "run-manifest.json").read_text(encoding="utf-8"))
         dataset_index = json.loads(
             (
@@ -79,6 +82,7 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
         )
         assert split["total_record_count"] == 3
         assert split["total_window_count"] == 9
+        assert split_quality["status"] == "passed"
         assert manifest["run_id"] == run_directory.name
         assert manifest["git"]["dirty"] is False
         assert manifest["dataset"]["dataset_slug"] == "synthetic"
@@ -98,7 +102,11 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
         assert any(
             item["path"].endswith("training/model.json") for item in manifest["artifact_files"]
         )
-        assert len(manifest["evidence_files"]) == 10
+        assert len(manifest["evidence_files"]) == 11
+        assert any(
+            item["path"].endswith("split_quality_summary.json")
+            for item in manifest["evidence_files"]
+        )
         assert any(
             item["path"].endswith("evaluation/validation-metrics.json")
             for item in manifest["artifact_files"]

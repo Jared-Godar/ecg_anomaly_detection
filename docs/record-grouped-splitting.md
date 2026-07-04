@@ -27,7 +27,8 @@ uv run ecg-data split-windows \
   --input data/interim/record-100-windows.npz \
   --input data/interim/record-101-windows.npz \
   --input data/interim/record-102-windows.npz \
-  --output artifacts/split-manifest.json
+  --output artifacts/split-manifest.json \
+  --quality-output artifacts/split_quality_summary.json
 ```
 
 Input NPZ files retain row-level record IDs, target values, mapping identity, and window
@@ -45,6 +46,11 @@ fields per partition:
 Validation rejects subject overlap, record overlap, incomplete coverage, inconsistent counts, and
 record-to-subject mappings that disagree with partition membership. Per-record shards preserve
 window and annotation lineage; the model-ready index adds `subject_id` to every shard descriptor.
+
+Subject separation is necessary but insufficient: a leakage-free split may still have too few
+subjects, records, windows, positive examples, or represented classes to support a meaningful
+evaluation. The separate `split_quality_summary.json` reports those conditions and applies the
+configured acceptance policy. See [Split quality reporting](split-quality-reporting.md).
 
 ## Migration from v1
 

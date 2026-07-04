@@ -12,8 +12,11 @@ from ecg_anomaly_detection.splitting import (
     SplitConfig,
     SplitError,
     SplitManifest,
+    SplitQualityConfig,
     WindowMetadata,
     create_split_manifest,
+    create_split_quality_summary,
+    enforce_split_quality,
     load_split_config,
     load_window_metadata,
     read_split_manifest,
@@ -169,6 +172,59 @@ def test_manifest_reader_rejects_subject_crossing_partitions(
 
     with pytest.raises(SplitError, match="subject leakage"):
         SplitManifest.from_json(json.dumps(document))
+
+
+def test_quality_summary_reports_deterministic_distributions_and_disjointness(
+    split_config: SplitConfig, metadata: WindowMetadata
+) -> None:
+    manifest = create_split_manifest(split_config, metadata)
+
+    first = create_split_quality_summary(split_config, manifest, metadata)
+    second = create_split_quality_summary(split_config, manifest, metadata)
+
+    assert first.to_json() == second.to_json()
+    assert first.status == "passed"
+    assert first.subject_disjoint is True
+    assert first.record_disjoint is True
+    assert first.acceptance_checks["min_subjects_per_partition"] == 1
+    assert tuple(first.partitions) == ("train", "validation", "test")
+    assert sum(item["window_count"] for item in first.partitions.values()) == 8
+    assert all(item["class_counts"].keys() == {"0", "1"} for item in first.partitions.values())
+    assert all(item["binary_counts"] is not None for item in first.partitions.values())
+
+
+@pytest.mark.parametrize(
+    "severity, expected_status", [("warning", "warning"), ("failure", "failed")]
+)
+def test_quality_summary_handles_missing_class_and_insufficient_counts(
+    split_config: SplitConfig,
+    metadata: WindowMetadata,
+    severity: str,
+    expected_status: str,
+) -> None:
+    config = replace(
+        split_config,
+        quality=SplitQualityConfig(
+            min_subjects_per_partition=2,
+            required_class_coverage=("validation", "test"),
+            required_classes=(0, 1, 2),
+            default_severity=severity,
+        ),
+    )
+    summary = create_split_quality_summary(
+        config, create_split_manifest(config, metadata), metadata
+    )
+
+    assert summary.status == expected_status
+    assert {item.check for item in summary.violations} == {
+        "minimum_subjects",
+        "required_class_coverage",
+    }
+    if severity == "failure":
+        with pytest.raises(SplitError, match="quality checks failed"):
+            enforce_split_quality(summary)
+    else:
+        enforce_split_quality(summary)
 
 
 def _write_metadata_artifact(path: Path, record_ids: list[str], target_values: list[int]) -> None:

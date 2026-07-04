@@ -41,6 +41,7 @@ Schema version 1 records:
 - the repository-relative `uv.lock` path and digest;
 - dataset identity plus every inventoried source filename, byte size, and checksum;
 - split policy, mapping and window versions, seed, record memberships, and target counts;
+- the hashed split-quality summary with disjointness, distributions, ratios, and acceptance results;
 - configuration, evidence, and artifact paths, sizes, and checksums.
 
 For orchestrated runs, artifact evidence includes the frozen model, training metadata, and

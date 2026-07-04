@@ -29,9 +29,12 @@ from ecg_anomaly_detection.records import (
 from ecg_anomaly_detection.run_manifest import create_run_manifest, write_run_manifest
 from ecg_anomaly_detection.splitting import (
     create_split_manifest,
+    create_split_quality_summary,
+    enforce_split_quality,
     load_split_config,
     load_window_metadata,
     write_split_manifest,
+    write_split_quality_summary,
 )
 from ecg_anomaly_detection.training import load_training_config, train_from_index
 from ecg_anomaly_detection.windows import (
@@ -57,6 +60,7 @@ class PipelineRunResult:
     acquisition_manifest_path: Path
     inventory_manifest_path: Path
     split_manifest_path: Path
+    split_quality_summary_path: Path
     dataset_index_path: Path
     model_path: Path
     training_metadata_path: Path
@@ -165,6 +169,10 @@ def run_pipeline(
     split_manifest = create_split_manifest(split_config, metadata)
     split_manifest_path = run_directory / "split.json"
     write_split_manifest(split_manifest, split_manifest_path)
+    split_quality_summary = create_split_quality_summary(split_config, split_manifest, metadata)
+    split_quality_summary_path = run_directory / "split_quality_summary.json"
+    write_split_quality_summary(split_quality_summary, split_quality_summary_path)
+    enforce_split_quality(split_quality_summary)
     if split_manifest.total_window_count != total_windows:
         raise PipelineError("split window count does not match per-record extraction reports")
 
@@ -203,6 +211,7 @@ def run_pipeline(
         config_paths,
         evidence_paths=(
             acquisition_manifest_path,
+            split_quality_summary_path,
             *validation_paths,
             *mapping_paths,
             *window_report_paths,
@@ -227,6 +236,7 @@ def run_pipeline(
         acquisition_manifest_path=acquisition_manifest_path,
         inventory_manifest_path=inventory_manifest_path,
         split_manifest_path=split_manifest_path,
+        split_quality_summary_path=split_quality_summary_path,
         dataset_index_path=dataset_index_path,
         model_path=model_path,
         training_metadata_path=training_metadata_path,

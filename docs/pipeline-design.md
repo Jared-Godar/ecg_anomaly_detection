@@ -8,6 +8,7 @@ verification, typed WFDB ingestion, structural signal and annotation validation,
 quality gates. A versioned annotation mapping with closed-world symbol validation and audit counts
 and boundary-safe single-channel window extraction with row-level lineage are also implemented.
 Deterministic subject-aware splitting and its machine-readable membership manifest are implemented.
+Deterministic split-quality reporting validates partition distributions before indexing or fitting.
 Auditable run manifests now connect repository-relative evidence to code and environment identity.
 Versioned, fail-safe HTTPS acquisition is also implemented. A local sequential orchestrator connects
 all currently supported data stages. A processed dataset index validates and references grouped
@@ -51,7 +52,7 @@ pipelines.
 | Acquire | Dataset URL, version, expected files | HTTP result, file inventory, checksum | Immutable raw files and acquisition manifest |
 | Validate | Raw signals and annotations | Record ID, channel, sample rate, duration, annotation symbols | Validation report and accepted-record inventory |
 | Window | Accepted records, label map, window configuration | Bounds, shape, finite values, excluded-label counts | Windows retaining record and annotation identity |
-| Split | Window metadata, record-to-subject metadata, and split configuration | No subject or record crosses partitions; class/subject/record counts reported | Train, validation, and test membership manifest |
+| Split | Window metadata, record-to-subject metadata, and split configuration | No subject or record crosses partitions; configured distribution checks pass | Membership manifest and split-quality summary |
 | Train | Training partition and model configuration | Fit only on training data; deterministic seed recorded | Model artifact and training metadata |
 | Evaluate | Frozen model and validation partition | Verify digests; open no test shards; tested zero-division behavior | Validation metrics and confusion matrix |
 

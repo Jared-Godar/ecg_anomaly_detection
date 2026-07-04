@@ -74,3 +74,6 @@ validation shards. Test shard descriptors remain reserved and are not resolved o
 The index itself does not train a model, calculate metrics, establish broader population
 generalization, or support clinical use. Its subject-independence guarantee is limited to the
 explicit record-to-subject metadata supplied to split schema v2.
+
+Indexing runs only after configured split-quality checks pass. The quality summary remains separate
+run evidence; it is not a source of model features and does not expose test metrics.
