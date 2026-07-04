@@ -18,6 +18,7 @@ replacement gains tests and documentation. Checkboxes report repository state, n
 - [x] Replace absolute paths with configuration in the supported workflow.
 - [x] Add repeatable dataset retrieval from the authoritative source.
 - [x] Add expected-file inventory and local SHA-256 integrity checks.
+- [x] Pin repository-reviewed source sizes and SHA-256 hashes before acquisition installation.
 - [x] Define raw, external, interim, processed, report, and artifact locations.
 
 Exit criterion: a contributor can create the environment and run documented, configuration-driven

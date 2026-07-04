@@ -17,11 +17,19 @@ from ecg_anomaly_detection.acquisition import (
     TransferResult,
     acquire_dataset,
 )
-from ecg_anomaly_detection.config import DatasetConfig
+from ecg_anomaly_detection.config import DatasetConfig, ExpectedSourceFile
 
 
 @pytest.fixture
 def dataset_config() -> DatasetConfig:
+    files = tuple(
+        ExpectedSourceFile(
+            path=f"100.{extension}",
+            size_bytes=len(content := f"fixture-100.{extension}".encode()),
+            sha256=hashlib.sha256(content).hexdigest(),
+        )
+        for extension in ("atr", "dat", "hea")
+    )
     return DatasetConfig(
         schema_version=1,
         name="Synthetic fixture",
@@ -33,6 +41,7 @@ def dataset_config() -> DatasetConfig:
         annotation_extension="atr",
         record_ids=("100",),
         required_extensions=("atr", "dat", "hea"),
+        expected_source_files=files,
     )
 
 
@@ -104,7 +113,7 @@ def test_acquisition_rejects_changed_existing_file(
     acquire_dataset(dataset_config, repository, data_dir, manifest_path, fetcher=fetcher)
     (data_dir / "100.hea").write_bytes(b"changed")
 
-    with pytest.raises(AcquisitionError, match="differs from acquisition manifest"):
+    with pytest.raises(AcquisitionError, match=r"size mismatch for 100\.hea"):
         acquire_dataset(dataset_config, repository, data_dir, manifest_path, fetcher=fetcher)
 
 
@@ -124,7 +133,7 @@ def test_acquisition_rejects_changed_source_when_restoring_missing_file(
     (data_dir / "100.dat").unlink()
     payloads[dataset_config.download_url + "100.dat"] = b"upstream-changed"
 
-    with pytest.raises(AcquisitionError, match="retrieved file differs"):
+    with pytest.raises(AcquisitionError, match=r"size mismatch for 100\.dat"):
         acquire_dataset(
             dataset_config,
             repository,
@@ -147,6 +156,86 @@ def test_acquisition_rejects_existing_required_file_without_baseline(
             repository,
             data_dir,
             repository / "artifacts" / "acquisition.json",
+            fetcher=_fetcher(_payloads(dataset_config), []),
+        )
+
+
+def test_acquisition_rejects_expected_sha256_mismatch(
+    repository: Path, dataset_config: DatasetConfig
+) -> None:
+    payloads = _payloads(dataset_config)
+    payloads[dataset_config.download_url + "100.dat"] = b"fixture-100.dax"
+
+    with pytest.raises(AcquisitionError, match=r"SHA-256 mismatch for 100\.dat"):
+        acquire_dataset(
+            dataset_config,
+            repository,
+            Path("data/raw/synthetic/1.0.0"),
+            Path("artifacts/acquisition.json"),
+            fetcher=_fetcher(payloads, []),
+        )
+
+
+def test_acquisition_rejects_expected_size_mismatch(
+    repository: Path, dataset_config: DatasetConfig
+) -> None:
+    payloads = _payloads(dataset_config)
+    payloads[dataset_config.download_url + "100.dat"] = b"wrong-size"
+
+    with pytest.raises(AcquisitionError, match=r"size mismatch for 100\.dat"):
+        acquire_dataset(
+            dataset_config,
+            repository,
+            Path("data/raw/synthetic/1.0.0"),
+            Path("artifacts/acquisition.json"),
+            fetcher=_fetcher(payloads, []),
+        )
+
+
+def test_acquisition_rejects_missing_expected_metadata(
+    repository: Path, dataset_config: DatasetConfig
+) -> None:
+    incomplete = DatasetConfig(
+        **{
+            field: getattr(dataset_config, field)
+            for field in (
+                "schema_version",
+                "name",
+                "slug",
+                "version",
+                "source_url",
+                "download_url",
+                "sample_rate_hz",
+                "annotation_extension",
+                "record_ids",
+                "required_extensions",
+            )
+        }
+    )
+
+    with pytest.raises(AcquisitionError, match="expected source metadata is incomplete"):
+        acquire_dataset(
+            incomplete,
+            repository,
+            Path("data/raw/synthetic/1.0.0"),
+            Path("artifacts/acquisition.json"),
+            fetcher=_fetcher(_payloads(incomplete), []),
+        )
+
+
+def test_acquisition_rejects_unexpected_source_file(
+    repository: Path, dataset_config: DatasetConfig
+) -> None:
+    data_dir = repository / "data" / "raw" / "synthetic" / "1.0.0"
+    data_dir.mkdir(parents=True)
+    (data_dir / "README").write_text("unexpected", encoding="utf-8")
+
+    with pytest.raises(AcquisitionError, match="unexpected source file"):
+        acquire_dataset(
+            dataset_config,
+            repository,
+            data_dir,
+            Path("artifacts/acquisition.json"),
             fetcher=_fetcher(_payloads(dataset_config), []),
         )
 

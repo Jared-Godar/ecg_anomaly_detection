@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import string
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,6 +47,15 @@ class RepositoryPaths:
 
 
 @dataclass(frozen=True, slots=True)
+class ExpectedSourceFile:
+    """Repository-reviewed identity for one versioned source file."""
+
+    path: str
+    size_bytes: int
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
 class DatasetConfig:
     """Expected upstream dataset inventory."""
 
@@ -59,6 +69,7 @@ class DatasetConfig:
     annotation_extension: str
     record_ids: tuple[str, ...]
     required_extensions: tuple[str, ...]
+    expected_source_files: tuple[ExpectedSourceFile, ...] = ()
 
     @property
     def expected_files(self) -> tuple[str, ...]:
@@ -68,6 +79,11 @@ class DatasetConfig:
             for record_id in self.record_ids
             for extension in self.required_extensions
         )
+
+    @property
+    def expected_source_files_by_path(self) -> dict[str, ExpectedSourceFile]:
+        """Return committed source expectations keyed by relative path."""
+        return {item.path: item for item in self.expected_source_files}
 
 
 def load_dataset_config(path: Path) -> DatasetConfig:
@@ -94,6 +110,7 @@ def load_dataset_config(path: Path) -> DatasetConfig:
         annotation_extension=_required_string(dataset, "annotation_extension").lstrip("."),
         record_ids=_required_unique_strings(dataset, "record_ids"),
         required_extensions=_required_unique_strings(dataset, "required_extensions"),
+        expected_source_files=_source_files(dataset.get("expected_source_files")),
     )
     if any(
         "/" in value or "\\" in value for value in (*config.record_ids, *config.required_extensions)
@@ -101,7 +118,51 @@ def load_dataset_config(path: Path) -> DatasetConfig:
         raise ConfigurationError("record IDs and extensions must be path segments, not paths")
     if config.annotation_extension not in config.required_extensions:
         raise ConfigurationError("dataset.annotation_extension must be a required extension")
+    configured_paths = set(config.expected_files)
+    metadata_paths = {item.path for item in config.expected_source_files}
+    if metadata_paths and metadata_paths != configured_paths:
+        missing = sorted(configured_paths - metadata_paths)
+        unexpected = sorted(metadata_paths - configured_paths)
+        raise ConfigurationError(
+            "expected source metadata must exactly match required files; "
+            f"missing={missing}, unexpected={unexpected}"
+        )
     return config
+
+
+def _source_files(value: Any) -> tuple[ExpectedSourceFile, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list) or not value:
+        raise ConfigurationError("expected_source_files must be a non-empty array of tables")
+    files: list[ExpectedSourceFile] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise ConfigurationError(f"expected_source_files[{index}] must be a table")
+        path = item.get("path")
+        size_bytes = item.get("size_bytes")
+        sha256 = item.get("sha256")
+        if not isinstance(path, str) or not path or "/" in path or "\\" in path:
+            raise ConfigurationError(
+                f"expected_source_files[{index}].path must be a relative file name"
+            )
+        if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes <= 0:
+            raise ConfigurationError(
+                f"expected_source_files[{index}].size_bytes must be a positive integer"
+            )
+        if (
+            not isinstance(sha256, str)
+            or len(sha256) != 64
+            or any(character not in string.hexdigits for character in sha256)
+        ):
+            raise ConfigurationError(
+                f"expected_source_files[{index}].sha256 must be a 64-character hex digest"
+            )
+        files.append(ExpectedSourceFile(path, size_bytes, sha256.lower()))
+    paths = [item.path for item in files]
+    if len(paths) != len(set(paths)):
+        raise ConfigurationError("expected_source_files must contain unique paths")
+    return tuple(files)
 
 
 def _required_string(values: dict[str, Any], key: str) -> str:

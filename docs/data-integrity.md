@@ -3,9 +3,9 @@
 ## Scope
 
 The supported package can retrieve the expected MIT-BIH v1.0.0 files, validate their inventory, and
-create separate acquisition and local-integrity baselines. Acquisition is documented in
+create separate acquisition and local-integrity evidence. Acquisition is documented in
 [dataset acquisition](dataset-acquisition.md). These controls do not commit data or independently
-establish authenticity beyond the configured versioned source and HTTPS transport.
+establish authenticity beyond the configured versioned source, reviewed hashes, and HTTPS transport.
 
 The versioned configuration at `configs/mitdb-v1.0.0.toml` defines 48 record IDs and three required
 file types per record:
@@ -14,8 +14,9 @@ file types per record:
 - `.dat`: signal data; and
 - `.atr`: reference annotations.
 
-This produces an expected inventory of 144 required files. Additional upstream documentation files
-may be present locally; they are outside this pipeline contract and are not hashed by this command.
+This produces an expected inventory of 144 required files. The same committed config pins each
+relative path, exact byte size, and SHA-256 digest. Files outside that contract are rejected; keep
+additional upstream documentation outside `data/raw/mitdb/1.0.0/`.
 
 ## Create a local baseline
 
@@ -28,7 +29,8 @@ uv run ecg-data inventory \
   --output artifacts/mitdb-v1.0.0-inventory.json
 ```
 
-The command fails if any required file is missing or is not a regular file. The output records the
+The command fails if any required file is missing, unexpected, not a regular file, or differs from
+the committed expected size or digest. The output records the observed
 dataset identity, UTC creation time, relative file name, byte size, and SHA-256 digest. The manifest
 is generated evidence and remains ignored by Git under `artifacts/`.
 
@@ -46,9 +48,12 @@ file is missing, or a file's size or SHA-256 digest changed.
 
 ## Trust boundary
 
-This inventory is a local integrity control: it detects change relative to the recorded baseline.
-The acquisition manifest separately records how the source was retrieved. Neither is a substitute
-for trusted checksums or signatures published by the dataset owner.
+The committed values are repository-reviewed expectations. All 144 SHA-256 values match the
+`SHA256SUMS.txt` that PhysioNet distributes inside its versioned v1.0.0 ZIP; exact byte sizes were
+measured from that clean extraction. The ZIP integrity test passed, and `100.hea` was also compared
+with a separate direct download. Review confirmed exact coverage of the configured file set.
+PhysioNet's checksum file is not signed, so this pins expected content and detects later change but
+is not cryptographic proof of publisher identity.
 
 No ECG files or generated inventory manifests are required by CI. Tests build small synthetic files
 inside temporary directories.

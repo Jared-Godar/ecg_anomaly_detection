@@ -30,7 +30,12 @@ def test_mitdb_config_defines_complete_required_inventory() -> None:
     assert config.download_url == "https://physionet.org/files/mitdb/1.0.0/"
     assert len(config.record_ids) == 48
     assert len(config.expected_files) == 144
+    assert len(config.expected_source_files) == 144
     assert config.expected_files[:3] == ("100.atr", "100.dat", "100.hea")
+    assert config.expected_source_files[0].size_bytes == 4558
+    assert config.expected_source_files[0].sha256 == (
+        "8d8a5349fb16638ebbf649f1779d12e96d91b736b2aafe59db43719ae583d471"
+    )
 
 
 def test_config_rejects_duplicate_inventory_values(tmp_path: Path) -> None:
