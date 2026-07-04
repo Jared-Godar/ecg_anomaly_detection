@@ -1,0 +1,45 @@
+name: Governance change
+description: Propose a change to repository policy, ownership, or contribution workflow.
+title: "[Governance]: "
+labels:
+  - "type: governance"
+  - "status: triage"
+  - "area: repository"
+body:
+  - type: textarea
+    id: policy_problem
+    attributes:
+      label: Policy or workflow problem
+      description: Describe the current rule, gap, or inconsistency and who it affects.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_change
+    attributes:
+      label: Proposed governance change
+      description: State the exact policy, ownership, template, or workflow change.
+    validations:
+      required: true
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Rationale and tradeoffs
+      description: Explain benefits, costs, alternatives, and enforcement boundaries.
+    validations:
+      required: true
+  - type: textarea
+    id: migration
+    attributes:
+      label: Adoption or migration plan
+      description: Identify settings, documentation, labels, or existing work that must be updated.
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Scope boundaries
+      options:
+        - label: This proposal does not silently change pipeline, model, dataset, evaluation, or CI behavior.
+          required: true
+        - label: Repository settings requiring maintainer action are identified explicitly.
+          required: true

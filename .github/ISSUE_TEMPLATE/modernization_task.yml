@@ -1,0 +1,61 @@
+name: Modernization task
+description: Plan an incremental, testable improvement to the modernization case study.
+title: "[Modernization]: "
+labels:
+  - "type: modernization"
+  - "status: triage"
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Intended outcome
+      description: Describe the repository capability or evidence this work should produce.
+    validations:
+      required: true
+  - type: textarea
+    id: current_state
+    attributes:
+      label: Current state and gap
+      description: Identify existing implementation, documentation, and limitations.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and deliverables
+      description: List concrete code, tests, configuration, documentation, or artifacts in scope.
+    validations:
+      required: true
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: State adjacent behavior this task will not change.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Use verifiable, repository-level outcomes.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: reproducibility
+    attributes:
+      label: Reproducibility and data considerations
+      description: Cover provenance, configuration, schemas, grouped splits, run metadata, and data handling as applicable.
+    validations:
+      required: true
+  - type: checkboxes
+    id: framing
+    attributes:
+      label: Project framing
+      options:
+        - label: The task preserves the historical educational context and modernization case-study framing.
+          required: true
+        - label: The task does not claim medical, clinical, diagnostic, or production-healthcare use.
+          required: true

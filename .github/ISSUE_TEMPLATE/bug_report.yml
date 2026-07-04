@@ -1,0 +1,75 @@
+name: Bug report
+description: Report reproducible incorrect repository or pipeline behavior.
+title: "[Bug]: "
+labels:
+  - "type: bug"
+  - "status: triage"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report engineering defects only. This educational project is not medical or clinical software.
+        Do not attach ECG source data, derived patient-level data, credentials, or other sensitive files.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+      placeholder: Describe the observed and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest deterministic sequence that reproduces the problem.
+      placeholder: |
+        1. Run `...`
+        2. Use configuration `...`
+        3. Observe `...`
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Include relevant errors, logs, or artifact paths after removing sensitive data.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include commit SHA, OS, Python version, and relevant dependency or configuration details.
+      placeholder: |
+        Commit:
+        OS:
+        Python:
+        Configuration:
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact
+      description: Select the narrowest accurate impact.
+      options:
+        - Local developer workflow
+        - Documentation or metadata
+        - Data pipeline reproducibility
+        - Evaluation integrity
+        - Historical preservation
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched existing issues for a duplicate.
+          required: true
+        - label: I removed source data, patient-level data, credentials, and other sensitive content.
+          required: true
+        - label: I understand this repository is for research and educational use only.
+          required: true
