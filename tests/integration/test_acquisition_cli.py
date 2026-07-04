@@ -29,6 +29,11 @@ sample_rate_hz = 360
 annotation_extension = "atr"
 record_ids = ["100"]
 required_extensions = ["atr", "dat", "hea"]
+expected_source_files = [
+  { path = "100.atr", size_bytes = 15, sha256 = "5ff83a0d5aba6e0450863587c5566dacaa1ee3328f6bfc6c8523f804b295f24f" },
+  { path = "100.dat", size_bytes = 15, sha256 = "1c69904e2556c222fa8ba6328c2434416967eab7aa936f10ca5aa13bad96c70a" },
+  { path = "100.hea", size_bytes = 15, sha256 = "6ce366847c45118af26db4a50544d7a47bf4e4de0f559a674f16f88f03b54aac" },
+]
 """.strip(),
         encoding="utf-8",
     )

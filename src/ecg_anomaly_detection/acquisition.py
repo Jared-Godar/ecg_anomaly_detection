@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote, urlsplit
 
-from ecg_anomaly_detection.config import DatasetConfig
+from ecg_anomaly_detection.config import DatasetConfig, ExpectedSourceFile
 
 BUFFER_SIZE = 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 60.0
@@ -137,6 +137,7 @@ def acquire_dataset(
     max_file_size_bytes: int = DEFAULT_MAX_FILE_SIZE_BYTES,
 ) -> AcquisitionResult:
     """Retrieve required files or verify them against an existing acquisition baseline."""
+    expectations = _expected_source_files(config)
     if timeout_seconds <= 0:
         raise AcquisitionError("download timeout must be positive")
     if max_file_size_bytes <= 0:
@@ -147,6 +148,7 @@ def acquire_dataset(
     destination = _canonical_data_directory(config, root, data_dir)
     output = _canonical_manifest_path(root, manifest_path)
     destination.mkdir(parents=True, exist_ok=True)
+    _reject_unexpected_source_files(config, destination)
     transport = fetcher or _fetch_https_file
 
     if output.exists():
@@ -180,6 +182,7 @@ def acquire_dataset(
             staged_path = staging / relative_path
             transfer = transport(url, staged_path, timeout_seconds, max_file_size_bytes)
             _validate_transfer(transfer, relative_path)
+            _validate_expected_transfer(transfer, expectations[relative_path])
             acquired.append(
                 AcquiredFile(
                     path=relative_path,
@@ -215,6 +218,7 @@ def _resume_acquisition(
     timeout_seconds: float,
     max_file_size_bytes: int,
 ) -> AcquisitionResult:
+    expectations = _expected_source_files(config)
     downloaded = 0
     reused = 0
     for item in manifest.files:
@@ -223,6 +227,7 @@ def _resume_acquisition(
             if destination_path.is_symlink() or not destination_path.is_file():
                 raise AcquisitionError(f"acquired path must be a regular file: {destination_path}")
             current = _hash_file(destination_path)
+            _validate_expected_transfer(current, expectations[item.path], existing=True)
             if current != TransferResult(item.size_bytes, item.sha256):
                 raise AcquisitionError(
                     f"existing file differs from acquisition manifest: {item.path}"
@@ -233,6 +238,7 @@ def _resume_acquisition(
             staged_path = Path(staging_name) / item.path
             transfer = fetcher(item.url, staged_path, timeout_seconds, max_file_size_bytes)
             _validate_transfer(transfer, item.path)
+            _validate_expected_transfer(transfer, expectations[item.path])
             if transfer != TransferResult(item.size_bytes, item.sha256):
                 raise AcquisitionError(
                     f"retrieved file differs from acquisition manifest: {item.path}"
@@ -327,6 +333,16 @@ def _canonical_manifest_path(root: Path, manifest_path: Path) -> Path:
     return resolved
 
 
+def _reject_unexpected_source_files(config: DatasetConfig, destination: Path) -> None:
+    expected = set(config.expected_files)
+    unexpected = sorted(path.name for path in destination.iterdir() if path.name not in expected)
+    if unexpected:
+        raise AcquisitionError(
+            "unexpected source file or directory in configured data directory: "
+            + ", ".join(unexpected)
+        )
+
+
 def _validate_manifest_for_config(config: DatasetConfig, manifest: AcquisitionManifest) -> None:
     if (
         manifest.dataset_slug,
@@ -342,6 +358,40 @@ def _validate_manifest_for_config(config: DatasetConfig, manifest: AcquisitionMa
         )
     if any(item.url != _file_url(config, item.path) for item in manifest.files):
         raise AcquisitionError("acquisition manifest file URL does not match dataset configuration")
+    expectations = _expected_source_files(config)
+    for item in manifest.files:
+        _validate_expected_transfer(
+            TransferResult(item.size_bytes, item.sha256), expectations[item.path]
+        )
+
+
+def _expected_source_files(config: DatasetConfig) -> dict[str, ExpectedSourceFile]:
+    expected_paths = set(config.expected_files)
+    by_path = config.expected_source_files_by_path
+    missing = sorted(expected_paths - set(by_path))
+    unexpected = sorted(set(by_path) - expected_paths)
+    if missing or unexpected:
+        raise AcquisitionError(
+            "committed expected source metadata is incomplete; "
+            f"missing={missing}, unexpected={unexpected}"
+        )
+    return by_path
+
+
+def _validate_expected_transfer(
+    actual: TransferResult, expected: ExpectedSourceFile, *, existing: bool = False
+) -> None:
+    prefix = "existing source file" if existing else "retrieved source file"
+    if actual.size_bytes != expected.size_bytes:
+        raise AcquisitionError(
+            f"{prefix} size mismatch for {expected.path}: "
+            f"expected {expected.size_bytes} bytes, got {actual.size_bytes}"
+        )
+    if actual.sha256.lower() != expected.sha256:
+        raise AcquisitionError(
+            f"{prefix} SHA-256 mismatch for {expected.path}: "
+            f"expected {expected.sha256}, got {actual.sha256.lower()}"
+        )
 
 
 def _read_manifest(path: Path) -> AcquisitionManifest:

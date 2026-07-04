@@ -82,6 +82,11 @@ def create_inventory(
     missing: list[str] = []
     invalid: list[str] = []
     digests: list[FileDigest] = []
+    expected_paths = set(config.expected_files)
+    unexpected = sorted(path.name for path in data_dir.iterdir() if path.name not in expected_paths)
+    if unexpected:
+        raise InventoryError(f"unexpected source files or directories: {', '.join(unexpected)}")
+    expectations = config.expected_source_files_by_path
 
     for relative_path in config.expected_files:
         file_path = data_dir / relative_path
@@ -92,6 +97,17 @@ def create_inventory(
             invalid.append(relative_path)
             continue
         size_bytes, sha256 = _measure_and_hash(file_path)
+        expected = expectations.get(relative_path)
+        if expected is not None and size_bytes != expected.size_bytes:
+            raise InventoryError(
+                f"expected size mismatch for {relative_path}: "
+                f"expected {expected.size_bytes} bytes, got {size_bytes}"
+            )
+        if expected is not None and sha256 != expected.sha256:
+            raise InventoryError(
+                f"expected SHA-256 mismatch for {relative_path}: "
+                f"expected {expected.sha256}, got {sha256}"
+            )
         digests.append(FileDigest(path=relative_path, size_bytes=size_bytes, sha256=sha256))
 
     if missing or invalid:

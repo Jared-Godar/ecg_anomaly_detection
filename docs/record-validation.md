@@ -12,7 +12,8 @@ time and does not download MIT-BIH data.
 
 ## Validate one record
 
-After completing the [local integrity workflow](data-integrity.md), validate a configured record:
+After acquisition or inventory has checked the files against the committed expected metadata, use
+the [local integrity workflow](data-integrity.md) and validate a configured record:
 
 ```fish
 uv run ecg-data validate-record \
@@ -50,9 +51,10 @@ metadata only; it is not a clinical validation report.
 
 ## Current boundaries
 
-Validation confirms structural expectations needed by the next pipeline stage. It does not assess
-signal quality, resolve channel preference, authenticate the upstream download, or establish model
-fitness. Those concerns require separate configuration, evidence, and tests.
+Validation confirms structural expectations needed by the next pipeline stage. Source-file byte
+integrity is enforced by acquisition/inventory, not by this record command. Validation does not
+assess signal quality, resolve channel preference, authenticate the upstream publisher, or establish
+model fitness. Those concerns require separate configuration, evidence, and tests.
 
 The next supported stage applies the [versioned annotation mapping](annotation-mapping.md) without
 altering the original symbols stored by ingestion.

@@ -39,6 +39,11 @@ The supported [acquisition command](dataset-acquisition.md) retrieves the config
 from PhysioNet's versioned HTTPS file directory and records an ignored local baseline. It does not
 redistribute the source files through this repository.
 
+`configs/mitdb-v1.0.0.toml` also commits repository-reviewed expected byte sizes and SHA-256 values
+for the 144 source files. The digests match PhysioNet's unsigned `SHA256SUMS.txt` distributed inside
+the v1.0.0 ZIP; sizes were measured from a clean extraction. This is a repository integrity control,
+while external provenance remains the versioned PhysioNet page, DOI, license, and citations above.
+
 The required lineage fields and stage boundaries are expanded in the
 [proposed pipeline design](pipeline-design.md). Unimplemented stages remain identified there.
 

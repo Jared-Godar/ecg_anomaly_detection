@@ -72,7 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
     acquire_parser.add_argument("--output", type=Path, required=True)
 
     inventory_parser = subparsers.add_parser(
-        "inventory", help="hash every required file and write a local baseline manifest"
+        "inventory", help="verify and hash every required file, then write observed evidence"
     )
     _add_common_arguments(inventory_parser)
     inventory_parser.add_argument("--output", type=Path, required=True)

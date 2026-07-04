@@ -30,7 +30,7 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
         for path in source_dir.iterdir()
         if path.suffix in {".atr", ".dat", ".hea"}
     }
-    _initialize_repository(tmp_path, record_ids)
+    _initialize_repository(tmp_path, record_ids, payloads)
     calls: list[str] = []
 
     def fake_fetch(url: str, output: Path, _: float, __: int) -> TransferResult:
@@ -105,7 +105,9 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
         )
 
 
-def _initialize_repository(root: Path, record_ids: tuple[str, ...]) -> None:
+def _initialize_repository(
+    root: Path, record_ids: tuple[str, ...], payloads: dict[str, bytes]
+) -> None:
     (root / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     (root / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     (root / ".gitignore").write_text(
@@ -119,6 +121,12 @@ def _initialize_repository(root: Path, record_ids: tuple[str, ...]) -> None:
     configs = root / "configs"
     configs.mkdir()
     records = ", ".join(f'"{record_id}"' for record_id in record_ids)
+    expected_files = ",\n".join(
+        '  { path = "'
+        + name
+        + f'", size_bytes = {len(content)}, sha256 = "{hashlib.sha256(content).hexdigest()}" }}'
+        for name, content in sorted(payloads.items())
+    )
     (configs / "dataset.toml").write_text(
         f"""
 schema_version = 1
@@ -132,6 +140,9 @@ sample_rate_hz = 4
 annotation_extension = "atr"
 record_ids = [{records}]
 required_extensions = ["atr", "dat", "hea"]
+expected_source_files = [
+{expected_files}
+]
 """.strip(),
         encoding="utf-8",
     )
