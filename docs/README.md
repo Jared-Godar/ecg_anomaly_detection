@@ -28,6 +28,7 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Issue workflow](governance/issue-workflow.md) | Issue intake, triage, status transitions, and project tracking |
 | [Label taxonomy](governance/label-taxonomy.md) | Label dimensions, assignment rules, and deterministic bootstrap |
 | [Repository governance](governance/repository-governance.md) | Ownership, pull-request workflow, and enforcement boundaries |
+| [Security governance](governance/security-policy.md) | Private reporting, supported versions, dependency stewardship, and limitations |
 | [Contributing](../CONTRIBUTING.md) | Change scope, data safety, validation, and pull request expectations |
 | [Third-party notices](../NOTICE.md) | Dataset, dependency, tutorial, and historical asset attribution status |
 

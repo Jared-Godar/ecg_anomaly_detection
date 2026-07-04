@@ -111,6 +111,7 @@ Start with the [documentation guide](docs/README.md), then use these focused ref
 - [Data provenance and licensing](docs/data-provenance.md)
 - [Historical results audit](docs/historical-results.md)
 - [Development workflow](docs/development.md)
+- [Security policy](SECURITY.md)
 - [Modernization roadmap](docs/modernization-roadmap.md)
 
 ## Historical experiment and results
