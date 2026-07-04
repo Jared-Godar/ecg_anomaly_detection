@@ -17,7 +17,7 @@ The labels are simplified reference-annotation classes from a historical dataset
 | **What is this?** | A responsible modernization of a notebook-oriented ECG classification project into a configuration-driven local data pipeline. |
 | **Why modernize it?** | The original work used absolute paths, an unrecorded environment, and random beat-window splits that cannot establish generalization to unseen patients. |
 | **What is implemented?** | Reproducible setup, acquisition, subject-aware preparation, deterministic baseline training, validation-only metrics, orchestration, and run manifests. |
-| **What comes next?** | A separately reviewed protected test-partition evaluation. No supported modern benchmark exists yet. |
+| **What comes next?** | Automated data-independent notebook execution checks and a separately reviewed protected test-partition evaluation. No supported modern benchmark exists yet. |
 
 ## Engineering capabilities demonstrated
 
@@ -59,7 +59,7 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 | Locked package environment and CLI | Test-partition evaluation |
 | Versioned, fail-safe dataset retrieval | Test-evaluation release policy |
 | File inventory, local integrity baseline, and model card | Modern held-out benchmark |
-| Typed WFDB ingestion and record validation | Curated narrative notebooks |
+| Typed WFDB ingestion and record validation | Automated notebook execution checks |
 | Auditable annotation mapping and window extraction | Cloud deployment or orchestration |
 | Deterministic subject-aware split manifests | Runtime and resource benchmarks |
 | Model-ready index over immutable record shards | Subject-grouped guarantees across the two records from one person |
@@ -106,6 +106,8 @@ The first pipeline run retrieves the configured source files from PhysioNet into
 
 Start with the [documentation guide](docs/README.md), then use these focused references:
 
+- [Supported narrative walkthrough](notebooks/narrative-walkthrough.ipynb)
+- [Notebook guidance](notebooks/README.md)
 - [Model card](MODEL_CARD.md)
 - [Repository architecture](docs/architecture.md)
 - [Pipeline orchestration](docs/pipeline-orchestration.md)
@@ -158,7 +160,8 @@ The repository's [MIT License](LICENSE) applies to project code and original doc
 
 - The archived 2022 environment and exact dependency versions were not captured.
 - The supported pipeline is local and sequential; no production or cloud deployment is implemented.
-- Curated notebooks, runtime benchmarks, and resource-use documentation remain pending.
+- Automated notebook execution checks remain pending; runtime and resource evidence is produced
+  per run but is not a cross-host benchmark.
 - Some archived exploratory notebooks contain saved errors and duplicated implementation.
 
 ### Third-party material

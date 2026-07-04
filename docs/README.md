@@ -5,6 +5,8 @@ The maintained documentation is organized by the question a reader is trying to 
 | Document | Purpose |
 |---|---|
 | [Project README](../README.md) | Portfolio overview, current status, quick start, and limitations |
+| [Narrative walkthrough](../notebooks/narrative-walkthrough.ipynb) | Canonical package-backed explanation of the supported workflow and evidence boundaries |
+| [Notebook guidance](../notebooks/README.md) | Supported notebook, execution, business-logic, and generated-figure policy |
 | [Model card](../MODEL_CARD.md) | Baseline scope, assumptions, evaluation, intended use, and prohibited use |
 | [Architecture](architecture.md) | Implemented repository boundaries and target component ownership |
 | [Pipeline design](pipeline-design.md) | Proposed lineage, validation controls, run outputs, and cloud mapping |

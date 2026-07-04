@@ -1,17 +1,38 @@
 # Notebooks
 
-This directory is reserved for curated notebooks that call the supported Python package rather than duplicate pipeline behavior.
+This directory contains the single supported [narrative walkthrough](narrative-walkthrough.ipynb).
+It explains the modern workflow by loading validated package configuration, describing the
+supported CLI, and optionally reading generated JSON evidence. It does not download data during
+routine execution or duplicate acquisition, transformation, training, or evaluation logic.
 
-No curated notebook is implemented yet. The directory contract is documented now so future
-notebooks remain presentation and analysis layers rather than becoming a second pipeline.
+The original notebooks are preserved in
+[`archive/original_2022/`](../archive/original_2022/README.md). They remain available as historical
+reference material but are not part of the supported modern workflow.
 
-The original notebooks are preserved in [`archive/original_2022/`](../archive/original_2022/README.md). They remain available as historical reference material but are not part of the supported modern workflow.
+## Supported notebook contract
 
-Curated notebooks should:
+Supported notebooks must:
 
 - have a numbered execution order and a single stated purpose;
 - use repository-relative configuration;
 - avoid embedding source data or model artifacts;
 - contain no saved execution errors;
-- call tested package functions for acquisition, transformation, and evaluation; and
-- repeat the project's research-only, non-clinical use limitation where results are presented.
+- delegate business logic to tested package modules or CLI commands;
+- read generated evidence only when it exists and degrade cleanly when ignored local artifacts are
+  absent;
+- avoid routine full-dataset downloads during notebook validation; and
+- repeat the project's research-only, non-clinical, non-production use limitation where results
+  are presented.
+
+The canonical notebook is expected to execute top-to-bottom without hidden state. The repository
+does not yet install or run a notebook execution checker in CI; current validation covers notebook
+JSON structure and the importable Python cell bodies. Data-independent automated notebook
+execution remains follow-up work.
+
+## Generated figures
+
+Modern notebook figures belong in `reports/figures/`, must be deterministic and clearly identified
+as supported modern assets, and must not reproduce pipeline logic. Generated local plots remain
+ignored unless a specific reviewed figure is intentionally allowlisted. Historical images under
+`archive/original_2022/images/` must not be reused or altered without verified source and reuse
+terms.
