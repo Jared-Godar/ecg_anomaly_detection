@@ -7,6 +7,11 @@ only the `validation` partition named by the dataset index. It does not resolve,
 summarize, or report indexed test shards. Validation results are exploratory pipeline evidence, not
 a final benchmark and not evidence of clinical or diagnostic performance.
 
+The protected `test` partition is governed by the separately documented
+[evaluation policy](evaluation-policy.md) and [benchmark governance](benchmark-governance.md). Policy
+validation does not enable test scoring. Any future benchmark execution requires a separate,
+explicitly reviewed implementation and immutable lineage evidence.
+
 The committed `configs/evaluation-baseline-v1.toml` fixes the evaluator, partition, configuration
 version, and zero-division value. Version 1 defines undefined precision, recall, or F1 as `0.0`.
 

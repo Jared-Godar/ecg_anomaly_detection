@@ -78,6 +78,8 @@ Exit criterion: every proposed change receives automated, data-independent quali
 
 - [x] Document repository architecture and proposed data lineage.
 - [ ] Define a separately reviewed held-out evaluation protocol and publish a model card only after it is run.
+- [x] Define benchmark eligibility, protected-test access, lineage, rerun, disclosure, and archival
+  governance before held-out execution.
 - [x] Document runtime, resource evidence, and operational interpretation limits.
 - [x] Describe future-state cloud concerns without claiming implementation.
 - [ ] Review every model and pipeline claim against generated evidence.

@@ -1,0 +1,85 @@
+schema_version = 1
+
+[benchmark]
+policy_id = "benchmark-governance-v1"
+version = "1.0.0"
+protected_partition = "test"
+test_evaluation_enabled = false
+explicit_future_opt_in_required = true
+
+[eligibility]
+criteria = [
+  "training and model selection are complete before protected-test access",
+  "the candidate model and all referenced configurations are immutable",
+  "the grouped split has passed its configured integrity and quality checks",
+  "reproducibility evidence and an auditable run manifest are available",
+  "a benchmark owner has recorded approval for the specific execution",
+]
+
+[execution]
+procedure = [
+  "record approval and the single-use benchmark purpose before execution",
+  "verify immutable lineage references before opening protected-test shards",
+  "execute a separately reviewed future benchmark command in an isolated run",
+  "write results once and archive all required evidence without model iteration",
+]
+required_lineage_references = [
+  "repository_commit_hash",
+  "dataset_configuration_hash",
+  "split_identity",
+  "training_configuration_hash",
+  "evaluation_configuration_hash",
+  "reproducibility_evidence_reference",
+  "run_manifest_reference",
+]
+
+[publication]
+required_disclosures = [
+  "repository_commit_hash",
+  "dataset_configuration_hash",
+  "split_identity",
+  "training_configuration_hash",
+  "evaluation_configuration_hash",
+  "reproducibility_evidence_reference",
+  "hardware_summary",
+  "runtime_summary",
+  "assumptions",
+  "limitations",
+]
+required_limitations = [
+  "dataset_limitations",
+  "annotation_limitations",
+  "class_imbalance_limitations",
+  "binary_mapping_limitations",
+  "split_methodology_limitations",
+  "historical_dataset_limitations",
+  "lack_of_clinical_validation",
+  "lack_of_medical_utility",
+]
+prohibited_claims = [
+  "model_quality_established",
+  "generalization_established",
+  "clinical_validity_established",
+  "medical_utility_established",
+]
+
+[reruns]
+allowed_reasons = [
+  "documented infrastructure failure before result inspection",
+  "verified implementation defect that invalidates the complete prior result",
+]
+require_new_approval = true
+require_prior_result_retention = true
+prohibit_model_selection_after_result = true
+
+[archival]
+required_records = [
+  "approval_record",
+  "immutable_lineage_references",
+  "benchmark_results",
+  "publication_disclosures",
+  "runtime_and_hardware_evidence",
+  "rerun_history",
+]
+retain_superseded_results = true
+append_only_history = true

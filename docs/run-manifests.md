@@ -69,3 +69,8 @@ the stages that create them. Neither command uploads evidence to external storag
 Reproducibility evidence does not prove generalization, clinical validity, or medical utility.
 Held-out benchmark evaluation remains intentionally protected, and host runtime/resource values are
 expected to vary.
+
+For a future protected-test benchmark, the run manifest is a required lineage reference but is not
+sufficient authorization. The benchmark record must also identify immutable dataset, split,
+training, and evaluation configurations and satisfy the approval, disclosure, rerun, and archival
+rules in [Benchmark governance](benchmark-governance.md).
