@@ -48,6 +48,11 @@ For orchestrated runs, artifact evidence includes the frozen model, training met
 `evaluation/validation-metrics.json`. The metrics document separately records the verified dataset
 index, model, and validation-shard digests used for scoring.
 
+Orchestrated runs also include the versioned reproducibility summaries and `evidence_manifest.json`
+described in [Reproducibility evidence](reproducibility-evidence.md). The run manifest hashes these
+documents; the evidence manifest connects the split identity to configuration, operational reports,
+derived artifacts, and validation-only evaluation outputs.
+
 Absolute local paths and file contents are not serialized. The output belongs under `artifacts/`
 and remains ignored because split membership and derived artifact metadata are record-level data.
 
@@ -60,3 +65,7 @@ them to the committed dependency resolution.
 
 The standalone manifest command only links supplied outputs; the `run-pipeline` command orchestrates
 the stages that create them. Neither command uploads evidence to external storage.
+
+Reproducibility evidence does not prove generalization, clinical validity, or medical utility.
+Held-out benchmark evaluation remains intentionally protected, and host runtime/resource values are
+expected to vary.

@@ -15,6 +15,7 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Record-grouped splitting](record-grouped-splitting.md) | Deterministic partition membership, leakage controls, and split manifest |
 | [Split quality reporting](split-quality-reporting.md) | Partition diagnostics, acceptance thresholds, and failure behavior |
 | [Run manifests](run-manifests.md) | Git, environment, configuration, dataset, split, and artifact evidence |
+| [Reproducibility evidence](reproducibility-evidence.md) | Versioned environment, runtime, resource, and digest evidence |
 | [Pipeline orchestration](pipeline-orchestration.md) | One-command local workflow, outputs, failure behavior, and limits |
 | [Model-ready dataset](model-ready-dataset.md) | Grouped shard index, lazy-loading contract, and training boundary |
 | [Baseline evaluation](baseline-evaluation.md) | Frozen-model validation metrics, isolation, and digest checks |

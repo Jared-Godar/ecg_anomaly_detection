@@ -42,6 +42,11 @@ artifacts/
     ├── mapping/<record-id>.json
     ├── windows/<record-id>.json
     ├── split.json
+    ├── split_quality_summary.json
+    ├── environment_summary.json
+    ├── runtime_summary.json
+    ├── resource_summary.json
+    ├── evidence_manifest.json
     ├── training/
     │   ├── model.json
     │   └── training-metadata.json
@@ -56,12 +61,19 @@ data/processed/runs/<run-id>/
 └── dataset-index.json
 ```
 
-The final run manifest hashes every configuration, report, window artifact, processed dataset
+The evidence summaries capture the host and interpreter, Git and lockfile identity, stage timings,
+best-effort host resources, and artifact digests. The final run manifest hashes every configuration,
+evidence summary, report, window artifact, processed dataset
 index, fitted model, training metadata, and validation metrics. The split manifest retains record
 membership;
 individual NPZ artifacts retain row-level record and annotation lineage. Only training shards are
 opened by fitting, and only validation shards are opened by evaluation. Test descriptors are not
 resolved, opened, scored, summarized, or reported.
+
+This operational evidence supports reproducibility review. It does not prove generalization,
+clinical validity, or medical utility. Validation metrics remain validation-only, and held-out
+benchmark evaluation remains intentionally protected. Runtime and resource observations may vary
+by host environment and system load.
 
 ## Execution and failure behavior
 

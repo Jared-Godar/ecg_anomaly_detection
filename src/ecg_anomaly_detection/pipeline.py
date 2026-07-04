@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from time import perf_counter
 from typing import Callable
 
 from ecg_anomaly_detection.acquisition import Fetcher, acquire_dataset
@@ -25,6 +26,13 @@ from ecg_anomaly_detection.records import (
     load_wfdb_record,
     validate_record,
     write_validation_report,
+)
+from ecg_anomaly_detection.reproducibility import (
+    RuntimeStageTimer,
+    capture_environment_summary,
+    capture_resource_summary,
+    create_evidence_manifest,
+    write_evidence,
 )
 from ecg_anomaly_detection.run_manifest import create_run_manifest, write_run_manifest
 from ecg_anomaly_detection.splitting import (
@@ -65,6 +73,10 @@ class PipelineRunResult:
     model_path: Path
     training_metadata_path: Path
     validation_metrics_path: Path
+    environment_summary_path: Path
+    runtime_summary_path: Path
+    resource_summary_path: Path
+    evidence_manifest_path: Path
     run_manifest_path: Path
     record_count: int
     window_count: int
@@ -82,6 +94,7 @@ def run_pipeline(
     fetcher: Fetcher | None = None,
     clock: Callable[[], datetime] | None = None,
     run_id_factory: Callable[[], str] | None = None,
+    monotonic: Callable[[], float] = perf_counter,
 ) -> PipelineRunResult:
     """Run acquisition through fitting and validation-only evaluation."""
     root = repository_root.resolve()
@@ -106,6 +119,7 @@ def run_pipeline(
     evaluation_config = load_evaluation_config(config_paths[5])
     run_id = _create_run_id(run_id_factory)
     timestamp = clock or (lambda: datetime.now(UTC))
+    runtime_timer = RuntimeStageTimer(monotonic)
 
     raw_data_dir = root / "data" / "raw" / dataset_config.slug / dataset_config.version
     dataset_evidence_dir = (
@@ -113,14 +127,15 @@ def run_pipeline(
     )
     dataset_evidence_dir.mkdir(parents=True, exist_ok=True)
     acquisition_manifest_path = dataset_evidence_dir / "acquisition.json"
-    acquire_dataset(
-        dataset_config,
-        root,
-        raw_data_dir,
-        acquisition_manifest_path,
-        fetcher=fetcher,
-        clock=timestamp,
-    )
+    with runtime_timer.stage("acquisition"):
+        acquire_dataset(
+            dataset_config,
+            root,
+            raw_data_dir,
+            acquisition_manifest_path,
+            fetcher=fetcher,
+            clock=timestamp,
+        )
 
     run_directory, interim_directory, processed_directory = _create_run_directories(root, run_id)
     validation_directory = run_directory / "validation"
@@ -146,33 +161,38 @@ def run_pipeline(
     total_windows = 0
     for record_id in dataset_config.record_ids:
         loaded = load_wfdb_record(dataset_config, raw_data_dir, record_id)
-        validation = validate_record(dataset_config, loaded.signal, loaded.annotations)
-        validation_path = validation_directory / f"{record_id}.json"
-        write_validation_report(validation, validation_path)
+        with runtime_timer.stage("validation"):
+            validation = validate_record(dataset_config, loaded.signal, loaded.annotations)
+            validation_path = validation_directory / f"{record_id}.json"
+            write_validation_report(validation, validation_path)
         validation_paths.append(validation_path)
 
-        mapped = map_annotations(mapping_config, loaded.annotations)
-        mapping_path = mapping_directory / f"{record_id}.json"
-        write_mapping_report(mapped.report, mapping_path)
+        with runtime_timer.stage("annotation_mapping"):
+            mapped = map_annotations(mapping_config, loaded.annotations)
+            mapping_path = mapping_directory / f"{record_id}.json"
+            write_mapping_report(mapped.report, mapping_path)
         mapping_paths.append(mapping_path)
 
-        extracted = extract_windows(window_config, mapping_config, loaded.signal, mapped)
-        window_artifact_path = window_artifact_directory / f"{record_id}.npz"
-        window_report_path = window_report_directory / f"{record_id}.json"
-        write_window_artifact(extracted.window_set, window_artifact_path)
-        write_window_report(extracted.report, window_report_path)
+        with runtime_timer.stage("window_extraction"):
+            extracted = extract_windows(window_config, mapping_config, loaded.signal, mapped)
+            window_artifact_path = window_artifact_directory / f"{record_id}.npz"
+            window_report_path = window_report_directory / f"{record_id}.json"
+            write_window_artifact(extracted.window_set, window_artifact_path)
+            write_window_report(extracted.report, window_report_path)
         window_artifact_paths.append(window_artifact_path)
         window_report_paths.append(window_report_path)
         total_windows += extracted.report.emitted_window_count
 
-    metadata = load_window_metadata(window_artifact_paths)
-    split_manifest = create_split_manifest(split_config, metadata)
-    split_manifest_path = run_directory / "split.json"
-    write_split_manifest(split_manifest, split_manifest_path)
-    split_quality_summary = create_split_quality_summary(split_config, split_manifest, metadata)
-    split_quality_summary_path = run_directory / "split_quality_summary.json"
-    write_split_quality_summary(split_quality_summary, split_quality_summary_path)
-    enforce_split_quality(split_quality_summary)
+    with runtime_timer.stage("split"):
+        metadata = load_window_metadata(window_artifact_paths)
+        split_manifest = create_split_manifest(split_config, metadata)
+        split_manifest_path = run_directory / "split.json"
+        write_split_manifest(split_manifest, split_manifest_path)
+    with runtime_timer.stage("split_diagnostics"):
+        split_quality_summary = create_split_quality_summary(split_config, split_manifest, metadata)
+        split_quality_summary_path = run_directory / "split_quality_summary.json"
+        write_split_quality_summary(split_quality_summary, split_quality_summary_path)
+        enforce_split_quality(split_quality_summary)
     if split_manifest.total_window_count != total_windows:
         raise PipelineError("split window count does not match per-record extraction reports")
 
@@ -184,25 +204,66 @@ def run_pipeline(
     training_directory.mkdir()
     model_path = training_directory / "model.json"
     training_metadata_path = training_directory / "training-metadata.json"
-    train_from_index(
-        root,
-        dataset_index_path,
-        training_config,
-        model_path,
-        training_metadata_path,
-    )
+    with runtime_timer.stage("training"):
+        train_from_index(
+            root,
+            dataset_index_path,
+            training_config,
+            model_path,
+            training_metadata_path,
+        )
 
     evaluation_directory = run_directory / "evaluation"
     evaluation_directory.mkdir()
     validation_metrics_path = evaluation_directory / "validation-metrics.json"
-    evaluate_validation_from_index(
-        root,
+    with runtime_timer.stage("validation_evaluation"):
+        evaluate_validation_from_index(
+            root,
+            dataset_index_path,
+            model_path,
+            training_metadata_path,
+            evaluation_config,
+            validation_metrics_path,
+        )
+
+    operational_evidence_paths = (
+        acquisition_manifest_path,
+        split_quality_summary_path,
+        *validation_paths,
+        *mapping_paths,
+        *window_report_paths,
+    )
+    artifact_paths = (
+        *window_artifact_paths,
         dataset_index_path,
         model_path,
         training_metadata_path,
-        evaluation_config,
         validation_metrics_path,
     )
+    environment_summary_path = run_directory / "environment_summary.json"
+    runtime_summary_path = run_directory / "runtime_summary.json"
+    resource_summary_path = run_directory / "resource_summary.json"
+    evidence_manifest_path = run_directory / "evidence_manifest.json"
+    write_evidence(capture_environment_summary(root), root, environment_summary_path)
+    write_evidence(runtime_timer.summary(), root, runtime_summary_path)
+    write_evidence(capture_resource_summary(root), root, resource_summary_path)
+    reproducibility_evidence_paths = (
+        environment_summary_path,
+        runtime_summary_path,
+        resource_summary_path,
+    )
+    evidence_manifest = create_evidence_manifest(
+        root,
+        split_manifest_path,
+        config_paths,
+        (*operational_evidence_paths, *reproducibility_evidence_paths),
+        artifact_paths,
+        split_name=split_manifest.split_name,
+        split_version=split_manifest.split_version,
+        split_strategy=split_manifest.strategy,
+        split_seed=split_manifest.seed,
+    )
+    write_evidence(evidence_manifest, root, evidence_manifest_path)
 
     run_manifest = create_run_manifest(
         root,
@@ -210,19 +271,11 @@ def run_pipeline(
         split_manifest_path,
         config_paths,
         evidence_paths=(
-            acquisition_manifest_path,
-            split_quality_summary_path,
-            *validation_paths,
-            *mapping_paths,
-            *window_report_paths,
+            *operational_evidence_paths,
+            *reproducibility_evidence_paths,
+            evidence_manifest_path,
         ),
-        artifact_paths=(
-            *window_artifact_paths,
-            dataset_index_path,
-            model_path,
-            training_metadata_path,
-            validation_metrics_path,
-        ),
+        artifact_paths=artifact_paths,
         clock=timestamp,
         run_id_factory=lambda: run_id,
     )
@@ -241,6 +294,10 @@ def run_pipeline(
         model_path=model_path,
         training_metadata_path=training_metadata_path,
         validation_metrics_path=validation_metrics_path,
+        environment_summary_path=environment_summary_path,
+        runtime_summary_path=runtime_summary_path,
+        resource_summary_path=resource_summary_path,
+        evidence_manifest_path=evidence_manifest_path,
         run_manifest_path=run_manifest_path,
         record_count=len(dataset_config.record_ids),
         window_count=total_windows,

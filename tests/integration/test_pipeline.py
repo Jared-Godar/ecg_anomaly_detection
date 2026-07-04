@@ -75,6 +75,16 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
             (run_directory / "split_quality_summary.json").read_text(encoding="utf-8")
         )
         manifest = json.loads((run_directory / "run-manifest.json").read_text(encoding="utf-8"))
+        environment = json.loads(
+            (run_directory / "environment_summary.json").read_text(encoding="utf-8")
+        )
+        runtime = json.loads((run_directory / "runtime_summary.json").read_text(encoding="utf-8"))
+        resources = json.loads(
+            (run_directory / "resource_summary.json").read_text(encoding="utf-8")
+        )
+        evidence_manifest = json.loads(
+            (run_directory / "evidence_manifest.json").read_text(encoding="utf-8")
+        )
         dataset_index = json.loads(
             (
                 tmp_path / "data" / "processed" / "runs" / run_directory.name / "dataset-index.json"
@@ -102,7 +112,7 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
         assert any(
             item["path"].endswith("training/model.json") for item in manifest["artifact_files"]
         )
-        assert len(manifest["evidence_files"]) == 11
+        assert len(manifest["evidence_files"]) == 15
         assert any(
             item["path"].endswith("split_quality_summary.json")
             for item in manifest["evidence_files"]
@@ -111,6 +121,26 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
             item["path"].endswith("evaluation/validation-metrics.json")
             for item in manifest["artifact_files"]
         )
+        assert environment["schema_version"] == 1
+        assert environment["dependency_lock"]["path"] == "uv.lock"
+        assert runtime["schema_version"] == 1
+        assert set(runtime["stage_durations"]) == {
+            "acquisition",
+            "validation",
+            "annotation_mapping",
+            "window_extraction",
+            "split",
+            "split_diagnostics",
+            "training",
+            "validation_evaluation",
+        }
+        assert resources["schema_version"] == 1
+        assert evidence_manifest["schema_version"] == 1
+        assert evidence_manifest["split"]["name"] == "synthetic-subject-grouped"
+        assert len(evidence_manifest["configuration_files"]) == 6
+        assert len(evidence_manifest["evidence_files"]) == 14
+        assert len(evidence_manifest["artifact_files"]) == 7
+        assert all(len(item["sha256"]) == 64 for item in evidence_manifest["artifact_files"])
 
 
 def _initialize_repository(
