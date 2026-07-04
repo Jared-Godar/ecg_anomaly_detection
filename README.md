@@ -17,7 +17,7 @@ The labels are simplified reference-annotation classes from a historical dataset
 | **What is this?** | A responsible modernization of a notebook-oriented ECG classification project into a configuration-driven local data pipeline. |
 | **Why modernize it?** | The original work used absolute paths, an unrecorded environment, and random beat-window splits that cannot establish generalization to unseen patients. |
 | **What is implemented?** | Reproducible setup, acquisition, subject-aware preparation, deterministic baseline training, validation-only metrics, orchestration, and run manifests. |
-| **What comes next?** | Protected test-partition evaluation and a model card. No supported modern benchmark exists yet. |
+| **What comes next?** | A separately reviewed protected test-partition evaluation. No supported modern benchmark exists yet. |
 
 ## Engineering capabilities demonstrated
 
@@ -58,7 +58,7 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 |---|---|
 | Locked package environment and CLI | Test-partition evaluation |
 | Versioned, fail-safe dataset retrieval | Test-evaluation release policy |
-| File inventory and local integrity baseline | Model card and modern benchmark |
+| File inventory, local integrity baseline, and model card | Modern held-out benchmark |
 | Typed WFDB ingestion and record validation | Curated narrative notebooks |
 | Auditable annotation mapping and window extraction | Cloud deployment or orchestration |
 | Deterministic subject-aware split manifests | Runtime and resource benchmarks |
@@ -106,6 +106,7 @@ The first pipeline run retrieves the configured source files from PhysioNet into
 
 Start with the [documentation guide](docs/README.md), then use these focused references:
 
+- [Model card](MODEL_CARD.md)
 - [Repository architecture](docs/architecture.md)
 - [Pipeline orchestration](docs/pipeline-orchestration.md)
 - [Data provenance and licensing](docs/data-provenance.md)
