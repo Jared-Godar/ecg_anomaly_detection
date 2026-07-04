@@ -27,6 +27,10 @@ Each pull request should:
 - be updated with `main` before merge when required by branch protection; and
 - have all review conversations resolved.
 
+Accepted work begins with the applicable issue form and follows the documented
+[issue workflow](issue-workflow.md). The [label taxonomy](label-taxonomy.md) provides consistent type,
+priority, status, area, modernization, portfolio, risk, size, and dependency metadata.
+
 The repository uses squash merges only. Each pull request therefore becomes one
 coherent commit on `main`, providing linear history while allowing iterative
 work on its topic branch. Merge commits and rebase merges should remain disabled,

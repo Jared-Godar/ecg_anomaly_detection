@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "labels": [
+    {"name": "type: bug", "color": "d73a4a", "description": "Reproducible incorrect behavior"},
+    {"name": "type: documentation", "color": "0075ca", "description": "Documentation correction or improvement"},
+    {"name": "type: governance", "color": "5319e7", "description": "Repository policy or workflow change"},
+    {"name": "type: maintenance", "color": "c5def5", "description": "Routine repository or dependency upkeep"},
+    {"name": "type: modernization", "color": "1d76db", "description": "Modernization case-study capability"},
+    {"name": "type: technical-debt", "color": "fbca04", "description": "Bounded maintainability or reliability liability"},
+
+    {"name": "priority: p0", "color": "b60205", "description": "Critical integrity or security work; act immediately"},
+    {"name": "priority: p1", "color": "d93f0b", "description": "High priority; schedule next"},
+    {"name": "priority: p2", "color": "fbca04", "description": "Normal priority; schedule when ready"},
+    {"name": "priority: p3", "color": "0e8a16", "description": "Low priority or opportunistic improvement"},
+
+    {"name": "status: triage", "color": "ededed", "description": "Needs scope, priority, or ownership review"},
+    {"name": "status: ready", "color": "0e8a16", "description": "Accepted and sufficiently defined to start"},
+    {"name": "status: in-progress", "color": "1d76db", "description": "Implementation is actively underway"},
+    {"name": "status: blocked", "color": "b60205", "description": "Cannot proceed until a named dependency is resolved"},
+    {"name": "status: needs-decision", "color": "5319e7", "description": "Maintainer decision is required"},
+
+    {"name": "area: data-pipeline", "color": "0052cc", "description": "Acquisition, validation, transformation, or orchestration"},
+    {"name": "area: documentation", "color": "0075ca", "description": "Maintained guides, references, or attribution"},
+    {"name": "area: evaluation", "color": "006b75", "description": "Grouped evaluation, metrics, or result reporting"},
+    {"name": "area: modeling", "color": "006b75", "description": "Baseline model training or model-ready interfaces"},
+    {"name": "area: quality", "color": "0e8a16", "description": "Tests, validation, typing, or static analysis"},
+    {"name": "area: repository", "color": "c5def5", "description": "Repository configuration and developer workflow"},
+
+    {"name": "modernization: historical-preservation", "color": "f9d0c4", "description": "Preserves or accurately frames historical project material"},
+    {"name": "modernization: reproducibility", "color": "bfdadc", "description": "Improves repeatability, provenance, or run evidence"},
+    {"name": "modernization: split-integrity", "color": "bfd4f2", "description": "Protects record or patient grouping and leakage controls"},
+    {"name": "modernization: testability", "color": "c2e0c6", "description": "Adds deterministic seams or regression coverage"},
+
+    {"name": "portfolio: case-study", "color": "d4c5f9", "description": "Improves the responsible modernization narrative"},
+    {"name": "portfolio: release", "color": "7057ff", "description": "Required for a portfolio release milestone"},
+
+    {"name": "risk: data-integrity", "color": "b60205", "description": "Could affect provenance, transformations, or artifact integrity"},
+    {"name": "risk: evaluation", "color": "d93f0b", "description": "Could affect leakage controls, metrics, or result interpretation"},
+    {"name": "risk: security", "color": "b60205", "description": "Could expose credentials, dependencies, or repository controls"},
+
+    {"name": "size: xs", "color": "c2e0c6", "description": "Very small, isolated change"},
+    {"name": "size: s", "color": "9be9a8", "description": "Small change with limited review surface"},
+    {"name": "size: m", "color": "fbca04", "description": "Moderate change across a coherent feature"},
+    {"name": "size: l", "color": "d93f0b", "description": "Large change that may need decomposition"},
+
+    {"name": "dependency: external", "color": "0366d6", "description": "Depends on an upstream project or external service"},
+    {"name": "dependency: repository-setting", "color": "0366d6", "description": "Requires a GitHub repository setting change"},
+    {"name": "dependency: decision", "color": "5319e7", "description": "Depends on a recorded maintainer decision"}
+  ]
+}

@@ -1,0 +1,50 @@
+name: Technical debt
+description: Record a bounded maintainability, reliability, or reproducibility liability.
+title: "[Debt]: "
+labels:
+  - "type: technical-debt"
+  - "status: triage"
+  - "area: quality"
+body:
+  - type: textarea
+    id: debt
+    attributes:
+      label: Debt description
+      description: Identify the workaround, fragility, duplication, or missing control.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and impact
+      description: Explain where the debt appears and its current engineering cost or risk.
+    validations:
+      required: true
+  - type: textarea
+    id: remediation
+    attributes:
+      label: Proposed remediation
+      description: Describe a bounded approach, including tests or documentation needed.
+    validations:
+      required: true
+  - type: textarea
+    id: deferral
+    attributes:
+      label: Deferral consequences
+      description: State what becomes harder or riskier if this remains unresolved.
+    validations:
+      required: true
+  - type: dropdown
+    id: debt_area
+    attributes:
+      label: Primary area
+      options:
+        - Data pipeline
+        - Repository workflow
+        - Quality and tests
+        - Documentation
+        - Evaluation
+        - Dependencies
+        - Historical preservation
+    validations:
+      required: true

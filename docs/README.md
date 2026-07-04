@@ -21,6 +21,9 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Historical results](historical-results.md) | Saved 2022 metrics and their known evaluation defects |
 | [Development workflow](development.md) | Locked environment, tests, hooks, and CI behavior |
 | [Modernization roadmap](modernization-roadmap.md) | Completed, active, and planned modernization phases |
+| [Issue workflow](governance/issue-workflow.md) | Issue intake, triage, status transitions, and project tracking |
+| [Label taxonomy](governance/label-taxonomy.md) | Label dimensions, assignment rules, and deterministic bootstrap |
+| [Repository governance](governance/repository-governance.md) | Ownership, pull-request workflow, and enforcement boundaries |
 | [Contributing](../CONTRIBUTING.md) | Change scope, data safety, validation, and pull request expectations |
 | [Third-party notices](../NOTICE.md) | Dataset, dependency, tutorial, and historical asset attribution status |
 

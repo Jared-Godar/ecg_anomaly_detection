@@ -1,0 +1,53 @@
+name: Documentation update
+description: Propose a correction or improvement to maintained documentation.
+title: "[Docs]: "
+labels:
+  - "type: documentation"
+  - "status: triage"
+  - "area: documentation"
+body:
+  - type: textarea
+    id: location
+    attributes:
+      label: Document and location
+      description: Link to the file and identify the relevant heading or passage.
+      placeholder: docs/example.md — "Section name"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Documentation problem
+      description: Explain what is missing, incorrect, ambiguous, or outdated.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_change
+    attributes:
+      label: Proposed change
+      description: Provide replacement wording or a concrete outline when practical.
+    validations:
+      required: true
+  - type: dropdown
+    id: context
+    attributes:
+      label: Documentation context
+      options:
+        - Implemented current behavior
+        - Proposed future architecture
+        - Historical project material
+        - Dataset provenance or attribution
+        - Contributor or repository workflow
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Content checks
+      options:
+        - label: The proposal distinguishes implemented, proposed, and historical behavior.
+          required: true
+        - label: The proposal avoids medical, clinical, diagnostic, or production-healthcare claims.
+          required: true
+        - label: Required dataset attribution and research/educational limitations remain visible where relevant.
+          required: true
