@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Sequence
 
 from ecg_anomaly_detection.acquisition import AcquisitionError, acquire_dataset
+from ecg_anomaly_detection.benchmark_policy import (
+    BenchmarkPolicyError,
+    load_benchmark_policy,
+)
 from ecg_anomaly_detection.config import ConfigurationError, load_dataset_config
 from ecg_anomaly_detection.dataset_index import (
     DatasetIndexError,
@@ -157,6 +161,12 @@ def build_parser() -> argparse.ArgumentParser:
     index_parser.add_argument("--split-manifest", type=Path, required=True)
     index_parser.add_argument("--input", type=Path, action="append", required=True)
     index_parser.add_argument("--output", type=Path, required=True)
+
+    policy_parser = subparsers.add_parser(
+        "validate-benchmark-policy",
+        help="validate benchmark governance configuration without accessing benchmark data",
+    )
+    policy_parser.add_argument("--policy", type=Path, required=True)
     return parser
 
 
@@ -166,6 +176,10 @@ def main(arguments: Sequence[str] | None = None) -> int:
     options = parser.parse_args(arguments)
 
     try:
+        if options.command == "validate-benchmark-policy":
+            policy = load_benchmark_policy(options.policy)
+            print(f"validated benchmark policy {policy.policy_id} version {policy.version}")
+            return 0
         if options.command == "index-dataset":
             index = create_dataset_index(
                 options.repository_root,
@@ -269,6 +283,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
     except (
         AcquisitionError,
         AnnotationMappingError,
+        BenchmarkPolicyError,
         ConfigurationError,
         DatasetIndexError,
         EvaluationError,

@@ -19,6 +19,8 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Pipeline orchestration](pipeline-orchestration.md) | One-command local workflow, outputs, failure behavior, and limits |
 | [Model-ready dataset](model-ready-dataset.md) | Grouped shard index, lazy-loading contract, and training boundary |
 | [Baseline evaluation](baseline-evaluation.md) | Frozen-model validation metrics, isolation, and digest checks |
+| [Evaluation policy](evaluation-policy.md) | Development evaluation and protected-test boundaries |
+| [Benchmark governance](benchmark-governance.md) | Future benchmark eligibility, execution, disclosure, rerun, and archival rules |
 | [Data provenance](data-provenance.md) | Dataset source, license, attribution, privacy, and label provenance |
 | [Historical results](historical-results.md) | Saved 2022 metrics and their known evaluation defects |
 | [Development workflow](development.md) | Locked environment, tests, hooks, and CI behavior |
