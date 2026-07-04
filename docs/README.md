@@ -13,6 +13,7 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Annotation mapping](annotation-mapping.md) | Versioned binary target policy, exclusions, and audit report |
 | [Window extraction](window-extraction.md) | Boundary-safe geometry, lineage-preserving NPZ output, and overlap audit |
 | [Record-grouped splitting](record-grouped-splitting.md) | Deterministic partition membership, leakage controls, and split manifest |
+| [Split quality reporting](split-quality-reporting.md) | Partition diagnostics, acceptance thresholds, and failure behavior |
 | [Run manifests](run-manifests.md) | Git, environment, configuration, dataset, split, and artifact evidence |
 | [Pipeline orchestration](pipeline-orchestration.md) | One-command local workflow, outputs, failure behavior, and limits |
 | [Model-ready dataset](model-ready-dataset.md) | Grouped shard index, lazy-loading contract, and training boundary |

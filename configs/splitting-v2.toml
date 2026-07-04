@@ -11,6 +11,17 @@ train = 0.70
 validation = 0.15
 test = 0.15
 
+[split.quality]
+min_subjects_per_partition = 5
+min_records_per_partition = 5
+min_windows_per_partition = 1
+min_positive_examples_per_partition = 1
+required_class_coverage = ["validation", "test"]
+required_classes = [0, 1]
+max_partition_ratio_deviation = 0.05
+default_severity = "failure"
+warning_checks = ["minimum_positive_examples", "required_class_coverage"]
+
 # Opaque subject identifiers. Records 201 and 202 originate from the same
 # source tape and therefore share one subject ID; all other records are unique.
 [record_subjects]

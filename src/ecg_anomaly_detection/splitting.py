@@ -6,7 +6,7 @@ import json
 import random
 import tomllib
 from collections import Counter
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 from zipfile import BadZipFile
@@ -33,6 +33,22 @@ class SplitConfig:
     validation_ratio: float
     test_ratio: float
     record_subjects: dict[str, str]
+    quality: SplitQualityConfig = field(default_factory=lambda: SplitQualityConfig())
+
+
+@dataclass(frozen=True, slots=True)
+class SplitQualityConfig:
+    """Acceptance thresholds applied after deterministic membership assignment."""
+
+    min_subjects_per_partition: int = 1
+    min_records_per_partition: int = 1
+    min_windows_per_partition: int = 1
+    min_positive_examples_per_partition: int = 0
+    required_class_coverage: tuple[str, ...] = ()
+    required_classes: tuple[int, ...] = ()
+    max_partition_ratio_deviation: float = 1.0
+    default_severity: str = "failure"
+    warning_checks: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +62,7 @@ class WindowMetadata:
     mapping_version: str
     window_config_name: str
     window_config_version: str
+    record_shards: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +152,36 @@ class SplitManifest:
         return manifest
 
 
+@dataclass(frozen=True, slots=True)
+class QualityViolation:
+    """One stable, machine-readable acceptance-check result."""
+
+    check: str
+    partition: str | None
+    severity: str
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class SplitQualitySummary:
+    """Deterministic diagnostics and acceptance result for one split."""
+
+    schema_version: int
+    split_name: str
+    split_version: str
+    status: str
+    subject_disjoint: bool
+    record_disjoint: bool
+    configured_ratios: dict[str, float]
+    acceptance_checks: dict[str, Any]
+    partitions: dict[str, dict[str, Any]]
+    violations: tuple[QualityViolation, ...]
+
+    def to_json(self) -> str:
+        """Serialize with deterministic keys and formatting."""
+        return json.dumps(asdict(self), indent=2, sort_keys=True) + "\n"
+
+
 def load_split_config(path: Path) -> SplitConfig:
     """Load and validate a versioned split configuration."""
     try:
@@ -161,6 +208,7 @@ def load_split_config(path: Path) -> SplitConfig:
         validation_ratio=_required_ratio(ratios, "validation"),
         test_ratio=_required_ratio(ratios, "test"),
         record_subjects=_record_subject_mapping(document, schema_version),
+        quality=_quality_config(split),
     )
     expected_strategy = "seeded-subject-shuffle" if schema_version == 2 else "seeded-record-shuffle"
     if config.strategy != expected_strategy:
@@ -180,6 +228,7 @@ def load_window_metadata(artifact_paths: Sequence[Path]) -> WindowMetadata:
     target_arrays: list[IntegerArray] = []
     seen_records: set[str] = set()
     identity: tuple[str, str, str, str] | None = None
+    record_shards: dict[str, str] = {}
 
     for path in artifact_paths:
         try:
@@ -224,6 +273,7 @@ def load_window_metadata(artifact_paths: Sequence[Path]) -> WindowMetadata:
                 f"records occur in multiple window artifacts: {sorted(duplicated_records)}"
             )
         seen_records.update(current_records)
+        record_shards.update({record_id: str(path) for record_id in current_records})
         if identity is None:
             identity = artifact_identity
         elif artifact_identity != identity:
@@ -243,7 +293,161 @@ def load_window_metadata(artifact_paths: Sequence[Path]) -> WindowMetadata:
         mapping_version=identity[1],
         window_config_name=identity[2],
         window_config_version=identity[3],
+        record_shards=dict(sorted(record_shards.items())),
     )
+
+
+def create_split_quality_summary(
+    config: SplitConfig, manifest: SplitManifest, metadata: WindowMetadata
+) -> SplitQualitySummary:
+    """Build deterministic diagnostics without reading or scoring held-out windows."""
+    names = ("train", "validation", "test")
+    configured = {
+        "train": config.train_ratio,
+        "validation": config.validation_ratio,
+        "test": config.test_ratio,
+    }
+    subject_sets = [set(manifest.partitions[name].subject_ids) for name in names]
+    record_sets = [set(manifest.partitions[name].record_ids) for name in names]
+    subject_disjoint = _sets_are_disjoint(subject_sets)
+    record_disjoint = _sets_are_disjoint(record_sets)
+    observed_classes = tuple(sorted({int(value) for value in metadata.target_values}))
+    binary = observed_classes == (0, 1)
+    diagnostics: dict[str, dict[str, Any]] = {}
+    violations: list[QualityViolation] = []
+    for name in names:
+        partition = manifest.partitions[name]
+        shards = sorted(
+            {
+                metadata.record_shards.get(record_id, source)
+                for record_id in partition.record_ids
+                for source in (
+                    metadata.source_artifacts[0]
+                    if len(metadata.source_artifacts) == 1
+                    else record_id,
+                )
+            }
+        )
+        class_counts = partition.target_value_counts
+        prevalence = {
+            key: (count / partition.window_count if partition.window_count else 0.0)
+            for key, count in class_counts.items()
+        }
+        actual_ratios = {
+            "subjects": partition.subject_count / manifest.total_subject_count,
+            "records": partition.record_count / manifest.total_record_count,
+            "shards": len(shards) / max(1, len(set(metadata.record_shards.values()) or shards)),
+            "windows": partition.window_count / manifest.total_window_count,
+        }
+        diagnostics[name] = {
+            "subject_count": partition.subject_count,
+            "record_count": partition.record_count,
+            "shard_count": len(shards),
+            "window_count": partition.window_count,
+            "class_count": sum(count > 0 for count in class_counts.values()),
+            "class_counts": class_counts,
+            "class_prevalence": prevalence,
+            "binary_counts": (
+                {"negative": class_counts["0"], "positive": class_counts["1"]} if binary else None
+            ),
+            "configured_ratio": configured[name],
+            "actual_ratios": actual_ratios,
+            "subject_ratio_deviation": abs(actual_ratios["subjects"] - configured[name]),
+        }
+        checks = (
+            (
+                "minimum_subjects",
+                partition.subject_count,
+                config.quality.min_subjects_per_partition,
+            ),
+            ("minimum_records", partition.record_count, config.quality.min_records_per_partition),
+            ("minimum_windows", partition.window_count, config.quality.min_windows_per_partition),
+        )
+        for check, actual, minimum in checks:
+            if actual < minimum:
+                violations.append(
+                    _violation(
+                        config, check, name, f"{actual} is below configured minimum {minimum}"
+                    )
+                )
+        if binary and class_counts["1"] < config.quality.min_positive_examples_per_partition:
+            violations.append(
+                _violation(
+                    config,
+                    "minimum_positive_examples",
+                    name,
+                    f"{class_counts['1']} is below configured minimum {config.quality.min_positive_examples_per_partition}",
+                )
+            )
+        if name in config.quality.required_class_coverage:
+            missing = [
+                value
+                for value in config.quality.required_classes
+                if class_counts.get(str(value), 0) == 0
+            ]
+            if missing:
+                violations.append(
+                    _violation(
+                        config,
+                        "required_class_coverage",
+                        name,
+                        f"missing required classes {missing}",
+                    )
+                )
+        if (
+            diagnostics[name]["subject_ratio_deviation"]
+            > config.quality.max_partition_ratio_deviation
+        ):
+            violations.append(
+                _violation(
+                    config,
+                    "partition_ratio_deviation",
+                    name,
+                    f"subject ratio deviation {diagnostics[name]['subject_ratio_deviation']:.6f} exceeds {config.quality.max_partition_ratio_deviation:.6f}",
+                )
+            )
+    if not subject_disjoint:
+        violations.append(
+            _violation(
+                config, "subject_disjointness", None, "subjects occur in multiple partitions"
+            )
+        )
+    if not record_disjoint:
+        violations.append(
+            _violation(config, "record_disjointness", None, "records occur in multiple partitions")
+        )
+    violations.sort(key=lambda item: (item.check, item.partition or "", item.message))
+    status = (
+        "failed"
+        if any(item.severity == "failure" for item in violations)
+        else ("warning" if violations else "passed")
+    )
+    return SplitQualitySummary(
+        1,
+        manifest.split_name,
+        manifest.split_version,
+        status,
+        subject_disjoint,
+        record_disjoint,
+        configured,
+        asdict(config.quality),
+        diagnostics,
+        tuple(violations),
+    )
+
+
+def write_split_quality_summary(summary: SplitQualitySummary, output_path: Path) -> None:
+    """Write split diagnostics to an existing directory."""
+    if output_path.suffix != ".json" or not output_path.parent.is_dir():
+        raise SplitError("split quality summary must be a JSON file in an existing directory")
+    output_path.write_text(summary.to_json(), encoding="utf-8")
+
+
+def enforce_split_quality(summary: SplitQualitySummary) -> None:
+    """Fail closed after the diagnostic artifact has been made available."""
+    failures = [item for item in summary.violations if item.severity == "failure"]
+    if failures:
+        raise SplitError(f"split quality checks failed: {len(failures)} failure(s)")
 
 
 def create_split_manifest(config: SplitConfig, metadata: WindowMetadata) -> SplitManifest:
@@ -536,6 +740,80 @@ def _required_ratio(values: dict[str, Any], key: str) -> float:
     if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 < value < 1:
         raise SplitError(f"split.ratios.{key} must be between 0 and 1")
     return float(value)
+
+
+def _quality_config(split: dict[str, Any]) -> SplitQualityConfig:
+    value = split.get("quality", {})
+    if not isinstance(value, dict):
+        raise SplitError("split.quality must be a table")
+    severity = value.get("default_severity", "failure")
+    warning_checks = value.get("warning_checks", [])
+    coverage = value.get("required_class_coverage", [])
+    classes = value.get("required_classes", [])
+    valid_checks = {
+        "minimum_subjects",
+        "minimum_records",
+        "minimum_windows",
+        "minimum_positive_examples",
+        "required_class_coverage",
+        "partition_ratio_deviation",
+        "subject_disjointness",
+        "record_disjointness",
+    }
+    if severity not in {"warning", "failure"}:
+        raise SplitError("split.quality.default_severity must be 'warning' or 'failure'")
+    if not isinstance(warning_checks, list) or not all(
+        item in valid_checks for item in warning_checks
+    ):
+        raise SplitError("split.quality.warning_checks contains an unknown check")
+    if not isinstance(coverage, list) or not all(
+        item in {"train", "validation", "test"} for item in coverage
+    ):
+        raise SplitError("split.quality.required_class_coverage contains an unknown partition")
+    if not isinstance(classes, list) or not all(
+        isinstance(item, int) and not isinstance(item, bool) for item in classes
+    ):
+        raise SplitError("split.quality.required_classes must contain integers")
+
+    def nonnegative(name: str, default: int) -> int:
+        item = value.get(name, default)
+        if not isinstance(item, int) or isinstance(item, bool) or item < 0:
+            raise SplitError(f"split.quality.{name} must be a nonnegative integer")
+        return item
+
+    deviation = value.get("max_partition_ratio_deviation", 1.0)
+    if (
+        not isinstance(deviation, (int, float))
+        or isinstance(deviation, bool)
+        or not 0 <= deviation <= 1
+    ):
+        raise SplitError("split.quality.max_partition_ratio_deviation must be between 0 and 1")
+    return SplitQualityConfig(
+        nonnegative("min_subjects_per_partition", 1),
+        nonnegative("min_records_per_partition", 1),
+        nonnegative("min_windows_per_partition", 1),
+        nonnegative("min_positive_examples_per_partition", 0),
+        tuple(coverage),
+        tuple(sorted(set(classes))),
+        float(deviation),
+        severity,
+        tuple(sorted(set(warning_checks))),
+    )
+
+
+def _violation(
+    config: SplitConfig, check: str, partition: str | None, message: str
+) -> QualityViolation:
+    severity = (
+        "warning" if check in config.quality.warning_checks else config.quality.default_severity
+    )
+    return QualityViolation(check, partition, severity, message)
+
+
+def _sets_are_disjoint(values: list[set[str]]) -> bool:
+    return not any(
+        left & right for index, left in enumerate(values) for right in values[index + 1 :]
+    )
 
 
 def _string_vector(value: np.ndarray[Any, Any], path: Path, field: str) -> tuple[str, ...]:

@@ -57,6 +57,7 @@ Exit criterion: the pipeline can be run without editing source files and produce
 - [x] Test sample-rate, shape, boundary-window, and label-mapping behavior.
 - [x] Assert that records never cross split boundaries.
 - [x] Assert that subjects never cross split boundaries, including multi-record synthetic fixtures.
+- [x] Report deterministic split quality and enforce configurable warning/failure thresholds.
 - [x] Test confusion-matrix and metric calculations.
 - [x] Add a small end-to-end test for all currently supported data stages.
 

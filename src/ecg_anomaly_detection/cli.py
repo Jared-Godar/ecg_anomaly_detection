@@ -43,9 +43,12 @@ from ecg_anomaly_detection.run_manifest import (
 from ecg_anomaly_detection.splitting import (
     SplitError,
     create_split_manifest,
+    create_split_quality_summary,
+    enforce_split_quality,
     load_split_config,
     load_window_metadata,
     write_split_manifest,
+    write_split_quality_summary,
 )
 from ecg_anomaly_detection.training import TrainingError
 from ecg_anomaly_detection.windows import (
@@ -116,6 +119,11 @@ def build_parser() -> argparse.ArgumentParser:
     split_parser.add_argument("--split-config", type=Path, required=True)
     split_parser.add_argument("--input", type=Path, action="append", required=True)
     split_parser.add_argument("--output", type=Path, required=True)
+    split_parser.add_argument(
+        "--quality-output",
+        type=Path,
+        help="quality summary path (default: split_quality_summary.json beside --output)",
+    )
 
     run_parser = subparsers.add_parser(
         "create-run-manifest",
@@ -202,9 +210,18 @@ def main(arguments: Sequence[str] | None = None) -> int:
             metadata = load_window_metadata(options.input)
             manifest = create_split_manifest(split_config, metadata)
             write_split_manifest(manifest, options.output)
+            quality_path = options.quality_output or options.output.with_name(
+                "split_quality_summary.json"
+            )
+            quality = create_split_quality_summary(split_config, manifest, metadata)
+            write_split_quality_summary(quality, quality_path)
+            for violation in quality.violations:
+                if violation.severity == "warning":
+                    print(f"warning: {violation.message}", file=sys.stderr)
+            enforce_split_quality(quality)
             print(
                 f"assigned {manifest.total_record_count} records "
-                f"across 3 partitions in {options.output}"
+                f"across 3 partitions in {options.output}; quality {quality.status} in {quality_path}"
             )
             return 0
         config = load_dataset_config(options.config)
