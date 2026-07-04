@@ -27,12 +27,15 @@ data access with synthetic CI coverage. Complete.
 ## Phase 3 — Notebook cleanup
 
 - [x] Maintain the original notebooks in the dated `archive/original_2022/` bundle.
-- [ ] Identify one canonical narrative notebook.
-- [ ] Remove duplicated pipeline implementation from curated notebooks.
-- [ ] Clear stale errors and excessive outputs.
+- [x] Identify one canonical package-backed narrative notebook.
+- [x] Keep the canonical notebook free of duplicated pipeline implementation; no other curated
+  notebook exists.
+- [x] Keep the canonical notebook free of saved outputs and execution errors.
 - [ ] Replace or attribute third-party imagery.
 
-Exit criterion: curated notebooks run against package functions and have a clearly documented order and purpose.
+The canonical walkthrough has a documented order and purpose, loads package-owned contracts, and
+degrades cleanly without local ignored evidence. Historical third-party imagery remains under audit,
+so the phase exit criterion is not yet complete.
 
 ## Phase 4 — Pipeline refactor
 

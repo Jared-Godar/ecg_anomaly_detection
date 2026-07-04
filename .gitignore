@@ -130,6 +130,7 @@ credentials/
 !/artifacts/.gitkeep
 /reports/figures/**
 !/reports/figures/.gitkeep
+!/reports/figures/modern-pipeline-lineage.svg
 *.joblib
 *.pkl
 *.pickle
