@@ -45,6 +45,7 @@ Exit criterion: curated notebooks run against package functions and have a clear
 - [x] Introduce a configuration-driven command-line entry point.
 - [x] Write auditable run manifests for current data-stage evidence.
 - [x] Write machine-readable validation metrics with artifact digests.
+- [x] Generate versioned environment, runtime, resource, and artifact-digest evidence for each run.
 
 The supported data stages now run through one configuration-driven local orchestration command and
 produce a grouped model-ready dataset index.
@@ -77,7 +78,7 @@ Exit criterion: every proposed change receives automated, data-independent quali
 
 - [x] Document repository architecture and proposed data lineage.
 - [ ] Define a separately reviewed held-out evaluation protocol and publish a model card only after it is run.
-- [ ] Document runtime, resource use, and operational tradeoffs.
+- [x] Document runtime, resource evidence, and operational interpretation limits.
 - [x] Describe future-state cloud concerns without claiming implementation.
 - [ ] Review every model and pipeline claim against generated evidence.
 

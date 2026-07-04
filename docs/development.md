@@ -117,3 +117,11 @@ modern package module requires them and receives tests in the same change.
 The `.venv/`, Python caches, coverage output, build artifacts, local data, generated models, and
 report outputs are ignored. A clean pull request should contain only intentional source,
 configuration, tests, documentation, and lockfile changes.
+
+Supported pipeline runs also generate environment, runtime, resource, and digest-manifest evidence
+under `artifacts/runs/<run-id>/`. These files support reproducibility review but remain ignored with
+the other generated run artifacts. Confirm this before committing with:
+
+```fish
+git status --short --ignored artifacts data/interim data/processed
+```
