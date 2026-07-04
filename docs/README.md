@@ -5,6 +5,7 @@ The maintained documentation is organized by the question a reader is trying to 
 | Document | Purpose |
 |---|---|
 | [Project README](../README.md) | Portfolio overview, current status, quick start, and limitations |
+| [Model card](../MODEL_CARD.md) | Baseline scope, assumptions, evaluation, intended use, and prohibited use |
 | [Architecture](architecture.md) | Implemented repository boundaries and target component ownership |
 | [Pipeline design](pipeline-design.md) | Proposed lineage, validation controls, run outputs, and cloud mapping |
 | [Dataset acquisition](dataset-acquisition.md) | Versioned HTTPS retrieval, idempotency, recovery, and trust boundary |

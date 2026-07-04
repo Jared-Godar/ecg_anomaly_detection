@@ -77,7 +77,9 @@ Exit criterion: every proposed change receives automated, data-independent quali
 ## Phase 7 — Portfolio polish
 
 - [x] Document repository architecture and proposed data lineage.
-- [ ] Define a separately reviewed held-out evaluation protocol and publish a model card only after it is run.
+- [ ] Define and execute a separately reviewed held-out evaluation protocol.
+- [x] Publish a validation-only model card covering assumptions, evidence boundaries, limitations,
+  intended use, and prohibited use without implying that a held-out benchmark exists.
 - [x] Define benchmark eligibility, protected-test access, lineage, rerun, disclosure, and archival
   governance before held-out execution.
 - [x] Document runtime, resource evidence, and operational interpretation limits.
