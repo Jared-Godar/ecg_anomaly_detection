@@ -53,12 +53,28 @@
 
 - Every pull request created or updated by Codex must receive repository metadata before handoff.
 - Assign every pull request to `@Jared-Godar` as the responsible maintainer.
-- Assign labels from `.github/labels.json`, including one `type:*` label, at least one `area:*` label, and any useful modernization, portfolio, risk, size, or dependency labels.
+- Assign labels from `.github/labels.json`, including one `type:*` label, at least one `area:*`
+  label, and useful modernization, portfolio, or dependency labels. Keep status, priority, risk,
+  size, and release planning in Project fields rather than duplicating them as labels.
 - Assign the delivery milestone that the work is required to complete. Do not use milestones as topic labels.
 - Add the pull request to the `ECG Pipeline Modernization` GitHub Project when it contributes to the tracked roadmap.
-- Set the project status to `In Progress` for an open pull request and `Done` after it is merged or closed as completed.
+- Set the project status to `In Progress` for an open pull request, `Merged` after merge, and
+  `Closed` when its linked issue is completed.
 - Verify assignee, labels, milestone, project membership, and project status after creating the pull request; do not infer success from the creation command alone.
 - When metadata is ambiguous, report the unresolved choice instead of inventing a classification.
+
+### Project planning metadata
+
+- Add every issue and pull request to the `ECG Pipeline Modernization` Project #5.
+- Populate Status, Workstream, Issue Type, Priority, Risk, Size, Repository Area, Portfolio Signal,
+  and Target Release for every project item.
+- Set new issues to `Backlog`, active pull requests to `In Progress`, merged pull requests to
+  `Merged`, and completed closed issues to `Closed`.
+- Preserve manually curated project values unless they are blank or demonstrably inconsistent
+  with repository state.
+- Link each implementation pull request to its issue with a supported closing reference when the
+  pull request completes the issue scope.
+- Verify all nine project fields after creating or updating an issue or pull request.
 
 ## Project positioning
 
