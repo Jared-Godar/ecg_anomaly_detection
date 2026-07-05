@@ -9,6 +9,11 @@ The original notebooks are preserved in
 [`archive/original_2022/`](../archive/original_2022/README.md). They remain available as historical
 reference material but are not part of the supported modern workflow.
 
+Local investigation and model-development notebooks belong in the ignored
+[`notebooks/local/`](local/README.md) sandbox. That workspace is explicitly unsupported: its
+notebooks, configurations, checkpoints, predictions, and result exports are not repository
+evidence and must not be committed.
+
 ## Supported notebook contract
 
 Supported notebooks must:

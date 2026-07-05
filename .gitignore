@@ -80,6 +80,10 @@ target/
 profile_default/
 ipython_config.py
 
+# Local notebook sandbox. Its policy document is the only tracked file.
+/notebooks/local/**
+!/notebooks/local/README.md
+
 # Generated documentation sites
 /site/
 docs/_build/

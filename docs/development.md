@@ -108,6 +108,20 @@ Development-only tools belong in the development dependency group:
 uv add --dev package-name
 ```
 
+Notebook kernels and optional local modeling libraries are isolated from the default development
+environment. Install them only when working in the ignored experimentation sandbox:
+
+```fish
+uv sync --locked --group notebooks --group experiments
+```
+
+Add notebook infrastructure and experimental modeling dependencies to their respective groups:
+
+```fish
+uv add --group notebooks package-name
+uv add --group experiments package-name
+```
+
 After any dependency change, run the tests and all hooks. Commit `uv.lock` with the corresponding
 metadata change. Do not add historical notebook dependencies to the supported package unless a
 modern package module requires them and receives tests in the same change.
@@ -117,6 +131,10 @@ modern package module requires them and receives tests in the same change.
 The `.venv/`, Python caches, coverage output, build artifacts, local data, generated models, and
 report outputs are ignored. A clean pull request should contain only intentional source,
 configuration, tests, documentation, and lockfile changes.
+
+The `notebooks/local/` sandbox is ignored except for its policy document. Its notebooks, local
+configuration, checkpoints, predictions, and tabular results are disposable experimentation
+artifacts. They are not supported workflow inputs, benchmark evidence, or publication artifacts.
 
 Supported pipeline runs also generate environment, runtime, resource, and digest-manifest evidence
 under `artifacts/runs/<run-id>/`. These files support reproducibility review but remain ignored with
