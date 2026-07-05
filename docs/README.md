@@ -27,6 +27,7 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Data provenance](data-provenance.md) | Dataset source, license, attribution, privacy, and label provenance |
 | [Historical results](historical-results.md) | Saved 2022 metrics and their known evaluation defects |
 | [Development workflow](development.md) | Locked environment, tests, hooks, and CI behavior |
+| [Local environment reproducibility](environment-reproducibility.md) | Dependency groups, locked setup commands, interpreter provenance, kernels, and troubleshooting |
 | [Modernization roadmap](modernization-roadmap.md) | Completed, active, and planned modernization phases |
 | [Governance guide](governance/index.md) | Repository, issue, security, versioning, and release governance |
 | [Issue workflow](governance/issue-workflow.md) | Issue intake, triage, status transitions, and project tracking |

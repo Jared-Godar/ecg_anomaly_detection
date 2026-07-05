@@ -77,6 +77,10 @@ uv sync --locked --dev
 uv run pytest
 ```
 
+Core, development, notebook, and optional experiment environments are separate locked workflows.
+See [local environment reproducibility](docs/environment-reproducibility.md) for the commands,
+dependency ownership rules, interpreter checks, and notebook kernel setup.
+
 Run the supported pipeline from the repository root:
 
 ```fish
@@ -114,6 +118,7 @@ Start with the [documentation guide](docs/README.md), then use these focused ref
 - [Data provenance and licensing](docs/data-provenance.md)
 - [Historical results audit](docs/historical-results.md)
 - [Development workflow](docs/development.md)
+- [Local environment reproducibility](docs/environment-reproducibility.md)
 - [Security policy](SECURITY.md)
 - [Release governance](docs/governance/releases.md)
 - [Changelog](CHANGELOG.md)
