@@ -53,10 +53,13 @@
 
 - Every pull request created or updated by Codex must receive repository metadata before handoff.
 - Assign every pull request to `@Jared-Godar` as the responsible maintainer.
-- Assign labels from `.github/labels.json`, including one `type:*` label, at least one `area:*` label, and any useful modernization, portfolio, risk, size, or dependency labels.
+- Assign labels from `.github/labels.json`, including one `type:*` label, at least one `area:*`
+  label, and useful modernization, portfolio, or dependency labels. Keep status, priority, risk,
+  size, and release planning in Project fields rather than duplicating them as labels.
 - Assign the delivery milestone that the work is required to complete. Do not use milestones as topic labels.
 - Add the pull request to the `ECG Pipeline Modernization` GitHub Project when it contributes to the tracked roadmap.
-- Set the project status to `In Progress` for an open pull request and `Done` after it is merged or closed as completed.
+- Set the project status to `In Progress` for an open pull request, `Merged` after merge, and
+  `Closed` when its linked issue is completed.
 - Verify assignee, labels, milestone, project membership, and project status after creating the pull request; do not infer success from the creation command alone.
 - When metadata is ambiguous, report the unresolved choice instead of inventing a classification.
 
