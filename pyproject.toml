@@ -32,6 +32,14 @@ dev = [
   "pytest>=8.4,<10",
   "pytest-cov>=6,<8",
 ]
+notebooks = [
+  "ipykernel>=7.3.0",
+]
+experiments = [
+  "lightgbm>=4.6.0",
+  "scikit-learn>=1.9.0",
+  "xgboost>=3.3.0",
+]
 
 [tool.pytest.ini_options]
 addopts = ["-ra", "--strict-config", "--strict-markers", "--import-mode=importlib"]
