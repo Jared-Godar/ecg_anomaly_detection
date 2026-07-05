@@ -14,6 +14,11 @@ Local investigation and model-development notebooks belong in the ignored
 notebooks, configurations, checkpoints, predictions, and result exports are not repository
 evidence and must not be committed.
 
+Install the locked notebook environment and register its kernel as described in
+[local environment reproducibility](../docs/environment-reproducibility.md). The supported
+notebook group contains infrastructure and plotting only; optional model libraries remain in the
+separate experiment group.
+
 ## Supported notebook contract
 
 Supported notebooks must:

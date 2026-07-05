@@ -36,6 +36,10 @@ pipeline modules are added only when supported behavior and tests arrive togethe
     └── unit/                  # isolated transformation and validation tests
 ```
 
+`pyproject.toml` separates core runtime, repository engineering, notebook infrastructure, and
+optional model experiments. `uv.lock` resolves all groups while each documented sync selects only
+the workflow it needs. See [local environment reproducibility](environment-reproducibility.md).
+
 ## Boundary rules
 
 ### Source code

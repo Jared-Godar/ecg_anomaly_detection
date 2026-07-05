@@ -44,6 +44,8 @@ git diff --check
 - [ ] Review the final diff and confirm generated or unrelated files are absent.
 - [ ] Confirm a clean checkout can use the documented locked environment before
   making any reproducibility claim.
+- [ ] Confirm core, development, notebook, and experiment locked syncs succeed without globally
+  installed packages or an IDE-managed interpreter.
 
 ## Release communication
 

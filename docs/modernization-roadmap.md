@@ -15,6 +15,7 @@ replacement gains tests and documentation. Checkboxes report repository state, n
 
 - [x] Select Python 3.12 and `uv` as the supported environment workflow.
 - [x] Add `pyproject.toml`, development dependencies, and a lock file.
+- [x] Separate locked core, engineering, notebook, and optional experiment environments.
 - [x] Replace absolute paths with configuration in the supported workflow.
 - [x] Add repeatable dataset retrieval from the authoritative source.
 - [x] Add expected-file inventory and local SHA-256 integrity checks.

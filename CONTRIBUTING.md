@@ -23,6 +23,10 @@ uv sync --locked --dev
 uv run pre-commit install --install-hooks
 ```
 
+This installs only core runtime and repository engineering dependencies. Use the documented
+[environment workflows](docs/environment-reproducibility.md) for notebook or optional experiment
+work; do not add those packages to `dev` or install them globally.
+
 Create a focused branch from current `main`:
 
 ```fish

@@ -37,6 +37,10 @@ editor:
 uv run --group notebooks python -m ipykernel --version
 ```
 
+Register the discoverable project kernel and verify it points to the current checkout using the
+[environment reproducibility guide](../../docs/environment-reproducibility.md). Use the notebook
+group without `experiments` when only the supported narrative notebook infrastructure is needed.
+
 The optional groups are deliberately separate from the default development environment. Their
 presence does not make local experiments part of the supported pipeline.
 

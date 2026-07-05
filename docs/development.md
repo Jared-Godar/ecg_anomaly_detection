@@ -17,6 +17,10 @@ From the repository root, create or update the locked environment:
 uv sync --locked --dev
 ```
 
+This is the repository-engineering environment. Core-only, notebook, and experiment setup are
+separate reproducible workflows documented in
+[local environment reproducibility](environment-reproducibility.md).
+
 Run commands through `uv` so they consistently use the project environment:
 
 ```fish
@@ -109,7 +113,8 @@ uv add --dev package-name
 ```
 
 Notebook kernels and optional local modeling libraries are isolated from the default development
-environment. Install them only when working in the ignored experimentation sandbox:
+environment. Install both groups only when model libraries are needed in the ignored
+experimentation sandbox:
 
 ```fish
 uv sync --locked --group notebooks --group experiments

@@ -34,6 +34,10 @@ dev = [
 ]
 notebooks = [
   "ipykernel>=7.3.0",
+  "ipython>=9.15.0",
+  "jupyter>=1.1.1",
+  "matplotlib>=3.10,<4",
+  "matplotlib-inline>=0.2.2",
 ]
 experiments = [
   "lightgbm>=4.6.0",
