@@ -60,6 +60,19 @@
 - Verify assignee, labels, milestone, project membership, and project status after creating the pull request; do not infer success from the creation command alone.
 - When metadata is ambiguous, report the unresolved choice instead of inventing a classification.
 
+### Project planning metadata
+
+- Add every issue and pull request to the `ECG Pipeline Modernization` Project #5.
+- Populate Status, Workstream, Issue Type, Priority, Risk, Size, Repository Area, Portfolio Signal,
+  and Target Release for every project item.
+- Set new issues to `Backlog`, active pull requests to `In Progress`, merged pull requests to
+  `Merged`, and completed closed issues to `Closed`.
+- Preserve manually curated project values unless they are blank or demonstrably inconsistent
+  with repository state.
+- Link each implementation pull request to its issue with a supported closing reference when the
+  pull request completes the issue scope.
+- Verify all nine project fields after creating or updating an issue or pull request.
+
 ## Project positioning
 
 - Treat this repository as a historical educational ECG machine-learning project being modernized into a data-engineering portfolio case study.
