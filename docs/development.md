@@ -72,6 +72,20 @@ The checks cover:
 - GitHub Actions security with zizmor; and
 - staged secret scanning with Gitleaks.
 
+## Validate local notebooks
+
+The optional notebook environment provides a static quality command for ignored local notebooks:
+
+```fish
+uv run --group notebooks ecg-data check-local-notebooks
+uv run --group notebooks ecg-data check-local-notebooks --json
+```
+
+Use `--format` to normalize notebook JSON, `--strip-outputs` to clear saved code-cell outputs and
+execution counts, and `--include-narrative` to add the tracked walkthrough to default local
+discovery. These flags never execute notebook cells. Full behavior, boundaries, and troubleshooting
+are documented in the [local notebook sandbox guide](../notebooks/local/README.md).
+
 The preserved `archive/original_2022/` bundle is excluded from style and formatting hooks so the
 historical record is not rewritten. A separate CI job scans the complete Git history for secrets.
 

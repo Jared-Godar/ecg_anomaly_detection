@@ -34,10 +34,11 @@ Supported notebooks must:
 - repeat the project's research-only, non-clinical, non-production use limitation where results
   are presented.
 
-The canonical notebook is expected to execute top-to-bottom without hidden state. The repository
-does not yet install or run a notebook execution checker in CI; current validation covers notebook
-JSON structure and the importable Python cell bodies. Data-independent automated notebook
-execution remains follow-up work.
+The canonical notebook is expected to execute top-to-bottom without hidden state. The optional
+local quality command documented in the [sandbox guide](local/README.md) can include this notebook
+with `--include-narrative`, but it only validates structure and reports hygiene. The repository does
+not install or run a notebook execution checker in CI, and local quality validation never executes
+cells. Any future data-independent notebook execution remains separately reviewed follow-up work.
 
 ## Generated figures
 

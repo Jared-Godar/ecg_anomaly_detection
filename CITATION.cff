@@ -1,4 +1,4 @@
-cff-version: 1.2.0
+PRcff-version: 1.2.0
 message: "If you use this software, please cite it using the metadata below and cite the source dataset separately."
 title: "ECG Beat-Window Classification"
 type: software

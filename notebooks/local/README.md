@@ -44,6 +44,40 @@ group without `experiments` when only the supported narrative notebook infrastru
 The optional groups are deliberately separate from the default development environment. Their
 presence does not make local experiments part of the supported pipeline.
 
+## Static quality checks
+
+Validate every local `.ipynb` file from the repository root:
+
+```fish
+uv run --group notebooks ecg-data check-local-notebooks
+```
+
+The command parses notebook JSON, validates the nbformat schema, and reports cell counts, saved
+outputs and their serialized size, execution counts, trust metadata, stale kernel names, and
+absolute machine-local paths. Add `--json` for deterministic machine-readable output. Default
+discovery recursively includes `.ipynb` files in this ignored directory while excluding Jupyter
+checkpoint directories.
+
+Formatting and output removal are explicit local mutations:
+
+```fish
+uv run --group notebooks ecg-data check-local-notebooks --format
+uv run --group notebooks ecg-data check-local-notebooks --strip-outputs
+```
+
+`--format` applies nbformat's canonical JSON serialization. `--strip-outputs` clears code-cell
+outputs and execution counts and also canonicalizes the file. Both operations are deterministic;
+review the affected notebooks locally because ignored files do not appear in the ordinary Git
+diff. Use `--include-narrative` only when intentionally checking the tracked walkthrough as well.
+
+This workflow never executes cells, imports notebook code, trains models, runs pipeline stages,
+evaluates data, or creates reproducibility or benchmark evidence. It does not make local notebooks
+supported repository artifacts and is not a notebook execution workflow for CI or pytest.
+
+If validation reports `invalid-notebook`, open the file in a notebook editor and repair or restore
+its JSON before using formatting or stripping. Hygiene warnings do not fail validation; structural
+or repository-boundary errors do.
+
 ## Working practices
 
 - Use repository-relative paths and package APIs where practical.

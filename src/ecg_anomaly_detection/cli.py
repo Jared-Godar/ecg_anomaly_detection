@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -167,6 +168,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="validate benchmark governance configuration without accessing benchmark data",
     )
     policy_parser.add_argument("--policy", type=Path, required=True)
+
+    notebook_parser = subparsers.add_parser(
+        "check-local-notebooks",
+        help="validate and optionally normalize local notebooks without executing cells",
+    )
+    notebook_parser.add_argument("--repository-root", type=Path, default=Path.cwd())
+    notebook_parser.add_argument(
+        "--notebook",
+        type=Path,
+        action="append",
+        default=[],
+        help="specific notebook under notebooks/ (repeatable; defaults to notebooks/local/)",
+    )
+    notebook_parser.add_argument("--format", action="store_true", dest="format_notebooks")
+    notebook_parser.add_argument("--strip-outputs", action="store_true")
+    notebook_parser.add_argument("--include-narrative", action="store_true")
+    notebook_parser.add_argument("--json", action="store_true", dest="json_output")
     return parser
 
 
@@ -176,6 +194,48 @@ def main(arguments: Sequence[str] | None = None) -> int:
     options = parser.parse_args(arguments)
 
     try:
+        if options.command == "check-local-notebooks":
+            from ecg_anomaly_detection.notebook_quality import (
+                NotebookQualityError,
+                check_notebooks,
+                discover_local_notebooks,
+            )
+
+            try:
+                notebook_paths = tuple(options.notebook) or discover_local_notebooks(
+                    options.repository_root,
+                    include_narrative=options.include_narrative,
+                )
+                summary = check_notebooks(
+                    options.repository_root,
+                    notebook_paths,
+                    format_notebooks=options.format_notebooks,
+                    strip_outputs=options.strip_outputs,
+                )
+            except NotebookQualityError as error:
+                print(f"error: {error}", file=sys.stderr)
+                return 1
+            if options.json_output:
+                print(json.dumps(summary.to_dict(), indent=2, sort_keys=True))
+            else:
+                for report in summary.notebooks:
+                    status = "valid" if report.valid else "invalid"
+                    print(
+                        f"{report.path}: {status}; {report.cell_count} cells, "
+                        f"{report.output_count} outputs ({report.output_bytes} bytes)"
+                    )
+                    for issue in report.issues:
+                        location = (
+                            f" cell {issue.cell_index}" if issue.cell_index is not None else ""
+                        )
+                        print(
+                            f"  {issue.severity}: {issue.code}{location}: {issue.message}",
+                            file=sys.stderr,
+                        )
+                print(
+                    f"checked {len(summary.notebooks)} notebooks; changed {summary.changed_count}"
+                )
+            return 0 if summary.valid else 1
         if options.command == "validate-benchmark-policy":
             policy = load_benchmark_policy(options.policy)
             print(f"validated benchmark policy {policy.policy_id} version {policy.version}")
