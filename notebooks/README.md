@@ -34,6 +34,8 @@ Supported notebooks must:
 - repeat the project's research-only, non-clinical, non-production use limitation where results
   are presented.
 
+Public example notebooks that require generated local artifacts must state those prerequisites clearly, avoid hardcoded local paths, avoid writing tracked outputs, and keep protected-test access closed.
+
 The canonical notebook is expected to execute top-to-bottom without hidden state. The optional
 local quality command documented in the [sandbox guide](local/README.md) can include this notebook
 with `--include-narrative`, but it only validates structure and reports hygiene. The repository does
