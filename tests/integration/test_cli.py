@@ -1,6 +1,10 @@
-"""Integration tests for the data inventory command boundary."""
+"""Integration tests for command boundaries."""
 
+import json
 from pathlib import Path
+
+import nbformat
+import pytest
 
 from ecg_anomaly_detection.cli import main
 
@@ -55,3 +59,21 @@ required_extensions = ["atr", "dat", "hea"]
     assert inventory_exit_code == 0
     assert verify_exit_code == 0
     assert manifest_path.is_file()
+
+
+def test_check_local_notebooks_cli_emits_json_without_execution(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "notebooks/local/example.ipynb"
+    path.parent.mkdir(parents=True)
+    notebook = nbformat.v4.new_notebook(
+        cells=[nbformat.v4.new_code_cell("raise RuntimeError('must not execute')")]
+    )
+    nbformat.write(notebook, path)
+
+    exit_code = main(["check-local-notebooks", "--repository-root", str(tmp_path), "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["valid"] is True
+    assert payload["notebook_count"] == 1

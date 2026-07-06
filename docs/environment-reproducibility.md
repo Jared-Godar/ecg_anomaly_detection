@@ -19,14 +19,15 @@ Run the smallest command that supports the work being performed:
 |---|---|---|
 | Core package and CLI | `uv sync --locked` | Package runtime dependencies (`numpy`, `wfdb`) |
 | Repository engineering | `uv sync --locked --dev` | Core plus tests, coverage, type checking, and hooks |
-| Supported notebooks | `uv sync --locked --group notebooks` | Core plus IPython, Jupyter, kernel, and plotting infrastructure |
+| Supported notebooks | `uv sync --locked --group notebooks` | Core plus IPython, Jupyter, kernel, plotting, and static notebook validation infrastructure |
 | Local model experiments | `uv sync --locked --group notebooks --group experiments` | Notebook stack plus scikit-learn, LightGBM, and XGBoost |
 
 The `dev` group must contain repository engineering tools only. Notebook infrastructure belongs in
-`notebooks`; optional modeling and playground libraries belong in `experiments`. A package belongs
-in core only when the installable package or supported CLI imports it at runtime. Future packages
-should be added to the narrowest owning group with `uv add`, followed by a committed lockfile
-update.
+`notebooks`; optional modeling and playground libraries belong in `experiments`. `nbformat` is the
+intentional exception shared by `dev`, where synthetic quality tests require it, and `notebooks`,
+where the optional local command requires it. A package belongs in core only when every supported
+CLI workflow imports it at runtime. Future packages should be added to the narrowest owning group
+with `uv add`, followed by a committed lockfile update.
 
 Locked syncs reconcile `.venv` to the selected groups. A package that happens to exist before a
 sync can be removed if it is undeclared or belongs to a group that was not selected. That removal
@@ -48,7 +49,7 @@ The executable path must end in this repository's `.venv/bin/python`. Validate o
 with the group on every `uv run` command so `uv` selects the intended environment:
 
 ```fish
-uv run --group notebooks python -c "import IPython, ipykernel, matplotlib, matplotlib_inline; print('notebooks ok')"
+uv run --group notebooks python -c "import IPython, ipykernel, matplotlib, matplotlib_inline, nbformat; print('notebooks ok')"
 uv run --group notebooks --group experiments python -c "import sklearn, lightgbm, xgboost; print('experiments ok')"
 ```
 
