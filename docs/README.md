@@ -6,6 +6,7 @@ The maintained documentation is organized by the question a reader is trying to 
 |---|---|
 | [Project README](../README.md) | Portfolio overview, current status, quick start, and limitations |
 | [Narrative walkthrough](../notebooks/narrative-walkthrough.ipynb) | Canonical package-backed explanation of the supported workflow and evidence boundaries |
+| [High-performing gradient boosting example](high-performing-gradient-boosting-example.md) | Public validation-only classical ML example built on generated pipeline artifacts |
 | [Notebook guidance](../notebooks/README.md) | Supported notebook, execution, business-logic, and generated-figure policy |
 | [Model card](../MODEL_CARD.md) | Baseline scope, assumptions, evaluation, intended use, and prohibited use |
 | [Architecture](architecture.md) | Implemented repository boundaries and target component ownership |
@@ -50,3 +51,4 @@ The maintained documentation is organized by the question a reader is trying to 
 - Present the 2022 model output only as historical evidence with the record-leakage caveat.
 - Keep source-dataset attribution and the research/educational-use limitation visible.
 - Prefer links to generated evidence once the modern pipeline produces manifests and reports.
+- Present public example-notebook metrics only as local validation-only experimentation, not as benchmark, clinical, diagnostic, or production evidence.
