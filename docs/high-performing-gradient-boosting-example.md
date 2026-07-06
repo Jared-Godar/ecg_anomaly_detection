@@ -76,7 +76,7 @@ The notebook:
 - compares against repository baseline validation metrics when they exist for the same run; and
 - leaves the protected `test` partition unopened, unscored, unsummarized, and unreported.
 
-Observed values from this notebook should be described as local validation-only experiment results. They must not be described as benchmark evidence, clinical performance, diagnostic accuracy, production readiness, or final model performance.
+Observed values from this notebook should be described as local validation-only experiment results. They must not be described as benchmark evidence, clinical evidence, diagnostic evidence, deployment fitness, or final model performance.
 
 ## Artifact policy
 
