@@ -32,11 +32,15 @@ data access with synthetic CI coverage. Complete.
 - [x] Keep the canonical notebook free of duplicated pipeline implementation; no other curated
   notebook exists.
 - [x] Keep the canonical notebook free of saved outputs and execution errors.
-- [ ] Replace or attribute third-party imagery.
+- [x] Attribute third-party imagery.
 
 The canonical walkthrough has a documented order and purpose, loads package-owned contracts, and
-degrades cleanly without local ignored evidence. Historical third-party imagery remains under audit,
-so the phase exit criterion is not yet complete.
+degrades cleanly without local ignored evidence. The historical third-party imagery attribution
+audit is complete: see
+[`archive/original_2022/ATTRIBUTION.md`](../archive/original_2022/ATTRIBUTION.md). Archived images
+are preserved unchanged per the archive's preservation policy, so imagery is attributed where a
+source could be established rather than replaced; provenance that could not be established is
+disclosed explicitly instead of left silent.
 
 ## Phase 4 — Pipeline refactor
 
