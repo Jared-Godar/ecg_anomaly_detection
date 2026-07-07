@@ -11,7 +11,8 @@ the repository governance policy.
 | [Issue workflow](issue-workflow.md) | Intake, triage, status transitions, and project tracking |
 | [Label taxonomy](label-taxonomy.md) | Label dimensions and assignment rules |
 | [GitHub Project governance](github-project.md) | Project fields, lifecycle, views, automation, and historical record |
-| [GitHub metadata automation](github-metadata-automation.md) | Programmatic issue and Project V2 bootstrap approach |
+| [GitHub metadata automation](github-metadata-automation.md) | Programmatic issue creation and Project V2 backfill approach, and the automated pull-request metadata gate |
+| [Repository hygiene automation](repository-hygiene.md) | Label drift detection, and the declined stale-issue/PR automation decision |
 | [Security governance](security-policy.md) | Reporting, supported states, dependencies, and security limitations |
 | [Release governance](releases.md) | Release purpose, source-archive boundary, evidence, and artifact hygiene |
 | [Versioning policy](versioning.md) | Semantic version rules and pre-1.0 compatibility expectations |

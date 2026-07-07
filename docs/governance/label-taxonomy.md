@@ -74,3 +74,8 @@ python3 scripts/sync_github_labels.py --repo Jared-Godar/ecg_anomaly_detection
 
 The script requires an authenticated GitHub CLI. It validates the complete manifest before making changes and
 uses `gh label create --force`, so repeated runs converge on the declared names, colors, and descriptions.
+
+This script converges the *set of labels the repository offers* on the manifest. It does not check which
+labels are actually *applied* to a given issue or pull request — see
+[repository hygiene automation](repository-hygiene.md#label-drift-detection) for the separate, read-only
+check that does.

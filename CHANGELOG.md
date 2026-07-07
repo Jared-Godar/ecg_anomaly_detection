@@ -44,6 +44,11 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   `type:*`/`area:*` labels, and closing issue reference, plus the linked issue's Project #5
   membership and required-field completeness, enforced via a repository-scoped
   `PROJECT_METADATA_TOKEN` secret with read-only Projects access.
+- Added `scripts/detect_label_drift.py` and a weekly `.github/workflows/repository-hygiene.yml`
+  run that reports labels applied to open issues/PRs that are not declared in
+  `.github/labels.json`. Read-only; never relabels anything. Stale issue/PR bot automation
+  was considered and explicitly declined as not justified by this repository's actual
+  activity — see `docs/governance/repository-hygiene.md`.
 
 ### Documentation
 
