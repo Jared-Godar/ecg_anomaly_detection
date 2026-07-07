@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from time import perf_counter
 from typing import Sequence
 
 from ecg_anomaly_detection.acquisition import AcquisitionError, acquire_dataset
@@ -34,6 +35,7 @@ from ecg_anomaly_detection.labels import (
     write_mapping_report,
 )
 from ecg_anomaly_detection.pipeline import PipelineError, run_pipeline
+from ecg_anomaly_detection.progress import ProgressReporter, format_elapsed_seconds
 from ecg_anomaly_detection.records import (
     RecordValidationError,
     load_wfdb_record,
@@ -253,6 +255,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             )
             return 0
         if options.command == "run-pipeline":
+            started_at = perf_counter()
             result = run_pipeline(
                 options.repository_root,
                 options.dataset_config,
@@ -261,9 +264,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 options.split_config,
                 options.training_config,
                 options.evaluation_config,
+                reporter=ProgressReporter(stream=sys.stdout),
             )
+            elapsed = format_elapsed_seconds(perf_counter() - started_at)
             print(
-                f"completed run {result.run_id}: {result.record_count} records, "
+                f"completed run {result.run_id} in {elapsed}: {result.record_count} records, "
                 f"{result.window_count} windows, manifest {result.run_manifest_path}"
             )
             return 0

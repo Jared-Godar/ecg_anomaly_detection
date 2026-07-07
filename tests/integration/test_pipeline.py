@@ -143,6 +143,72 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
         assert all(len(item["sha256"]) == 64 for item in evidence_manifest["artifact_files"])
 
 
+def test_run_pipeline_command_emits_stage_progress_and_total_elapsed_time(
+    tmp_path: Path,
+    tmp_path_factory: pytest.TempPathFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source_dir = tmp_path_factory.mktemp("wfdb-source")
+    record_ids = ("100", "101", "102")
+    for record_id in record_ids:
+        _write_synthetic_record(source_dir, record_id)
+    payloads = {
+        path.name: path.read_bytes()
+        for path in source_dir.iterdir()
+        if path.suffix in {".atr", ".dat", ".hea"}
+    }
+    _initialize_repository(tmp_path, record_ids, payloads)
+
+    def fake_fetch(url: str, output: Path, _: float, __: int) -> TransferResult:
+        content = payloads[output.name]
+        output.write_bytes(content)
+        return TransferResult(len(content), hashlib.sha256(content).hexdigest())
+
+    monkeypatch.setattr(acquisition, "_fetch_https_file", fake_fetch)
+    arguments = [
+        "run-pipeline",
+        "--repository-root",
+        str(tmp_path),
+        "--dataset-config",
+        "configs/dataset.toml",
+        "--mapping-config",
+        "configs/mapping.toml",
+        "--window-config",
+        "configs/window.toml",
+        "--split-config",
+        "configs/split.toml",
+        "--training-config",
+        "configs/training.toml",
+        "--evaluation-config",
+        "configs/evaluation.toml",
+    ]
+
+    exit_code = main(arguments)
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "run " in output.splitlines()[0]
+    for index, name in enumerate(
+        (
+            "acquisition",
+            "inventory",
+            "record_processing",
+            "split",
+            "split_diagnostics",
+            "training",
+            "validation_evaluation",
+        ),
+        start=1,
+    ):
+        assert f"[{index}/7] {name}: starting" in output
+        assert f"[{index}/7] {name}: complete in" in output
+    for record_id in record_ids:
+        assert f"({record_id}): " in output
+    assert "completed run " in output.splitlines()[-1]
+    assert " in " in output.splitlines()[-1]
+
+
 def _initialize_repository(
     root: Path, record_ids: tuple[str, ...], payloads: dict[str, bytes]
 ) -> None:
