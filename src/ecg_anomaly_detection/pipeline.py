@@ -22,6 +22,7 @@ from ecg_anomaly_detection.labels import (
     map_annotations,
     write_mapping_report,
 )
+from ecg_anomaly_detection.progress import ProgressReporter
 from ecg_anomaly_detection.records import (
     load_wfdb_record,
     validate_record,
@@ -55,6 +56,9 @@ from ecg_anomaly_detection.windows import (
 
 class PipelineError(ValueError):
     """Raised when orchestration paths or run identity violate their contract."""
+
+
+_TOTAL_REPORTED_STAGES = 7
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +99,7 @@ def run_pipeline(
     clock: Callable[[], datetime] | None = None,
     run_id_factory: Callable[[], str] | None = None,
     monotonic: Callable[[], float] = perf_counter,
+    reporter: ProgressReporter | None = None,
 ) -> PipelineRunResult:
     """Run acquisition through fitting and validation-only evaluation."""
     root = repository_root.resolve()
@@ -120,6 +125,8 @@ def run_pipeline(
     run_id = _create_run_id(run_id_factory)
     timestamp = clock or (lambda: datetime.now(UTC))
     runtime_timer = RuntimeStageTimer(monotonic)
+    progress = reporter or ProgressReporter()
+    progress.header(f"run {run_id} starting")
 
     raw_data_dir = root / "data" / "raw" / dataset_config.slug / dataset_config.version
     dataset_evidence_dir = (
@@ -127,7 +134,16 @@ def run_pipeline(
     )
     dataset_evidence_dir.mkdir(parents=True, exist_ok=True)
     acquisition_manifest_path = dataset_evidence_dir / "acquisition.json"
-    with runtime_timer.stage("acquisition"):
+    with (
+        progress.stage(
+            "acquisition",
+            1,
+            _TOTAL_REPORTED_STAGES,
+            detail=f"{len(dataset_config.record_ids)} records, "
+            f"{len(dataset_config.expected_files)} files expected",
+        ) as stage,
+        runtime_timer.stage("acquisition"),
+    ):
         acquire_dataset(
             dataset_config,
             root,
@@ -136,6 +152,7 @@ def run_pipeline(
             fetcher=fetcher,
             clock=timestamp,
         )
+        stage.detail(f"manifest written to {acquisition_manifest_path.relative_to(root)}")
 
     run_directory, interim_directory, processed_directory = _create_run_directories(root, run_id)
     validation_directory = run_directory / "validation"
@@ -150,43 +167,58 @@ def run_pipeline(
     ):
         directory.mkdir()
 
-    inventory = create_inventory(dataset_config, raw_data_dir, clock=timestamp)
-    inventory_manifest_path = run_directory / "inventory.json"
-    write_manifest(inventory, inventory_manifest_path)
+    with progress.stage("inventory", 2, _TOTAL_REPORTED_STAGES) as stage:
+        inventory = create_inventory(dataset_config, raw_data_dir, clock=timestamp)
+        inventory_manifest_path = run_directory / "inventory.json"
+        write_manifest(inventory, inventory_manifest_path)
+        stage.detail(f"{len(inventory.files)} files verified")
 
     validation_paths: list[Path] = []
     mapping_paths: list[Path] = []
     window_report_paths: list[Path] = []
     window_artifact_paths: list[Path] = []
     total_windows = 0
-    for record_id in dataset_config.record_ids:
-        loaded = load_wfdb_record(dataset_config, raw_data_dir, record_id)
-        with runtime_timer.stage("validation"):
-            validation = validate_record(dataset_config, loaded.signal, loaded.annotations)
-            validation_path = validation_directory / f"{record_id}.json"
-            write_validation_report(validation, validation_path)
-        validation_paths.append(validation_path)
+    record_total = len(dataset_config.record_ids)
+    with progress.stage(
+        "record_processing", 3, _TOTAL_REPORTED_STAGES, detail=f"{record_total} records"
+    ) as stage:
+        for record_index, record_id in enumerate(dataset_config.record_ids, start=1):
+            loaded = load_wfdb_record(dataset_config, raw_data_dir, record_id)
+            with runtime_timer.stage("validation"):
+                validation = validate_record(dataset_config, loaded.signal, loaded.annotations)
+                validation_path = validation_directory / f"{record_id}.json"
+                write_validation_report(validation, validation_path)
+            validation_paths.append(validation_path)
 
-        if record_id in window_config.exclude_record_ids:
-            continue
+            if record_id in window_config.exclude_record_ids:
+                progress.note(f"record {record_index}/{record_total} ({record_id}): excluded")
+                continue
 
-        with runtime_timer.stage("annotation_mapping"):
-            mapped = map_annotations(mapping_config, loaded.annotations)
-            mapping_path = mapping_directory / f"{record_id}.json"
-            write_mapping_report(mapped.report, mapping_path)
-        mapping_paths.append(mapping_path)
+            with runtime_timer.stage("annotation_mapping"):
+                mapped = map_annotations(mapping_config, loaded.annotations)
+                mapping_path = mapping_directory / f"{record_id}.json"
+                write_mapping_report(mapped.report, mapping_path)
+            mapping_paths.append(mapping_path)
 
-        with runtime_timer.stage("window_extraction"):
-            extracted = extract_windows(window_config, mapping_config, loaded.signal, mapped)
-            window_artifact_path = window_artifact_directory / f"{record_id}.npz"
-            window_report_path = window_report_directory / f"{record_id}.json"
-            write_window_artifact(extracted.window_set, window_artifact_path)
-            write_window_report(extracted.report, window_report_path)
-        window_artifact_paths.append(window_artifact_path)
-        window_report_paths.append(window_report_path)
-        total_windows += extracted.report.emitted_window_count
+            with runtime_timer.stage("window_extraction"):
+                extracted = extract_windows(window_config, mapping_config, loaded.signal, mapped)
+                window_artifact_path = window_artifact_directory / f"{record_id}.npz"
+                window_report_path = window_report_directory / f"{record_id}.json"
+                write_window_artifact(extracted.window_set, window_artifact_path)
+                write_window_report(extracted.report, window_report_path)
+            window_artifact_paths.append(window_artifact_path)
+            window_report_paths.append(window_report_path)
+            total_windows += extracted.report.emitted_window_count
+            progress.note(
+                f"record {record_index}/{record_total} ({record_id}): "
+                f"{extracted.report.emitted_window_count} windows"
+            )
+        stage.detail(f"{total_windows} windows across {len(window_artifact_paths)} records")
 
-    with runtime_timer.stage("split"):
+    with (
+        progress.stage("split", 4, _TOTAL_REPORTED_STAGES) as stage,
+        runtime_timer.stage("split"),
+    ):
         metadata = load_window_metadata(window_artifact_paths)
         split_record_ids = set(metadata.record_shards)
         filtered_split_config = split_config
@@ -210,11 +242,19 @@ def run_pipeline(
         split_manifest = create_split_manifest(filtered_split_config, metadata)
         split_manifest_path = run_directory / "split.json"
         write_split_manifest(split_manifest, split_manifest_path)
-    with runtime_timer.stage("split_diagnostics"):
+        stage.detail(
+            f"{split_manifest.total_record_count} records, "
+            f"manifest {split_manifest_path.relative_to(root)}"
+        )
+    with (
+        progress.stage("split_diagnostics", 5, _TOTAL_REPORTED_STAGES) as stage,
+        runtime_timer.stage("split_diagnostics"),
+    ):
         split_quality_summary = create_split_quality_summary(split_config, split_manifest, metadata)
         split_quality_summary_path = run_directory / "split_quality_summary.json"
         write_split_quality_summary(split_quality_summary, split_quality_summary_path)
         enforce_split_quality(split_quality_summary)
+        stage.detail(f"quality {split_quality_summary.status}")
     if split_manifest.total_window_count != total_windows:
         raise PipelineError("split window count does not match per-record extraction reports")
 
@@ -226,7 +266,10 @@ def run_pipeline(
     training_directory.mkdir()
     model_path = training_directory / "model.json"
     training_metadata_path = training_directory / "training-metadata.json"
-    with runtime_timer.stage("training"):
+    with (
+        progress.stage("training", 6, _TOTAL_REPORTED_STAGES) as stage,
+        runtime_timer.stage("training"),
+    ):
         train_from_index(
             root,
             dataset_index_path,
@@ -234,11 +277,15 @@ def run_pipeline(
             model_path,
             training_metadata_path,
         )
+        stage.detail(f"model written to {model_path.relative_to(root)}")
 
     evaluation_directory = run_directory / "evaluation"
     evaluation_directory.mkdir()
     validation_metrics_path = evaluation_directory / "validation-metrics.json"
-    with runtime_timer.stage("validation_evaluation"):
+    with (
+        progress.stage("validation_evaluation", 7, _TOTAL_REPORTED_STAGES) as stage,
+        runtime_timer.stage("validation_evaluation"),
+    ):
         evaluate_validation_from_index(
             root,
             dataset_index_path,
@@ -247,6 +294,7 @@ def run_pipeline(
             evaluation_config,
             validation_metrics_path,
         )
+        stage.detail(f"metrics written to {validation_metrics_path.relative_to(root)}")
 
     operational_evidence_paths = (
         acquisition_manifest_path,

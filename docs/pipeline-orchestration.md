@@ -29,6 +29,36 @@ uv run ecg-data run-pipeline \
 The first run retrieves the configured source files. Later runs verify and reuse the acquisition
 baseline instead of redownloading unchanged files.
 
+## Progress output
+
+`run-pipeline` prints a start and completion banner for each of its seven reported stages
+(acquisition, inventory, record processing, split, split diagnostics, training, validation
+evaluation), with elapsed time and key counts or artifact paths on completion. The record-processing
+stage additionally prints one indented line per record so long record loops do not appear frozen.
+Representative output:
+
+```text
+run 32888ee3-7781-4171-b43e-e076a73b363c starting
+[1/7] acquisition: starting (3 records, 9 files expected)
+[1/7] acquisition: complete in 00:04 (manifest written to artifacts/datasets/synthetic/1.0.0/acquisition.json)
+[2/7] inventory: starting
+[2/7] inventory: complete in 00:01 (9 files verified)
+[3/7] record_processing: starting (3 records)
+    record 1/3 (100): 3 windows
+    record 2/3 (101): 3 windows
+    record 3/3 (102): 3 windows
+[3/7] record_processing: complete in 00:02 (9 windows across 3 records)
+...
+completed run 32888ee3-7781-4171-b43e-e076a73b363c in 00:09: 3 records, 9 windows, manifest artifacts/runs/32888ee3-7781-4171-b43e-e076a73b363c/run-manifest.json
+```
+
+A stage that raises prints `failed after MM:SS` instead of `complete in MM:SS`; the underlying
+error still propagates and the command still returns a nonzero status. This output is purely
+observational: it never affects run identity, evidence contents, or artifact schemas, and the
+existing `runtime_summary.json` per-stage timings (see below) remain the authoritative timing
+evidence. Other subcommands (`acquire`, `inventory`, `split-windows`, and so on) are unchanged and
+continue to print a single completion line.
+
 ## Output layout
 
 Each invocation receives a UUID and creates isolated ignored output directories:
