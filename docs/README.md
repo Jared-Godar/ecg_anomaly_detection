@@ -39,7 +39,7 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Issue workflow](governance/issue-workflow.md) | Issue intake, triage, status transitions, and project tracking |
 | [Label taxonomy](governance/label-taxonomy.md) | Label dimensions, assignment rules, and deterministic bootstrap |
 | [GitHub Project governance](governance/github-project.md) | Project fields, workflow states, views, and historical planning record |
-| [GitHub metadata automation](governance/github-metadata-automation.md) | Programmatic issue creation and Project V2 backfill approach |
+| [GitHub metadata automation](governance/github-metadata-automation.md) | Programmatic issue creation and Project V2 backfill approach, and the automated pull-request metadata gate |
 | [Repository governance](governance/repository-governance.md) | Ownership, pull-request workflow, and enforcement boundaries |
 | [Security governance](governance/security-policy.md) | Private reporting, supported versions, dependency stewardship, and limitations |
 | [Release governance](governance/releases.md) | Release boundaries, evidence, artifact hygiene, and explicit limitations |

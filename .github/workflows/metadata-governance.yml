@@ -1,0 +1,46 @@
+name: Metadata governance
+
+on:
+  pull_request:
+    types: [opened, edited, labeled, unlabeled, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: metadata-governance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate PR and linked-issue metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+
+      - name: Create locked environment
+        run: uv sync --locked --dev
+
+      - name: Validate PR and linked-issue metadata
+        env:
+          # GITHUB_TOKEN alone cannot read Project V2 fields for a user-owned project.
+          # Set a repository secret named PROJECT_METADATA_TOKEN (a fine-grained PAT or
+          # GitHub App token with the `project` scope) to enable Project field checks; see
+          # docs/governance/github-metadata-automation.md. Until that secret exists, this
+          # falls back to GITHUB_TOKEN and the script treats an unreadable Project as an
+          # advisory warning rather than a failure -- PR-level checks below still enforce
+          # immediately either way.
+          GH_TOKEN: ${{ secrets.PROJECT_METADATA_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          uv run python scripts/github/validate_project_metadata.py \
+            --pr-number "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}"
