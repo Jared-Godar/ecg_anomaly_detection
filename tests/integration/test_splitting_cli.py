@@ -132,3 +132,94 @@ default_severity = "failure"
         "train",
         "validation",
     ]
+
+
+def test_split_windows_accepts_a_directory_of_artifacts(tmp_path: Path) -> None:
+    config_path = tmp_path / "split.toml"
+    config_path.write_text(
+        """
+schema_version = 2
+[split]
+name = "synthetic-subject-split"
+version = "2.0.0"
+strategy = "seeded-subject-shuffle"
+seed = 7
+[split.ratios]
+train = 0.5
+validation = 0.25
+test = 0.25
+[record_subjects]
+100 = "subject-a"
+101 = "subject-a"
+102 = "subject-b"
+103 = "subject-c"
+""".strip(),
+        encoding="utf-8",
+    )
+    shard_dir = tmp_path / "shards"
+    shard_dir.mkdir()
+    np.savez_compressed(
+        shard_dir / "windows.npz",
+        schema_version=np.asarray(1, dtype=np.int64),
+        record_ids=np.asarray(["100", "100", "101", "102", "103"], dtype=np.str_),
+        target_values=np.asarray([0, 1, 0, 1, 0], dtype=np.int64),
+        mapping_name=np.asarray("test-map", dtype=np.str_),
+        mapping_version=np.asarray("1.0.0", dtype=np.str_),
+        window_config_name=np.asarray("test-window", dtype=np.str_),
+        window_config_version=np.asarray("1.0.0", dtype=np.str_),
+    )
+    output_path = tmp_path / "split-manifest.json"
+
+    exit_code = main(
+        [
+            "split-windows",
+            "--split-config",
+            str(config_path),
+            "--input",
+            str(shard_dir),
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    manifest = json.loads(output_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert manifest["total_record_count"] == 4
+    assert manifest["total_window_count"] == 5
+
+
+def test_split_windows_reports_an_empty_input_directory(tmp_path: Path) -> None:
+    config_path = tmp_path / "split.toml"
+    config_path.write_text(
+        """
+schema_version = 2
+[split]
+name = "synthetic-subject-split"
+version = "2.0.0"
+strategy = "seeded-subject-shuffle"
+seed = 7
+[split.ratios]
+train = 0.5
+validation = 0.25
+test = 0.25
+[record_subjects]
+100 = "subject-a"
+""".strip(),
+        encoding="utf-8",
+    )
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+
+    exit_code = main(
+        [
+            "split-windows",
+            "--split-config",
+            str(config_path),
+            "--input",
+            str(empty_dir),
+            "--output",
+            str(tmp_path / "split-manifest.json"),
+        ]
+    )
+
+    assert exit_code == 1

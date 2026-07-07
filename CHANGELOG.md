@@ -19,6 +19,11 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   interruption loses at most the in-progress candidate. Supports resume via
   `is_completed()`, progress/ETA reporting, and a sorted `finalize()` summary
   once every candidate has completed.
+- `ecg-data split-windows` and `ecg-data index-dataset` accept a directory as
+  `--input`, expanded to its immediate `*.npz` files (sorted, non-recursive).
+  Directory and file arguments can be mixed and repeated; an empty directory,
+  missing path, symlink, or duplicate resolved file fails with a clear
+  diagnostic instead of a confusing downstream error.
 
 ### Changed
 

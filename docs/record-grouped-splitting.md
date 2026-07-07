@@ -24,6 +24,18 @@ state. Identical configuration and window metadata produce identical membership.
 ```fish
 uv run ecg-data split-windows \
   --split-config configs/splitting-v2.toml \
+  --input data/interim/runs/YOUR_RUN_UUID/windows/ \
+  --output artifacts/split-manifest.json \
+  --quality-output artifacts/split_quality_summary.json
+```
+
+`--input` accepts a directory (expanded to its immediate `*.npz` files, sorted, non-recursive) or
+individual shard files, and is repeatable — pass explicit files instead of a directory to split a
+specific subset:
+
+```fish
+uv run ecg-data split-windows \
+  --split-config configs/splitting-v2.toml \
   --input data/interim/record-100-windows.npz \
   --input data/interim/record-101-windows.npz \
   --input data/interim/record-102-windows.npz \
