@@ -112,6 +112,32 @@ clinical validity, or medical utility. Validation metrics remain validation-only
 benchmark evaluation remains intentionally protected. Runtime and resource observations may vary
 by host environment and system load.
 
+## Local artifact lifecycle helpers
+
+Iterative local runs accumulate `artifacts/runs/<run-id>/`, `data/interim/runs/<run-id>/`, and
+`data/processed/runs/<run-id>/` directories, since [run directories are never reused or
+overwritten](#execution-and-failure-behavior). `list-runs` and `purge-run` give an operator an
+explicit way to inspect and reclaim that local disk space without touching governed, create-only
+artifacts:
+
+```fish
+uv run ecg-data list-runs --repository-root .
+uv run ecg-data purge-run --repository-root . --run-id <run-id> --dry-run
+uv run ecg-data purge-run --repository-root . --run-id <run-id>
+```
+
+`list-runs` reports each run's ID, total size, directory count, and whether `run-manifest.json`
+exists, newest first. `purge-run` removes exactly the three companion directories for one named
+run ID — never `data/raw/`, never `artifacts/datasets/<dataset>/<version>/acquisition.json` (the
+shared dataset acquisition baseline, which is not run-scoped), and never another run's
+directories. `--dry-run` reports what would be removed and the bytes that would be freed without
+deleting anything. A run ID must be a canonical lowercase UUID and must resolve to at least one
+existing directory, or the command fails with a nonzero exit rather than silently doing nothing.
+
+This is deliberately manual and explicit, not automatic cleanup: nothing here changes the
+`run-pipeline` retry behavior described below, and it does not touch the acquisition baseline that
+[dataset retrieval](dataset-acquisition.md) verifies and reuses across runs.
+
 ## Execution and failure behavior
 
 Records are processed sequentially in configured order. This favors deterministic evidence and

@@ -11,6 +11,9 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   elapsed time, and key counts or artifact paths) for acquisition, inventory, record
   processing, split, split diagnostics, training, and validation evaluation, plus
   total elapsed run time, so long-running local runs no longer appear frozen.
+- `ecg-data list-runs` and `ecg-data purge-run` list and reclaim disk space from
+  local `run-pipeline` output by exact run ID, with a `--dry-run` preview, without
+  touching the dataset acquisition baseline or any other run's directories.
 
 ### Changed
 
