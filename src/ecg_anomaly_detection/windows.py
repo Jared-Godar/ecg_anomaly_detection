@@ -28,7 +28,9 @@ class WindowConfig:
     version: str
     pre_seconds: float
     post_seconds: float
-    channel_index: int
+    channel_index: int | None
+    channel_name: str | None
+    exclude_record_ids: tuple[str, ...]
     boundary_policy: str
 
 
@@ -42,6 +44,9 @@ class BeatWindowSet:
     source_symbols: tuple[str, ...]
     target_values: IntegerArray
     sample_rate_hz: float
+    channel_selector: str
+    configured_channel_index: int | None
+    configured_channel_name: str | None
     channel_index: int
     channel_name: str
     mapping_name: str
@@ -61,6 +66,9 @@ class WindowExtractionReport:
     window_config_name: str
     window_config_version: str
     sample_rate_hz: float
+    channel_selector: str
+    configured_channel_index: int | None
+    configured_channel_name: str | None
     channel_index: int
     channel_name: str
     pre_samples: int
@@ -99,13 +107,21 @@ def load_window_config(path: Path) -> WindowConfig:
             "window config must use schema_version = 1 and a [window] table"
         )
     window = document["window"]
+    has_channel_index = "channel_index" in window
+    has_channel_name = "channel_name" in window
+    if has_channel_index == has_channel_name:
+        raise WindowExtractionError(
+            "window config must provide exactly one channel selector: channel_name or channel_index"
+        )
     config = WindowConfig(
         schema_version=1,
         name=_required_string(window, "name"),
         version=_required_string(window, "version"),
         pre_seconds=_required_positive_number(window, "pre_seconds"),
         post_seconds=_required_positive_number(window, "post_seconds"),
-        channel_index=_required_nonnegative_int(window, "channel_index"),
+        channel_index=_optional_nonnegative_int(window, "channel_index"),
+        channel_name=_optional_string(window, "channel_name"),
+        exclude_record_ids=_optional_unique_strings(window, "exclude_record_ids"),
         boundary_policy=_required_string(window, "boundary_policy"),
     )
     if config.boundary_policy != "exclude":
@@ -136,10 +152,9 @@ def extract_windows(
         raise WindowExtractionError("mapped annotation sample indices must be ordered")
     if signal.signals.ndim != 2:
         raise WindowExtractionError("signals must use a samples-by-channels array")
-    if config.channel_index >= signal.signals.shape[1]:
-        raise WindowExtractionError(
-            f"channel index {config.channel_index} exceeds signal width {signal.signals.shape[1]}"
-        )
+    channel_selector, resolved_channel_index, resolved_channel_name = _resolve_channel(
+        config, signal
+    )
 
     pre_samples = _seconds_to_samples(config.pre_seconds, signal.sample_rate_hz, "pre_seconds")
     post_samples = _seconds_to_samples(config.post_seconds, signal.sample_rate_hz, "post_seconds")
@@ -168,7 +183,7 @@ def extract_windows(
             right_exclusions += 1
             continue
         window = np.asarray(
-            signal.signals[left:right, config.channel_index],
+            signal.signals[left:right, resolved_channel_index],
             dtype=np.float64,
         ).copy()
         if window.shape != (window_samples,):
@@ -206,8 +221,11 @@ def extract_windows(
         source_symbols=tuple(source_symbols),
         target_values=target_array,
         sample_rate_hz=signal.sample_rate_hz,
-        channel_index=config.channel_index,
-        channel_name=signal.channel_names[config.channel_index],
+        channel_selector=channel_selector,
+        configured_channel_index=config.channel_index,
+        configured_channel_name=config.channel_name,
+        channel_index=resolved_channel_index,
+        channel_name=resolved_channel_name,
         mapping_name=mapping_config.name,
         mapping_version=mapping_config.version,
         window_config_name=config.name,
@@ -221,8 +239,11 @@ def extract_windows(
         window_config_name=config.name,
         window_config_version=config.version,
         sample_rate_hz=signal.sample_rate_hz,
-        channel_index=config.channel_index,
-        channel_name=signal.channel_names[config.channel_index],
+        channel_selector=channel_selector,
+        configured_channel_index=config.channel_index,
+        configured_channel_name=config.channel_name,
+        channel_index=resolved_channel_index,
+        channel_name=resolved_channel_name,
         pre_samples=pre_samples,
         post_samples=post_samples,
         window_samples=window_samples,
@@ -250,8 +271,23 @@ def write_window_artifact(window_set: BeatWindowSet, output_path: Path) -> None:
         source_symbols=np.asarray(window_set.source_symbols, dtype=np.str_),
         target_values=window_set.target_values,
         sample_rate_hz=np.asarray(window_set.sample_rate_hz, dtype=np.float64),
+        channel_selector=np.asarray(window_set.channel_selector, dtype=np.str_),
+        configured_channel_index=np.asarray(
+            -1
+            if window_set.configured_channel_index is None
+            else window_set.configured_channel_index,
+            dtype=np.int64,
+        ),
+        configured_channel_name=np.asarray(
+            ""
+            if window_set.configured_channel_name is None
+            else window_set.configured_channel_name,
+            dtype=np.str_,
+        ),
         channel_index=np.asarray(window_set.channel_index, dtype=np.int64),
         channel_name=np.asarray(window_set.channel_name, dtype=np.str_),
+        resolved_channel_index=np.asarray(window_set.channel_index, dtype=np.int64),
+        resolved_channel_name=np.asarray(window_set.channel_name, dtype=np.str_),
         mapping_name=np.asarray(window_set.mapping_name, dtype=np.str_),
         mapping_version=np.asarray(window_set.mapping_version, dtype=np.str_),
         window_config_name=np.asarray(window_set.window_config_name, dtype=np.str_),
@@ -282,6 +318,59 @@ def _validate_output_path(output_path: Path, suffix: str, description: str) -> N
         raise WindowExtractionError(
             f"{description} parent directory does not exist: {output_path.parent}"
         )
+
+
+def _resolve_channel(config: WindowConfig, signal: SignalRecord) -> tuple[str, int, str]:
+    if config.channel_name is not None:
+        try:
+            channel_index = signal.channel_names.index(config.channel_name)
+        except ValueError as error:
+            raise WindowExtractionError(
+                f'Configured channel_name = "{config.channel_name}" was not available '
+                f"for record {signal.record_id}. available channels: {list(signal.channel_names)}"
+            ) from error
+        return "channel_name", channel_index, signal.channel_names[channel_index]
+
+    if config.channel_index is None:
+        raise WindowExtractionError(
+            "window config must provide exactly one channel selector: channel_name or channel_index"
+        )
+    if config.channel_index >= signal.signals.shape[1]:
+        raise WindowExtractionError(
+            f"channel index {config.channel_index} exceeds signal width {signal.signals.shape[1]}"
+        )
+    return "channel_index", config.channel_index, signal.channel_names[config.channel_index]
+
+
+def _optional_string(values: dict[str, Any], key: str) -> str | None:
+    if key not in values:
+        return None
+    value = values[key]
+    if not isinstance(value, str) or not value.strip():
+        raise WindowExtractionError(f"window.{key} must be a non-empty string")
+    return value.strip()
+
+
+def _optional_nonnegative_int(values: dict[str, Any], key: str) -> int | None:
+    if key not in values:
+        return None
+    return _required_nonnegative_int(values, key)
+
+
+def _optional_unique_strings(values: dict[str, Any], key: str) -> tuple[str, ...]:
+    if key not in values:
+        return ()
+    raw_values = values[key]
+    if not isinstance(raw_values, list):
+        raise WindowExtractionError(f"window.{key} must be a list of non-empty strings")
+    parsed: list[str] = []
+    for value in raw_values:
+        if not isinstance(value, str) or not value.strip():
+            raise WindowExtractionError(f"window.{key} must be a list of non-empty strings")
+        parsed.append(value.strip())
+    if len(set(parsed)) != len(parsed):
+        raise WindowExtractionError(f"window.{key} must not contain duplicates")
+    return tuple(parsed)
 
 
 def _required_string(values: dict[str, Any], key: str) -> str:

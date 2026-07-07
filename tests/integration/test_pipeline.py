@@ -212,7 +212,7 @@ name = "synthetic-one-second"
 version = "1.0.0"
 pre_seconds = 0.5
 post_seconds = 0.5
-channel_index = 0
+channel_name = "MLII"
 boundary_policy = "exclude"
 """.strip(),
         encoding="utf-8",

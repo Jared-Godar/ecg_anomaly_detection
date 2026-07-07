@@ -46,6 +46,8 @@ def window_config() -> WindowConfig:
         pre_seconds=2.0,
         post_seconds=2.0,
         channel_index=0,
+        channel_name=None,
+        exclude_record_ids=(),
         boundary_policy="exclude",
     )
 
@@ -71,8 +73,51 @@ def test_repository_window_config_preserves_historical_geometry() -> None:
     assert config.name == "historical-six-second"
     assert config.pre_seconds == 3.0
     assert config.post_seconds == 3.0
-    assert config.channel_index == 0
+    assert config.channel_index is None
+    assert config.channel_name == "MLII"
     assert config.boundary_policy == "exclude"
+
+
+def test_window_config_rejects_missing_channel_selector(tmp_path: Path) -> None:
+    config_path = tmp_path / "windowing.toml"
+    config_path.write_text(
+        """
+schema_version = 1
+
+[window]
+name = "test-window"
+version = "1.0.0"
+pre_seconds = 2.0
+post_seconds = 2.0
+boundary_policy = "exclude"
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(WindowExtractionError, match="exactly one channel selector"):
+        load_window_config(config_path)
+
+
+def test_window_config_rejects_multiple_channel_selectors(tmp_path: Path) -> None:
+    config_path = tmp_path / "windowing.toml"
+    config_path.write_text(
+        """
+schema_version = 1
+
+[window]
+name = "test-window"
+version = "1.0.0"
+pre_seconds = 2.0
+post_seconds = 2.0
+channel_index = 0
+channel_name = "MLII"
+boundary_policy = "exclude"
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(WindowExtractionError, match="exactly one channel selector"):
+        load_window_config(config_path)
 
 
 def test_extraction_preserves_lineage_and_reports_boundaries(
@@ -100,6 +145,11 @@ def test_extraction_preserves_lineage_and_reports_boundaries(
     assert result.window_set.source_symbols == ("V", "N")
     assert result.window_set.target_values.tolist() == [1, 0]
     assert result.window_set.windows.flags.writeable is False
+    assert result.window_set.channel_selector == "channel_index"
+    assert result.window_set.configured_channel_index == 0
+    assert result.window_set.configured_channel_name is None
+    assert result.window_set.channel_index == 0
+    assert result.window_set.channel_name == "MLII"
     assert result.report.left_boundary_exclusion_count == 1
     assert result.report.right_boundary_exclusion_count == 1
     assert result.report.overlapping_adjacent_window_count == 1
@@ -109,6 +159,11 @@ def test_extraction_preserves_lineage_and_reports_boundaries(
         assert artifact["windows"].shape == (2, 8)
         assert artifact["record_ids"].tolist() == ["100", "100"]
         assert artifact["mapping_version"].item() == "1.0.0"
+        assert artifact["channel_selector"].item() == "channel_index"
+        assert artifact["configured_channel_index"].item() == 0
+        assert artifact["configured_channel_name"].item() == ""
+        assert artifact["resolved_channel_index"].item() == 0
+        assert artifact["resolved_channel_name"].item() == "MLII"
     assert '"emitted_window_count": 2' in report_path.read_text(encoding="utf-8")
 
 
@@ -144,6 +199,8 @@ def test_extraction_rejects_out_of_range_channel(
         pre_seconds=window_config.pre_seconds,
         post_seconds=window_config.post_seconds,
         channel_index=2,
+        channel_name=None,
+        exclude_record_ids=(),
         boundary_policy=window_config.boundary_policy,
     )
     source = AnnotationSet(
@@ -161,6 +218,95 @@ def test_extraction_rejects_out_of_range_channel(
         )
 
 
+def test_extraction_resolves_named_channel_when_record_order_differs(
+    mapping_config: AnnotationMappingConfig,
+    window_config: WindowConfig,
+    signal_record: SignalRecord,
+) -> None:
+    named_config = WindowConfig(
+        schema_version=window_config.schema_version,
+        name=window_config.name,
+        version=window_config.version,
+        pre_seconds=window_config.pre_seconds,
+        post_seconds=window_config.post_seconds,
+        channel_index=None,
+        channel_name="MLII",
+        exclude_record_ids=(),
+        boundary_policy=window_config.boundary_policy,
+    )
+    reordered_signal = SignalRecord(
+        record_id=signal_record.record_id,
+        sample_rate_hz=signal_record.sample_rate_hz,
+        signals=signal_record.signals[:, [1, 0]],
+        channel_names=("V5", "MLII"),
+        units=signal_record.units,
+    )
+    source = AnnotationSet(
+        record_id="100",
+        sample_indices=np.array([6], dtype=np.int64),
+        symbols=("N",),
+    )
+
+    result = extract_windows(
+        named_config,
+        mapping_config,
+        reordered_signal,
+        map_annotations(mapping_config, source),
+    )
+
+    assert result.window_set.windows.tolist() == [list(range(2, 10))]
+    assert result.window_set.channel_selector == "channel_name"
+    assert result.window_set.configured_channel_index is None
+    assert result.window_set.configured_channel_name == "MLII"
+    assert result.window_set.channel_index == 1
+    assert result.window_set.channel_name == "MLII"
+    assert result.report.channel_selector == "channel_name"
+    assert result.report.configured_channel_name == "MLII"
+    assert result.report.channel_index == 1
+    assert result.report.channel_name == "MLII"
+
+
+def test_extraction_rejects_missing_named_channel(
+    mapping_config: AnnotationMappingConfig,
+    window_config: WindowConfig,
+    signal_record: SignalRecord,
+) -> None:
+    named_config = WindowConfig(
+        schema_version=window_config.schema_version,
+        name=window_config.name,
+        version=window_config.version,
+        pre_seconds=window_config.pre_seconds,
+        post_seconds=window_config.post_seconds,
+        channel_index=None,
+        channel_name="MLII",
+        exclude_record_ids=(),
+        boundary_policy=window_config.boundary_policy,
+    )
+    missing_signal = SignalRecord(
+        record_id=signal_record.record_id,
+        sample_rate_hz=signal_record.sample_rate_hz,
+        signals=signal_record.signals,
+        channel_names=("V5", "V2"),
+        units=signal_record.units,
+    )
+    source = AnnotationSet(
+        record_id="100",
+        sample_indices=np.array([6], dtype=np.int64),
+        symbols=("N",),
+    )
+
+    with pytest.raises(
+        WindowExtractionError,
+        match='Configured channel_name = "MLII" was not available for record 100',
+    ):
+        extract_windows(
+            named_config,
+            mapping_config,
+            missing_signal,
+            map_annotations(mapping_config, source),
+        )
+
+
 def test_extraction_rejects_fractional_sample_geometry(
     mapping_config: AnnotationMappingConfig,
     signal_record: SignalRecord,
@@ -172,6 +318,8 @@ def test_extraction_rejects_fractional_sample_geometry(
         pre_seconds=0.75,
         post_seconds=1.0,
         channel_index=0,
+        channel_name=None,
+        exclude_record_ids=(),
         boundary_policy="exclude",
     )
     source = AnnotationSet(

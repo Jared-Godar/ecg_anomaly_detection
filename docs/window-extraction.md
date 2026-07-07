@@ -70,3 +70,40 @@ windows must never be allowed to cross train, validation, or test boundaries. Th
 Changing duration, channel, boundary behavior, annotation mapping, or sample rate changes the
 derived dataset definition. Such changes require new configuration versions and regenerated
 artifacts rather than overwriting earlier results.
+
+## Channel identity contract
+
+Window extraction uses an explicit channel identity contract. The public window configuration selects the MIT-BIH channel by name:
+
+```toml
+channel_name = "MLII"
+```
+
+Name-based selection is resolved per record. For each record, extraction inspects the available signal names, finds the configured channel name, and uses the resolved record-local channel index for slicing. This avoids assuming that positional channel index `0` has the same signal identity in every record.
+
+Positional selection remains supported for compatibility:
+
+```toml
+channel_index = 0
+```
+
+However, positional selection is a lower-level selector. It records the configured index and the resolved channel identity. It is unsafe for datasets where signal ordering varies by record unless downstream shard identity validation confirms that all produced shards resolve to one channel identity.
+
+A valid window configuration must provide exactly one channel selector:
+
+- `channel_name`; or
+- `channel_index`.
+
+Providing both selectors, or neither selector, is rejected during configuration loading.
+
+Generated window artifacts preserve channel lineage fields sufficient to audit selection:
+
+- selector type;
+- configured channel index, when positional selection is used;
+- configured channel name, when name-based selection is used;
+- resolved per-record channel index; and
+- resolved per-record channel name.
+
+Missing named channels fail as configuration/data-contract errors. The error reports the affected record and the available channel names. This is not treated as a local artifact cleanup issue.
+
+Strict channel identity validation is intentional. Mixed channel identities such as `MLII` and `V5` must not be treated as equivalent, even when the window geometry is otherwise identical. This repository treats that mismatch as a reproducibility and lineage defect, not as a modeling or clinical claim.

@@ -77,3 +77,24 @@ explicit record-to-subject metadata supplied to split schema v2.
 
 Indexing runs only after configured split-quality checks pass. The quality summary remains separate
 run evidence; it is not a source of model features and does not expose test metrics.
+
+## Shard channel identity validation
+
+The model-ready dataset index validates that all referenced window shards share one geometry and configuration identity. Channel identity is part of that contract.
+
+The index rejects mixed resolved channel names across shards. For example, shards extracted from `MLII` and `V5` are not considered interchangeable, even if they were produced with the same window length, mapping configuration, and split manifest.
+
+When mixed channel identities are detected, the index reports:
+
+- configured channel selector, when available;
+- observed channel names and record counts;
+- affected records; and
+- guidance that cleanup is not the usual fix.
+
+The expected fix is to use a configuration that satisfies the channel contract, such as name-based selection with:
+
+```toml
+channel_name = "MLII"
+```
+
+Alternatively, records that cannot satisfy the configured channel contract must be explicitly excluded or handled by a documented fallback strategy. The repository does not silently coerce or merge channel identities.
