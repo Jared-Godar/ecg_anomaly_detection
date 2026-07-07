@@ -29,6 +29,8 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Evaluation policy](evaluation-policy.md) | Development evaluation and protected-test boundaries |
 | [Benchmark governance](benchmark-governance.md) | Future benchmark eligibility, execution, disclosure, rerun, and archival rules |
 | [Data provenance](data-provenance.md) | Dataset source, license, attribution, privacy, and label provenance |
+| [Historical archive attribution](../archive/original_2022/ATTRIBUTION.md) | Per-file attribution status inventory for archived 2022 presentation imagery |
+| [Historical archive provenance](../archive/original_2022/PROVENANCE.md) | Attribution audit method and provenance evidence for the archived 2022 project |
 | [Historical results](historical-results.md) | Saved 2022 metrics and their known evaluation defects |
 | [Development workflow](development.md) | Locked environment, tests, hooks, and CI behavior |
 | [Local environment reproducibility](environment-reproducibility.md) | Dependency groups, locked setup commands, interpreter provenance, kernels, and troubleshooting |

@@ -27,11 +27,13 @@ The precise extent of adaptation has not yet been audited. That audit should occ
 
 The `archive/original_2022/images/` directory and historical notebooks contain diagrams, photographs, and background material assembled for the original educational presentation. Their authorship and reuse terms are not consistently recorded.
 
-Until the attribution audit is complete:
+An attribution audit is complete; see [`archive/original_2022/ATTRIBUTION.md`](archive/original_2022/ATTRIBUTION.md) for the per-file inventory and [`archive/original_2022/PROVENANCE.md`](archive/original_2022/PROVENANCE.md) for the audit method and evidence. Of the 16 images audited, 7 are attributed to a specific external source (Christopher Olah's "Understanding LSTM Networks"), 2 are assessed as author-original, and 7 remain of unresolved provenance — disclosed explicitly rather than guessed at.
+
+Regardless of attribution status:
 
 - do not assume those assets are covered by the repository's MIT license;
 - do not reuse them in new publications or generated documentation;
 - retain them only as historical project material; and
 - prefer replacement figures generated directly from appropriately licensed data.
 
-The modernization will either document a source and compatible license for each retained asset, replace it with an original asset, or propose its removal in a dedicated reviewable commit.
+The archive's [preservation policy](archive/original_2022/README.md#preservation-policy) excludes replacing or removing archived images. Attribution documentation, not replacement, is how this repository closes the gap for imagery that predates the modernization.

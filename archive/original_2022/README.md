@@ -13,7 +13,8 @@ Known limitations include:
 - random beat-window splitting that can place records and overlapping windows across train, validation, and test sets;
 - a saved validation cell that compares predictions with themselves;
 - duplicated exploratory code and saved notebook errors; and
-- incomplete attribution records for some presentation images and research material.
+- unresolved provenance for 7 of the 16 presentation images, disclosed explicitly in
+  [`ATTRIBUTION.md`](ATTRIBUTION.md) rather than concealed.
 
 See [historical results](../../docs/historical-results.md) for the evaluation audit and [data provenance](../../docs/data-provenance.md) for dataset licensing and attribution.
 
@@ -28,7 +29,9 @@ See [historical results](../../docs/historical-results.md) for the evaluation au
 | `eeg_explore.ipynb` | Alternate-dataset experiment using Challenge 2017 files. |
 | `wrangle.ipynb` | Incomplete wrangling scratchpad. |
 | `wrangle.py` | Original data loading, window generation, and random split code. |
-| `images/` | Historical presentation images and diagrams; attribution audit pending. |
+| `images/` | Historical presentation images and diagrams; attribution audit complete. See [`ATTRIBUTION.md`](ATTRIBUTION.md) and [`PROVENANCE.md`](PROVENANCE.md). |
+| `ATTRIBUTION.md` | Per-file attribution status inventory for `images/`. |
+| `PROVENANCE.md` | Attribution audit method and provenance evidence for archived notebooks, `wrangle.py`, and `images/`. |
 
 ## Preservation policy
 
