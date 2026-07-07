@@ -219,7 +219,9 @@ and [baseline evaluation](docs/baseline-evaluation.md).
 - Determinism depends on the recorded software, configuration, inputs, and execution contract.
   Runtime and resource values are host observations, not performance benchmarks.
 - The original 2022 environment was not captured, and its results are not exactly reproducible.
-- Historical images and tutorial attribution remain under review and are not reused in this card.
+- Historical archive image attribution is audited (see [NOTICE.md](NOTICE.md) and
+  [`ATTRIBUTION.md`](archive/original_2022/ATTRIBUTION.md)); historical tutorial code
+  adaptation extent remains under review. Neither is reused in this card.
 
 ## Maintenance and change control
 
