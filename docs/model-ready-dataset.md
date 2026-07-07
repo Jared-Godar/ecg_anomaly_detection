@@ -30,25 +30,37 @@ The final run manifest hashes both the dataset index and every referenced shard.
 
 ## Standalone command
 
-The stage can also be run independently by repeating `--input` for every record shard:
+The stage can also be run independently. `--input` accepts a directory, which expands to its
+immediate `*.npz` files (sorted, non-recursive) — this is the normal way to point at every shard
+from one run without enumerating them by hand:
 
 ```fish
 set -l run_id YOUR_RUN_UUID
-set -l shard_arguments
-
-for shard in data/interim/runs/$run_id/windows/*.npz
-  set --append shard_arguments --input $shard
-end
 
 uv run ecg-data index-dataset \
   --repository-root . \
   --split-manifest artifacts/runs/$run_id/split.json \
-  $shard_arguments \
+  --input data/interim/runs/$run_id/windows/ \
   --output data/processed/runs/$run_id/dataset-index.json
 ```
 
-The loop adds one `--input` argument for each shard. The orchestration command builds that list
-automatically.
+`--input` is still repeatable and still accepts individual shard file paths — useful to index a
+specific subset rather than every shard in a run:
+
+```fish
+uv run ecg-data index-dataset \
+  --repository-root . \
+  --split-manifest artifacts/runs/$run_id/split.json \
+  --input data/interim/runs/$run_id/windows/100.npz \
+  --input data/interim/runs/$run_id/windows/101.npz \
+  --output data/processed/runs/$run_id/dataset-index.json
+```
+
+Directory and file arguments can be mixed in one invocation; the combined, expanded list must not
+contain the same file twice. An empty directory or a nonexistent path fails with a clear diagnostic
+rather than silently producing an empty index. The orchestration command (`run-pipeline`) already
+builds its shard list automatically and is unaffected by this — directory discovery only applies to
+this standalone command's `--input` argument.
 
 ## Validation contract
 

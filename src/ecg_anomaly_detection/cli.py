@@ -71,6 +71,55 @@ from ecg_anomaly_detection.windows import (
     write_window_report,
 )
 
+_ARTIFACT_GLOB = "*.npz"
+
+
+class ArtifactDiscoveryError(ValueError):
+    """Raised when a --input path cannot be resolved to concrete artifact files."""
+
+
+def _resolve_input_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
+    """Expand directory --input arguments into their contained artifact files.
+
+    Each path must be an existing regular file or an existing, non-symlink
+    directory. A directory expands to its immediate `*.npz` children, sorted
+    by name for determinism; it is not searched recursively, matching the
+    flat layout `run_pipeline()` writes under
+    `data/interim/runs/<run-id>/windows/`. File arguments pass through
+    unchanged and are not themselves required to end in `.npz`, preserving
+    existing behavior exactly. The combined, expanded result must not
+    contain the same file twice.
+    """
+    resolved: list[Path] = []
+    for path in paths:
+        if path.is_symlink():
+            raise ArtifactDiscoveryError(f"input path must not be a symbolic link: {path}")
+        if path.is_dir():
+            discovered = sorted(path.glob(_ARTIFACT_GLOB))
+            if not discovered:
+                raise ArtifactDiscoveryError(
+                    f"no {_ARTIFACT_GLOB} artifact files found in directory: {path}"
+                )
+            resolved.extend(discovered)
+        elif path.is_file():
+            resolved.append(path)
+        else:
+            raise ArtifactDiscoveryError(f"input path does not exist: {path}")
+    seen: dict[Path, Path] = {}
+    duplicates: list[Path] = []
+    for path in resolved:
+        canonical = path.resolve()
+        if canonical in seen:
+            duplicates.append(path)
+        else:
+            seen[canonical] = path
+    if duplicates:
+        raise ArtifactDiscoveryError(
+            "duplicate input artifact path(s) after directory expansion: "
+            + ", ".join(str(path) for path in duplicates)
+        )
+    return tuple(resolved)
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -129,7 +178,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="assign complete subjects to deterministic train, validation, and test partitions",
     )
     split_parser.add_argument("--split-config", type=Path, required=True)
-    split_parser.add_argument("--input", type=Path, action="append", required=True)
+    split_parser.add_argument(
+        "--input",
+        type=Path,
+        action="append",
+        required=True,
+        help="window artifact file, or a directory of *.npz files (repeatable)",
+    )
     split_parser.add_argument("--output", type=Path, required=True)
     split_parser.add_argument(
         "--quality-output",
@@ -167,7 +222,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     index_parser.add_argument("--repository-root", type=Path, default=Path.cwd())
     index_parser.add_argument("--split-manifest", type=Path, required=True)
-    index_parser.add_argument("--input", type=Path, action="append", required=True)
+    index_parser.add_argument(
+        "--input",
+        type=Path,
+        action="append",
+        required=True,
+        help="window artifact file, or a directory of *.npz files (repeatable)",
+    )
     index_parser.add_argument("--output", type=Path, required=True)
 
     policy_parser = subparsers.add_parser(
@@ -270,7 +331,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             index = create_dataset_index(
                 options.repository_root,
                 options.split_manifest,
-                options.input,
+                _resolve_input_paths(options.input),
             )
             write_dataset_index(index, options.repository_root, options.output)
             print(
@@ -346,7 +407,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             return 0
         if options.command == "split-windows":
             split_config = load_split_config(options.split_config)
-            metadata = load_window_metadata(options.input)
+            metadata = load_window_metadata(_resolve_input_paths(options.input))
             manifest = create_split_manifest(split_config, metadata)
             write_split_manifest(manifest, options.output)
             quality_path = options.quality_output or options.output.with_name(
@@ -408,6 +469,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
     except (
         AcquisitionError,
         AnnotationMappingError,
+        ArtifactDiscoveryError,
         BenchmarkPolicyError,
         ConfigurationError,
         DatasetIndexError,
