@@ -30,6 +30,7 @@ The labels are simplified reference-annotation classes from a historical dataset
 | Lineage and auditability | Record identity retained through transformations; run manifests capture code, environment, configuration, inputs, and artifact digests |
 | Pipeline design | One configuration-driven command connects supported stages and isolates every run under a UUID |
 | Testability and automation | Synthetic fixtures, unit and integration tests, CI, formatting, linting, type checks, security scans, and dependency maintenance |
+| Execution visibility | Per-stage progress banners with elapsed time and artifact paths for `run-pipeline`, flushed per line so subprocess consumers (including the Step 0 notebook) see it live |
 | Responsible delivery | Historical results, evaluation defects, dataset licensing, modernization status, and non-clinical limitations are documented explicitly |
 
 ## Implemented pipeline
@@ -63,8 +64,10 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 | Auditable annotation mapping and window extraction | Cloud deployment or orchestration |
 | Deterministic subject-aware split manifests | Runtime and resource benchmarks |
 | Model-ready index over immutable record shards | Subject-grouped guarantees across the two records from one person |
-| Run manifests and synthetic end-to-end coverage | Completed historical image and tutorial attribution audit |
+| Run manifests and synthetic end-to-end coverage | Historical tutorial code adaptation-extent audit |
 | Deterministic baseline training and validation-only tested metrics | Threshold, ROC/AUC, calibration, and generated figures |
+| Historical archive image attribution and provenance audit | |
+| Per-stage pipeline progress reporting for `run-pipeline` | |
 
 See the [modernization roadmap](docs/modernization-roadmap.md) for phase-level status.
 
@@ -174,7 +177,10 @@ The repository's [MIT License](LICENSE) applies to project code and original doc
 
 ### Third-party material
 
-- Historical image and tutorial attribution remains under audit; unverified assets are not reused in new portfolio material.
+- Historical archive image attribution is audited; see [NOTICE.md](NOTICE.md) and
+  [`ATTRIBUTION.md`](archive/original_2022/ATTRIBUTION.md) for per-file status, including assets
+  where provenance could not be resolved. Historical tutorial code adaptation extent remains
+  unaudited. Unverified assets are not reused in new portfolio material.
 
 ## Citation, contribution, and license
 
