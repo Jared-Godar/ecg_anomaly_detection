@@ -86,6 +86,19 @@ execution counts, and `--include-narrative` to add the tracked walkthrough to de
 discovery. These flags never execute notebook cells. Full behavior, boundaries, and troubleshooting
 are documented in the [local notebook sandbox guide](../notebooks/local/README.md).
 
+## Clean up local pipeline runs
+
+`list-runs` and `purge-run` reclaim disk space from local `run-pipeline` output without touching
+the dataset acquisition baseline or any other run:
+
+```fish
+uv run ecg-data list-runs --repository-root .
+uv run ecg-data purge-run --repository-root . --run-id <run-id> --dry-run
+```
+
+See [local artifact lifecycle helpers](pipeline-orchestration.md#local-artifact-lifecycle-helpers)
+for the full reference.
+
 The preserved `archive/original_2022/` bundle is excluded from style and formatting hooks so the
 historical record is not rewritten. A separate CI job scans the complete Git history for secrets.
 

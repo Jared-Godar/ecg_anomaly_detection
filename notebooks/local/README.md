@@ -78,6 +78,22 @@ If validation reports `invalid-notebook`, open the file in a notebook editor and
 its JSON before using formatting or stripping. Hygiene warnings do not fail validation; structural
 or repository-boundary errors do.
 
+## Cleaning up local pipeline runs
+
+Iterating against `run-pipeline` output from a notebook accumulates `artifacts/runs/<run-id>/` and
+its companion `data/interim/` and `data/processed/` directories. List and reclaim them explicitly
+rather than editing generated files by hand:
+
+```fish
+uv run ecg-data list-runs --repository-root .
+uv run ecg-data purge-run --repository-root . --run-id <run-id> --dry-run
+```
+
+See [local artifact lifecycle helpers](../../docs/pipeline-orchestration.md#local-artifact-lifecycle-helpers)
+for the full command reference and the guarantee that these commands never touch the dataset
+acquisition baseline. For a full local reset instead of removing a single run, use
+`clean-local-pipeline-state.fish` if a Step 0 preflight check writes one.
+
 ## Working practices
 
 - Use repository-relative paths and package APIs where practical.

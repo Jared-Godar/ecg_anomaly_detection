@@ -34,6 +34,11 @@ from ecg_anomaly_detection.labels import (
     map_annotations,
     write_mapping_report,
 )
+from ecg_anomaly_detection.local_execution import (
+    LocalArtifactLifecycleError,
+    list_runs,
+    purge_run,
+)
 from ecg_anomaly_detection.pipeline import PipelineError, run_pipeline
 from ecg_anomaly_detection.progress import ProgressReporter, format_elapsed_seconds
 from ecg_anomaly_detection.records import (
@@ -187,6 +192,25 @@ def build_parser() -> argparse.ArgumentParser:
     notebook_parser.add_argument("--strip-outputs", action="store_true")
     notebook_parser.add_argument("--include-narrative", action="store_true")
     notebook_parser.add_argument("--json", action="store_true", dest="json_output")
+
+    list_runs_parser = subparsers.add_parser(
+        "list-runs",
+        help="list local run_pipeline() output directories with size and manifest status",
+    )
+    list_runs_parser.add_argument("--repository-root", type=Path, default=Path.cwd())
+    list_runs_parser.add_argument("--json", action="store_true", dest="json_output")
+
+    purge_run_parser = subparsers.add_parser(
+        "purge-run",
+        help="remove one local run's artifact, interim, and processed output directories",
+    )
+    purge_run_parser.add_argument("--repository-root", type=Path, default=Path.cwd())
+    purge_run_parser.add_argument("--run-id", required=True)
+    purge_run_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="report what would be removed without deleting anything",
+    )
     return parser
 
 
@@ -284,6 +308,42 @@ def main(arguments: Sequence[str] | None = None) -> int:
             write_run_manifest(manifest, options.repository_root, options.output)
             print(f"recorded run {manifest.run_id} in {options.output}")
             return 0
+        if options.command == "list-runs":
+            summaries = list_runs(options.repository_root)
+            if options.json_output:
+                print(
+                    json.dumps(
+                        [
+                            {
+                                "run_id": summary.run_id,
+                                "has_run_manifest": summary.has_run_manifest,
+                                "total_size_bytes": summary.total_size_bytes,
+                                "modified_at_epoch": summary.modified_at_epoch,
+                                "directories": [str(path) for path in summary.directories],
+                            }
+                            for summary in summaries
+                        ],
+                        indent=2,
+                        sort_keys=True,
+                    )
+                )
+            else:
+                if not summaries:
+                    print("no local runs found")
+                for summary in summaries:
+                    manifest_note = "manifest" if summary.has_run_manifest else "no manifest"
+                    print(
+                        f"{summary.run_id}  {summary.total_size_bytes:>12} bytes  "
+                        f"{len(summary.directories)} directories  {manifest_note}"
+                    )
+            return 0
+        if options.command == "purge-run":
+            result = purge_run(options.repository_root, options.run_id, dry_run=options.dry_run)
+            verb = "would remove" if result.dry_run else "removed"
+            for directory in result.removed_directories:
+                print(f"{verb} {directory}")
+            print(f"{verb.capitalize()} {result.freed_bytes} bytes for run {result.run_id}")
+            return 0
         if options.command == "split-windows":
             split_config = load_split_config(options.split_config)
             metadata = load_window_metadata(options.input)
@@ -353,6 +413,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         DatasetIndexError,
         EvaluationError,
         InventoryError,
+        LocalArtifactLifecycleError,
         PipelineError,
         RecordValidationError,
         RunManifestError,
