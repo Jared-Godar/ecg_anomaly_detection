@@ -116,3 +116,58 @@ saved project views and built-in workflow actions. Those settings require web-in
 
 This limitation is why view definitions and expected workflow transitions are maintained in
 [GitHub Project governance](github-project.md).
+
+## Automated pull-request metadata gate
+
+`.github/workflows/metadata-governance.yml` runs `scripts/github/validate_project_metadata.py`
+on every pull request event, converting the field requirements above from documentation-only
+guidance into an enforced check. The script and workflow are deliberately separate: the script
+takes no GitHub Actions-specific input (only `--pr-number`, `--repo`, `--owner`, and
+`--project-number`), so it runs identically from a terminal for local debugging.
+
+```fish
+uv run python scripts/github/validate_project_metadata.py --pr-number 65
+```
+
+The check validates two layers:
+
+- **Pull request level**: an assignee, a milestone, at least one `type:*` label, at least one
+  `area:*` label, and a body closing reference (`Closes #N`, `Fixes #N`, `Resolves #N`, and their
+  keyword variants) to an issue.
+- **Linked issue level**: for every issue number extracted from a closing reference, that the
+  issue is a member of the tracked Project and has every field in
+  [Required fields](github-project.md#required-fields) populated.
+
+### Token requirement and rollout
+
+Reading Project V2 field values requires a token with the `project` scope. The default
+repository-scoped `GITHUB_TOKEN` a workflow receives does not have that scope for a user-owned
+project (the same limitation recorded above for the historical bootstrap). A repository secret
+named `PROJECT_METADATA_TOKEN` — a fine-grained personal access token scoped to this repository,
+with read-only Pull requests and Issues (Repository permissions) and read-only Projects (Account
+permissions) — supplies it.
+
+The workflow passes `--strict-project-checks`: an unreadable Project (missing or misconfigured
+token) is a hard failure, not an advisory warning. The `GITHUB_TOKEN` fallback in the workflow's
+`env` block exists only so a removed or rotated-out secret degrades to a clear authentication error
+in the job log rather than the workflow silently not running; it is not a soft-enforcement mode.
+Pull-request-level checks (assignee, milestone, labels, closing reference) and linked-issue-level
+checks (Project membership and field completeness) both enforce immediately once
+`PROJECT_METADATA_TOKEN` is configured.
+
+Marking this workflow as a required status check in branch protection is a separate, manual
+repository-settings decision and is not configured by the workflow itself.
+
+### Why issue creation is not blocked
+
+GitHub provides no rejection mechanism for issue creation comparable to a required pull-request
+status check. Issue-only metadata gaps (an issue with no open pull request yet) remain a
+manual-review concern; enforcement here starts at the pull-request stage, where a required check
+can actually block a merge.
+
+### Tests
+
+`tests/scripts/test_validate_project_metadata.py` covers the pure validation logic (closing-
+reference extraction, pull-request-level checks, linked-issue field-completeness checks) directly,
+and the `gh`-subprocess boundary with mocked process output. It does not call the network; running
+it requires no GitHub token.

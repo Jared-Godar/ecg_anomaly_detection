@@ -39,6 +39,11 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 - Defined release, versioning, and release-review policies for this engineering
   portfolio repository.
+- Added an automated pull-request metadata gate (`.github/workflows/metadata-governance.yml`,
+  `scripts/github/validate_project_metadata.py`) that validates PR assignee, milestone,
+  `type:*`/`area:*` labels, and closing issue reference, plus the linked issue's Project #5
+  membership and required-field completeness, enforced via a repository-scoped
+  `PROJECT_METADATA_TOKEN` secret with read-only Projects access.
 
 ### Documentation
 

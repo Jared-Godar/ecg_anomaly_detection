@@ -87,3 +87,6 @@ The project is linked to this repository. Built-in workflows should provide thes
 
 Automatic priority, risk, size, and portfolio assignments are intentionally avoided. Those fields
 require reviewable engineering judgment.
+
+Completeness of the required fields above is checked automatically on every pull request; see
+[Automated pull-request metadata gate](github-metadata-automation.md#automated-pull-request-metadata-gate).

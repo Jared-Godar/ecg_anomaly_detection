@@ -117,6 +117,10 @@ type checks and repository checks for every pull request and every push to `main
 Actions are pinned to immutable commit SHAs, and Dependabot proposes weekly updates for Actions and
 pre-commit hooks.
 
+A separate workflow validates pull request and linked-issue planning metadata (assignee,
+milestone, labels, closing reference, and Project field completeness) on every pull request. See
+[automated pull-request metadata gate](governance/github-metadata-automation.md#automated-pull-request-metadata-gate).
+
 ## Type checking
 
 Pyright runs in Basic mode across `src/` and `tests/`. This matches the current Pylance editor mode
