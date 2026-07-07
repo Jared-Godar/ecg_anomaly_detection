@@ -14,6 +14,11 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 - `ecg-data list-runs` and `ecg-data purge-run` list and reclaim disk space from
   local `run-pipeline` output by exact run ID, with a `--dry-run` preview, without
   touching the dataset acquisition baseline or any other run's directories.
+- `ecg_anomaly_detection.experiment_tracking.ExperimentTracker` checkpoints
+  long-running local experiment loops one candidate at a time, so an
+  interruption loses at most the in-progress candidate. Supports resume via
+  `is_completed()`, progress/ETA reporting, and a sorted `finalize()` summary
+  once every candidate has completed.
 
 ### Changed
 

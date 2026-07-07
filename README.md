@@ -32,6 +32,7 @@ The labels are simplified reference-annotation classes from a historical dataset
 | Testability and automation | Synthetic fixtures, unit and integration tests, CI, formatting, linting, type checks, security scans, and dependency maintenance |
 | Execution visibility | Per-stage progress banners with elapsed time and artifact paths for `run-pipeline`, flushed per line so subprocess consumers (including the Step 0 notebook) see it live |
 | Local artifact lifecycle management | `list-runs`/`purge-run` reclaim disk space from local run output on demand, by exact run ID only, without touching the shared dataset acquisition baseline or weakening create-only artifact guarantees |
+| Interruption-tolerant local experimentation | `ExperimentTracker` checkpoints long-running hyperparameter search loops one candidate at a time, so an interruption loses at most the in-progress candidate |
 | Responsible delivery | Historical results, evaluation defects, dataset licensing, modernization status, and non-clinical limitations are documented explicitly |
 
 ## Implemented pipeline
@@ -70,6 +71,7 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 | Historical archive image attribution and provenance audit | |
 | Per-stage pipeline progress reporting for `run-pipeline` | |
 | Local run listing and purge helpers (`list-runs`/`purge-run`) | |
+| Local experiment checkpoint, resume, and progress/ETA reporting | |
 
 See the [modernization roadmap](docs/modernization-roadmap.md) for phase-level status.
 
