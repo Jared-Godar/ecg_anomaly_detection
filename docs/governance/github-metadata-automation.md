@@ -142,19 +142,18 @@ The check validates two layers:
 
 Reading Project V2 field values requires a token with the `project` scope. The default
 repository-scoped `GITHUB_TOKEN` a workflow receives does not have that scope for a user-owned
-project (the same limitation recorded above for the historical bootstrap). Configure a repository
-secret named `PROJECT_METADATA_TOKEN` — a fine-grained personal access token or GitHub App
-installation token with `project` (read) and `contents`/`pull-requests` (read) access — to enable
-the linked-issue-level checks.
+project (the same limitation recorded above for the historical bootstrap). A repository secret
+named `PROJECT_METADATA_TOKEN` — a fine-grained personal access token scoped to this repository,
+with read-only Pull requests and Issues (Repository permissions) and read-only Projects (Account
+permissions) — supplies it.
 
-Until that secret exists, the workflow falls back to `GITHUB_TOKEN`, the Project read fails, and
-the script prints a warning and skips the linked-issue-level checks rather than failing the PR —
-the pull-request-level checks above still enforce immediately regardless. Pass
-`--strict-project-checks` (not set in the current workflow) once the secret is configured and
-verified working, to make an unreadable Project a hard failure instead of an advisory warning.
-This lets PR-level enforcement start immediately while Project-field enforcement is opted into
-deliberately, rather than landing as an unexpectedly broken required check on every future PR the
-moment this workflow merges.
+The workflow passes `--strict-project-checks`: an unreadable Project (missing or misconfigured
+token) is a hard failure, not an advisory warning. The `GITHUB_TOKEN` fallback in the workflow's
+`env` block exists only so a removed or rotated-out secret degrades to a clear authentication error
+in the job log rather than the workflow silently not running; it is not a soft-enforcement mode.
+Pull-request-level checks (assignee, milestone, labels, closing reference) and linked-issue-level
+checks (Project membership and field completeness) both enforce immediately once
+`PROJECT_METADATA_TOKEN` is configured.
 
 Marking this workflow as a required status check in branch protection is a separate, manual
 repository-settings decision and is not configured by the workflow itself.

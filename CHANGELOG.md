@@ -42,9 +42,8 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 - Added an automated pull-request metadata gate (`.github/workflows/metadata-governance.yml`,
   `scripts/github/validate_project_metadata.py`) that validates PR assignee, milestone,
   `type:*`/`area:*` labels, and closing issue reference, plus the linked issue's Project #5
-  membership and required-field completeness. Project-field checks are advisory until a
-  `PROJECT_METADATA_TOKEN` repository secret with `project` scope is configured; PR-level
-  checks enforce immediately.
+  membership and required-field completeness, enforced via a repository-scoped
+  `PROJECT_METADATA_TOKEN` secret with read-only Projects access.
 
 ### Documentation
 
