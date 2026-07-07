@@ -40,6 +40,7 @@ notebooks = [
   "matplotlib>=3.10,<4",
   "matplotlib-inline>=0.2.2",
   "nbformat>=5.10,<6",
+  "scikit-learn>=1.9.0",
 ]
 experiments = [
   "lightgbm>=4.6.0",

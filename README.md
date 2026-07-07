@@ -110,7 +110,10 @@ The first pipeline run retrieves the configured source files from PhysioNet into
 
 Start with the [documentation guide](docs/README.md), then use these focused references:
 
-- [Supported narrative walkthrough](notebooks/narrative-walkthrough.ipynb)
+- [Public notebook workflow](notebooks/README.md)
+  - Step 0: [Environment setup and artifact generation](notebooks/00-environment-setup-and-artifact-generation.ipynb)
+  - Step 1: [Narrative walkthrough](notebooks/01-narrative-walkthrough.ipynb)
+  - Step 2: [Gradient boosting validation example](notebooks/02-high-performing-gradient-boosting-validation.ipynb)
 - [Notebook guidance](notebooks/README.md)
 - [Model card](MODEL_CARD.md)
 - [Repository architecture](docs/architecture.md)

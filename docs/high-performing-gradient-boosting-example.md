@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The public example notebook at `notebooks/examples/high-performing-gradient-boosting-validation.ipynb` demonstrates how the governed pipeline artifacts can support a higher-performing local classical ML experiment without weakening the repository's evaluation boundaries.
+The public example notebook at `notebooks/02-high-performing-gradient-boosting-validation.ipynb` demonstrates how the governed pipeline artifacts can support a higher-performing local classical ML experiment without weakening the repository's evaluation boundaries.
 
 The notebook is positioned as a reproducible local validation example. It is not a benchmark, not clinical evidence, not diagnostic software, not production ML, and not a protected-test evaluation.
 
@@ -10,8 +10,9 @@ The notebook is positioned as a reproducible local validation example. It is not
 
 | Notebook area | Role |
 |---|---|
-| `notebooks/narrative-walkthrough.ipynb` | Canonical package-backed explanation of the supported modernization workflow and evidence boundaries |
-| `notebooks/examples/high-performing-gradient-boosting-validation.ipynb` | Public example that trains a fixed tuned classical ML model on generated train artifacts and evaluates validation artifacts only |
+| `notebooks/00-environment-setup-and-artifact-generation.ipynb` | Fresh-clone setup, environment verification, governed artifact generation, and Step 0 readiness evidence |
+| `notebooks/01-narrative-walkthrough.ipynb` | Canonical package-backed explanation of the supported modernization workflow and evidence boundaries |
+| `notebooks/02-high-performing-gradient-boosting-validation.ipynb` | Public example that trains a fixed tuned classical ML model on generated train artifacts and evaluates validation artifacts only |
 | `notebooks/local/` | Ignored local experimentation sandbox for disposable notebooks, checkpoints, predictions, and result exports |
 
 The example notebook is intentionally not a general-purpose tuning workbench. It promotes a fixed configuration derived from local experimentation and leaves broader search, checkpointing, and optional model-family comparison in the ignored local sandbox.
