@@ -499,6 +499,7 @@ notebooks = [
     { name = "matplotlib" },
     { name = "matplotlib-inline" },
     { name = "nbformat" },
+    { name = "scikit-learn" },
 ]
 
 [package.metadata]
@@ -527,6 +528,7 @@ notebooks = [
     { name = "matplotlib", specifier = ">=3.10,<4" },
     { name = "matplotlib-inline", specifier = ">=0.2.2" },
     { name = "nbformat", specifier = ">=5.10,<6" },
+    { name = "scikit-learn", specifier = ">=1.9.0" },
 ]
 
 [[package]]

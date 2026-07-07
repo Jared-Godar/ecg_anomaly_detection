@@ -5,7 +5,10 @@ The maintained documentation is organized by the question a reader is trying to 
 | Document | Purpose |
 |---|---|
 | [Project README](../README.md) | Portfolio overview, current status, quick start, and limitations |
-| [Narrative walkthrough](../notebooks/narrative-walkthrough.ipynb) | Canonical package-backed explanation of the supported workflow and evidence boundaries |
+| [Public notebook workflow](../notebooks/README.md) | Canonical 00 → 01 → 02 public workflow covering artifact generation, modernization narrative, and validation-only gradient boosting example. |
+| [Environment setup and artifact generation](../notebooks/00-environment-setup-and-artifact-generation.ipynb) | Fresh-clone setup, environment verification, governed artifact generation, and Step 0 readiness evidence. |
+| [Narrative walkthrough](../notebooks/01-narrative-walkthrough.ipynb) | Package-backed explanation of the supported modernization workflow and evidence boundaries. |
+| [Gradient boosting validation example](../notebooks/02-high-performing-gradient-boosting-validation.ipynb) | Validation-only classical ML example using generated governed artifacts. |
 | [High-performing gradient boosting example](high-performing-gradient-boosting-example.md) | Public validation-only classical ML example built on generated pipeline artifacts |
 | [Notebook guidance](../notebooks/README.md) | Supported notebook, execution, business-logic, and generated-figure policy |
 | [Model card](../MODEL_CARD.md) | Baseline scope, assumptions, evaluation, intended use, and prohibited use |
