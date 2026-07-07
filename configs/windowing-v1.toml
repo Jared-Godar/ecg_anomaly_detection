@@ -5,5 +5,6 @@ name = "historical-six-second"
 version = "1.0.0"
 pre_seconds = 3.0
 post_seconds = 3.0
-channel_index = 0
+channel_name = "MLII"
+exclude_record_ids = ["102", "104"]
 boundary_policy = "exclude"

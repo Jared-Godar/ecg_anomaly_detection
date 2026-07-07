@@ -96,3 +96,18 @@ the network transport; CI never downloads MIT-BIH data.
 - The model-ready index references record shards rather than concatenating arrays.
 - The v1 split balances record counts, not target distributions.
 - Test-partition evaluation, model selection, and model-card generation remain unimplemented.
+
+## Channel contract during artifact generation
+
+The governed pipeline depends on window artifacts whose channel identity is explicit and consistent. During artifact generation, the public window configuration selects `MLII` by channel name instead of relying on positional index `0`.
+
+This matters because some datasets may not expose the same signal identity at the same positional index for every record. The pipeline therefore treats mixed resolved channel identities as a data-contract failure. That failure is expected to stop model-ready artifact generation rather than producing a dataset index over inconsistent shards.
+
+A successful pipeline run must produce model-ready artifacts only after the window extraction and shard identity contracts are satisfied, including:
+
+- `data/processed/runs/<run-id>/dataset-index.json`;
+- `artifacts/runs/<run-id>/split.json`;
+- `artifacts/runs/<run-id>/split_quality_summary.json`; and
+- `artifacts/runs/<run-id>/run-manifest.json`.
+
+A clean failure message is useful diagnostics, but it is not equivalent to successful artifact generation. Notebook workflows that depend on these artifacts remain blocked until the governed pipeline produces them.

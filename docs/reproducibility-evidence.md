@@ -40,3 +40,9 @@ Runtime and resource values vary by host, operating system load, filesystem, and
 reuses verified local files. They are operational observations, not deterministic performance
 benchmarks. Generated evidence, raw data, derived data, trained models, and reports remain ignored
 and must not be committed.
+
+## Channel identity evidence
+
+Window extraction records channel selector provenance and resolved channel identity in generated artifacts. The model-ready dataset index validates that referenced shards share one channel identity before indexing them for downstream training or validation examples.
+
+This evidence supports reproducibility and lineage review. It is not a clinical, diagnostic, production-readiness, or benchmark claim.

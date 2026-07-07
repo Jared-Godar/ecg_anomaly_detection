@@ -167,6 +167,9 @@ def run_pipeline(
             write_validation_report(validation, validation_path)
         validation_paths.append(validation_path)
 
+        if record_id in window_config.exclude_record_ids:
+            continue
+
         with runtime_timer.stage("annotation_mapping"):
             mapped = map_annotations(mapping_config, loaded.annotations)
             mapping_path = mapping_directory / f"{record_id}.json"
@@ -185,7 +188,26 @@ def run_pipeline(
 
     with runtime_timer.stage("split"):
         metadata = load_window_metadata(window_artifact_paths)
-        split_manifest = create_split_manifest(split_config, metadata)
+        split_record_ids = set(metadata.record_shards)
+        filtered_split_config = split_config
+        if set(split_config.record_subjects) != split_record_ids:
+            filtered_split_config = type(split_config)(
+                schema_version=split_config.schema_version,
+                name=split_config.name,
+                version=split_config.version,
+                strategy=split_config.strategy,
+                seed=split_config.seed,
+                train_ratio=split_config.train_ratio,
+                validation_ratio=split_config.validation_ratio,
+                test_ratio=split_config.test_ratio,
+                record_subjects={
+                    record_id: subject_id
+                    for record_id, subject_id in split_config.record_subjects.items()
+                    if record_id in split_record_ids
+                },
+                quality=split_config.quality,
+            )
+        split_manifest = create_split_manifest(filtered_split_config, metadata)
         split_manifest_path = run_directory / "split.json"
         write_split_manifest(split_manifest, split_manifest_path)
     with runtime_timer.stage("split_diagnostics"):

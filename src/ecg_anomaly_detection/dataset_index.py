@@ -89,6 +89,9 @@ class _InspectedShard:
     sample_rate_hz: float
     channel_index: int
     channel_name: str
+    channel_selector: str | None
+    configured_channel_index: int | None
+    configured_channel_name: str | None
     window_samples: int
 
 
@@ -227,6 +230,26 @@ def _inspect_shard(repository_root: Path, path: Path) -> _InspectedShard:
             sample_rate_hz = _positive_float_scalar(artifact["sample_rate_hz"], "sample_rate_hz")
             channel_index = _nonnegative_integer_scalar(artifact["channel_index"], "channel_index")
             channel_name = _string_scalar(artifact["channel_name"], "channel_name")
+            channel_selector = _optional_artifact_string_scalar(artifact, "channel_selector")
+            if channel_selector is not None and channel_selector not in {
+                "channel_index",
+                "channel_name",
+            }:
+                raise DatasetIndexError("channel_selector must be channel_index or channel_name")
+            configured_channel_index = _optional_artifact_integer_scalar(
+                artifact, "configured_channel_index"
+            )
+            if configured_channel_index == -1:
+                configured_channel_index = None
+            if configured_channel_index is not None and configured_channel_index < 0:
+                raise DatasetIndexError(
+                    "configured_channel_index must be nonnegative or -1 when absent"
+                )
+            configured_channel_name = _optional_artifact_string_scalar(
+                artifact, "configured_channel_name", allow_empty=True
+            )
+            if configured_channel_name == "":
+                configured_channel_name = None
             mapping_name = _string_scalar(artifact["mapping_name"], "mapping_name")
             mapping_version = _string_scalar(artifact["mapping_version"], "mapping_version")
             window_config_name = _string_scalar(
@@ -271,8 +294,33 @@ def _inspect_shard(repository_root: Path, path: Path) -> _InspectedShard:
         sample_rate_hz=sample_rate_hz,
         channel_index=channel_index,
         channel_name=channel_name,
+        channel_selector=channel_selector,
+        configured_channel_index=configured_channel_index,
+        configured_channel_name=configured_channel_name,
         window_samples=windows.shape[1],
     )
+
+
+def _optional_artifact_string_scalar(
+    artifact: Any, name: str, *, allow_empty: bool = False
+) -> str | None:
+    if name not in artifact.files:
+        return None
+    value = artifact[name]
+    if np.asarray(value).shape != ():
+        raise DatasetIndexError(f"{name} must be a scalar string")
+    scalar = value.item()
+    if not isinstance(scalar, str):
+        raise DatasetIndexError(f"{name} must be a scalar string")
+    if not allow_empty and not scalar:
+        raise DatasetIndexError(f"{name} must be a non-empty scalar string")
+    return scalar
+
+
+def _optional_artifact_integer_scalar(artifact: Any, name: str) -> int | None:
+    if name not in artifact.files:
+        return None
+    return _integer_scalar(artifact[name], name)
 
 
 def _validate_shard_identity(
@@ -285,7 +333,6 @@ def _validate_shard_identity(
         first.window_config_name,
         first.window_config_version,
         first.sample_rate_hz,
-        first.channel_index,
         first.channel_name,
         first.window_samples,
     )
@@ -296,16 +343,13 @@ def _validate_shard_identity(
             shard.window_config_name,
             shard.window_config_version,
             shard.sample_rate_hz,
-            shard.channel_index,
             shard.channel_name,
             shard.window_samples,
         )
         != identity
         for shard in shards[1:]
     ):
-        raise DatasetIndexError(
-            "window shards do not share one geometry and configuration identity"
-        )
+        raise DatasetIndexError(_format_shard_identity_mismatch(shards))
     if identity[:4] != (
         split_manifest.mapping_name,
         split_manifest.mapping_version,
@@ -314,6 +358,60 @@ def _validate_shard_identity(
     ):
         raise DatasetIndexError("window shard identity does not match split manifest")
     return first
+
+
+def _format_shard_identity_mismatch(shards: Sequence[_InspectedShard]) -> str:
+    channel_counts = Counter(shard.channel_name for shard in shards)
+    if len(channel_counts) <= 1:
+        return "window shards do not share one geometry and configuration identity"
+
+    lines = ["Window extraction produced inconsistent channel identities."]
+    configured_selection = _format_configured_channel_selection(shards)
+    if configured_selection is not None:
+        lines.append(configured_selection)
+
+    lines.append("Observed channel identities:")
+    for channel_name, count in sorted(channel_counts.items()):
+        record_word = "record" if count == 1 else "records"
+        lines.append(f"  - {channel_name}: {count} {record_word}")
+
+    first_channel = shards[0].channel_name
+    affected = [
+        shard
+        for shard in sorted(shards, key=lambda item: item.index.record_id)
+        if shard.channel_name != first_channel
+    ]
+    if affected:
+        lines.append("Affected records:")
+        for shard in affected:
+            lines.append(f"  - {shard.index.record_id}: {shard.channel_name}")
+
+    lines.append(
+        "This is not usually fixed by cleaning local artifacts. Configure extraction "
+        "by channel name or explicitly exclude/fallback records that cannot satisfy "
+        "the channel contract."
+    )
+    return "\n".join(lines)
+
+
+def _format_configured_channel_selection(shards: Sequence[_InspectedShard]) -> str | None:
+    selections = {
+        (
+            shard.channel_selector,
+            shard.configured_channel_index,
+            shard.configured_channel_name,
+        )
+        for shard in shards
+    }
+    if len(selections) != 1:
+        return None
+
+    selector, configured_index, configured_name = next(iter(selections))
+    if selector == "channel_index" and configured_index is not None:
+        return f"Configured channel selection: channel_index = {configured_index}"
+    if selector == "channel_name" and configured_name is not None:
+        return f'Configured channel selection: channel_name = "{configured_name}"'
+    return None
 
 
 def _build_partition_index(
