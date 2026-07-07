@@ -78,3 +78,21 @@ def test_note_is_indented_beneath_stage_banners() -> None:
     reporter.note("record 3/48 (102): 12 windows")
 
     assert stream.getvalue() == "    record 3/48 (102): 12 windows\n"
+
+
+def test_each_line_is_flushed_immediately_so_a_subprocess_pipe_streams_live() -> None:
+    """Regression test: piped (non-TTY) stdout is fully block-buffered by default.
+
+    Without an explicit flush per line, a subprocess consumer (the Step 0 notebook)
+    would receive every banner in one batch at process exit instead of live,
+    silently defeating the "no longer appears frozen" purpose of this reporter.
+    """
+    stream = io.StringIO()
+    snapshots: list[str] = []
+    stream.flush = lambda: snapshots.append(stream.getvalue())  # type: ignore[method-assign]
+    reporter = ProgressReporter(stream=stream, monotonic=lambda: 0.0)
+
+    reporter.header("run starting")
+    reporter.note("record 1/3")
+
+    assert snapshots == ["run starting\n", "run starting\n    record 1/3\n"]

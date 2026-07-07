@@ -81,3 +81,8 @@ class ProgressReporter:
         if self._stream is None:
             return
         print(line, file=self._stream)
+        # Flush immediately: when this stream is the write end of a subprocess pipe
+        # (as in the Step 0 notebook), Python fully block-buffers non-TTY stdout, so
+        # without an explicit flush every banner would arrive in one batch at process
+        # exit instead of live — defeating the point of reporting progress at all.
+        self._stream.flush()
