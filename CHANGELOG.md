@@ -30,6 +30,9 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 ### Documentation
 
 - Added the initial changelog and release governance documentation.
+- Completed the historical archive attribution and provenance audit for
+  `archive/original_2022/images/`, adding `archive/original_2022/ATTRIBUTION.md`
+  and `PROVENANCE.md` (retroactive entry for #59, missed when that PR merged).
 
 ### Security
 
