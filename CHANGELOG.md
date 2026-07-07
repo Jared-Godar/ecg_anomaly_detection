@@ -7,9 +7,18 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Added
 
+- `ecg-data run-pipeline` now prints per-stage progress banners (start, completion,
+  elapsed time, and key counts or artifact paths) for acquisition, inventory, record
+  processing, split, split diagnostics, training, and validation evaluation, plus
+  total elapsed run time, so long-running local runs no longer appear frozen.
+
 ### Changed
 
 ### Fixed
+
+- Pipeline progress output is now flushed per line so subprocess consumers
+  (including the Step 0 notebook) receive it live instead of buffered until
+  process exit, which is the default for non-TTY stdout in Python.
 
 ### Removed
 

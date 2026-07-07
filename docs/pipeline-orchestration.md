@@ -59,6 +59,13 @@ existing `runtime_summary.json` per-stage timings (see below) remain the authori
 evidence. Other subcommands (`acquire`, `inventory`, `split-windows`, and so on) are unchanged and
 continue to print a single completion line.
 
+Every line is flushed as it is written. Python fully block-buffers stdout when it is not a
+terminal, which is exactly the case for `notebooks/00-environment-setup-and-artifact-generation.ipynb`'s
+Step 0 cell: it runs this command through `subprocess.Popen` specifically so a reviewer can watch
+progress live. Without an explicit flush per line, every banner above would arrive in one batch at
+process exit instead of live. The notebook requires no changes to pick up this output — it already
+streams the CLI's combined stdout/stderr line by line.
+
 ## Output layout
 
 Each invocation receives a UUID and creates isolated ignored output directories:
