@@ -99,6 +99,14 @@ uv run ecg-data purge-run --repository-root . --run-id <run-id> --dry-run
 See [local artifact lifecycle helpers](pipeline-orchestration.md#local-artifact-lifecycle-helpers)
 for the full reference.
 
+## Checkpoint and resume long-running local experiments
+
+`ecg_anomaly_detection.experiment_tracking.ExperimentTracker` checkpoints one candidate at a time
+during long-running local experiment loops (for example, hyperparameter search notebooks), so an
+interruption loses at most the in-progress candidate. See [checkpoint and resume long-running
+experiments](../notebooks/local/README.md#checkpoint-and-resume-long-running-experiments) for the
+full API reference and a usage example.
+
 The preserved `archive/original_2022/` bundle is excluded from style and formatting hooks so the
 historical record is not rewritten. A separate CI job scans the complete Git history for secrets.
 

@@ -94,6 +94,47 @@ for the full command reference and the guarantee that these commands never touch
 acquisition baseline. For a full local reset instead of removing a single run, use
 `clean-local-pipeline-state.fish` if a Step 0 preflight check writes one.
 
+## Checkpoint and resume long-running experiments
+
+`ecg_anomaly_detection.experiment_tracking.ExperimentTracker` replaces the hand-rolled
+`atomic_write_csv`/`atomic_write_pickle`/`load_pickle` checkpoint helpers that local
+hyperparameter-search notebooks have previously had to define inline. It checkpoints one candidate
+at a time, immediately after it completes, so an interruption loses at most the in-progress
+candidate:
+
+```python
+from pathlib import Path
+from ecg_anomaly_detection.experiment_tracking import ExperimentTracker
+
+checkpoint_dir = Path("notebooks/local/model-experiments/outputs/gradient-boosting-v4")
+candidate_ids = [spec["experiment_id"] for spec in model_specs]
+tracker = ExperimentTracker(checkpoint_dir, candidate_ids)
+
+for spec in model_specs:
+    if tracker.is_completed(spec["experiment_id"]):
+        continue  # already checkpointed in a prior, interrupted run
+    with tracker.track(spec["experiment_id"]) as recorder:
+        model = fit_candidate(spec)
+        predictions = model.predict(x_validation_model)
+        recorder.set_metrics(compute_metrics(y_validation_model, predictions))
+        recorder.set_predictions(predictions)
+    print(tracker.progress())  # completed/remaining counts, elapsed time, estimated remaining
+
+final_results_path = tracker.finalize("macro_f1")  # raises if any candidate is still incomplete
+```
+
+Re-running the same cell with the same `checkpoint_dir` and candidate list resumes automatically:
+already-checkpointed candidates are skipped via `is_completed()`, and `tracker.load_result()` /
+`tracker.load_predictions()` recover a completed candidate's metrics and predictions without
+refitting. `finalize()` writes a `final-results.json` sorted by the metric you name, and refuses to
+run while any candidate remains incomplete rather than silently reporting a partial leaderboard as
+final.
+
+This is unrelated to `ecg_anomaly_detection.local_execution`'s `list-runs`/`purge-run` above, which
+manage governed `run_pipeline()` output, not ad hoc experiment loops. Checkpoint directories here
+are local, disposable, and excluded from Git like everything else in this directory — never run
+manifests, benchmark artifacts, model card evidence, or reproducibility evidence bundles.
+
 ## Working practices
 
 - Use repository-relative paths and package APIs where practical.
