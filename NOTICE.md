@@ -19,9 +19,9 @@ endorsement of this project for clinical use.
 
 ## Historical tutorial influence
 
-`archive/original_2022/wrangle.py` identifies the Towards Data Science article “Detecting Heart Arrhythmias with Deep Learning in Keras” as sample code used while developing the original dataset workflow. The source file retains the original article URL.
+`archive/original_2022/wrangle.py` identifies the Towards Data Science article "Detecting Heart Arrhythmias with Deep Learning in Keras" (Andrew Long) as sample code used while developing the original dataset workflow. The source file retains the original article URL.
 
-The precise extent of adaptation has not yet been audited. That audit should occur before the pipeline refactor, with attribution retained where required.
+An adaptation-extent audit is complete; see [`archive/original_2022/PROVENANCE.md`](archive/original_2022/PROVENANCE.md#code-provenance-evidence) for the comparison method and evidence. `wrangle.py`'s `load_ecg`, `make_dataset`, and `build_XY` functions, its `pts`/`nonbeat`/`abnormal` lists, and its `num_sec`/`fs` parameters are directly adapted from the cited article's linked source notebook, with only cosmetic formatting differences (docstrings versus inline comments, PEP 8 spacing). `wrangle.py`'s `split_my_data` function is not adapted from that source: the source notebook splits by patient identity (`random.sample(pts, 36)`), while `split_my_data` performs an ordinary beat-level `train_test_split`, independent of the cited article's approach.
 
 ## Images and notebook research material
 

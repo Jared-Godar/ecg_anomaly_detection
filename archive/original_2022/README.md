@@ -28,7 +28,7 @@ See [historical results](../../docs/historical-results.md) for the evaluation au
 | `model.ipynb` | Focused random-forest modeling scratchpad. |
 | `eeg_explore.ipynb` | Alternate-dataset experiment using Challenge 2017 files. |
 | `wrangle.ipynb` | Incomplete wrangling scratchpad. |
-| `wrangle.py` | Original data loading, window generation, and random split code. |
+| `wrangle.py` | Original data loading, window generation, and random split code; tutorial-adaptation audit complete. See [`PROVENANCE.md`](PROVENANCE.md#code-provenance-evidence). |
 | `images/` | Historical presentation images and diagrams; attribution audit complete. See [`ATTRIBUTION.md`](ATTRIBUTION.md) and [`PROVENANCE.md`](PROVENANCE.md). |
 | `ATTRIBUTION.md` | Per-file attribution status inventory for `images/`. |
 | `PROVENANCE.md` | Attribution audit method and provenance evidence for archived notebooks, `wrangle.py`, and `images/`. |

@@ -66,6 +66,15 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   guarantees across paired records (e.g. 201/202, sharing one source tape)
   as not yet implemented; split schema v2 has enforced this since its
   introduction (see `docs/record-grouped-splitting.md`).
+- Completed the `archive/original_2022/wrangle.py` tutorial-code adaptation
+  audit (`archive/original_2022/PROVENANCE.md`'s new "Code provenance
+  evidence" section), retrieving the cited article's linked source
+  repository and comparing it against `wrangle.py` line by line. Its
+  `load_ecg`, `make_dataset`, and `build_XY` functions and parameter lists
+  are directly adapted from that source; its `split_my_data` function is
+  not — the source splits by patient identity, while `split_my_data` uses
+  an ordinary beat-level split, independent of the cited approach. No
+  archived file was modified.
 
 ### Security
 
