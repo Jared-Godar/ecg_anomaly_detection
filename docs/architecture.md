@@ -14,26 +14,29 @@ pipeline modules are added only when supported behavior and tests arrive togethe
 
 ```text
 .
-├── archive/original_2022/     # preserved, unsupported original project bundle
-├── artifacts/                 # ignored generated models and run outputs
-├── configs/                   # versioned pipeline and experiment configuration
+├── .github/                    # CI workflows, issue forms, label manifest, Dependabot config
+├── archive/original_2022/      # preserved, unsupported original project bundle
+├── artifacts/                  # ignored generated models and run outputs
+├── configs/                    # versioned pipeline and experiment configuration
 ├── data/
-│   ├── raw/                   # immutable upstream files; ignored
-│   ├── external/              # other externally sourced files; ignored
-│   ├── interim/               # resumable transformations; ignored
-│   └── processed/             # model-ready outputs; ignored
-├── docs/                      # architecture, provenance, limitations, roadmap
-├── notebooks/                 # curated notebooks using supported package APIs
+│   ├── raw/                    # immutable upstream files; ignored
+│   ├── external/               # other externally sourced files; ignored
+│   ├── interim/                # resumable transformations; ignored
+│   └── processed/              # model-ready outputs; ignored
+├── docs/                       # architecture, provenance, limitations, roadmap
+├── notebooks/                  # curated notebooks using supported package APIs
+│   └── local/                  # ignored local notebook sandbox; see its own README
 ├── reports/
-│   └── figures/               # reproducible generated figures; ignored
-├── scripts/                   # thin operational entry points
-├── src/ecg_anomaly_detection/ # installable Python package
-├── pyproject.toml             # package metadata and tool configuration
-├── uv.lock                    # exact cross-platform dependency resolution
+│   └── figures/                # reproducible generated figures; ignored
+├── scripts/                    # thin operational entry points
+├── src/ecg_anomaly_detection/  # installable Python package
+├── pyproject.toml              # package metadata and tool configuration
+├── uv.lock                     # exact cross-platform dependency resolution
 └── tests/
-    ├── fixtures/              # small synthetic, redistributable fixtures
-    ├── integration/           # component-boundary and workflow tests
-    └── unit/                  # isolated transformation and validation tests
+    ├── fixtures/                # small synthetic, redistributable fixtures
+    ├── integration/             # component-boundary and workflow tests
+    ├── scripts/                 # tests for scripts/ operational tooling
+    └── unit/                    # isolated transformation and validation tests
 ```
 
 `pyproject.toml` separates core runtime, repository engineering, notebook infrastructure, and
@@ -104,8 +107,18 @@ Models, serialized objects, run outputs, and generated figures are ignored by de
 9. **Completed:** orchestrate current stages through one tested local workflow.
 10. **Completed:** index grouped model-ready record shards without concatenating arrays.
 11. **Completed:** add deterministic baseline training and validation-only metric contracts.
-12. **Next:** define protected test evaluation and model-card policy.
-13. Create curated notebooks that call supported package APIs.
+12. **Completed:** define protected-test evaluation policy (eligibility, access, lineage, rerun,
+    disclosure, and archival governance in [benchmark governance](benchmark-governance.md)) and
+    publish the model card ([`MODEL_CARD.md`](../MODEL_CARD.md)).
+13. **Completed:** create curated notebooks (`notebooks/00`–`02`) that call supported package APIs,
+    with automated execution validation against synthetic data (see
+    [notebook validation](../notebooks/README.md#validation)).
+
+This list predates and has been superseded by [`docs/modernization-roadmap.md`](modernization-roadmap.md),
+which tracks current phase-level status, including the one item this list never anticipated:
+executing (not just defining) the protected-test evaluation, which remains intentionally deferred
+post-1.0 (see the `M9 — Held-out Evaluation` milestone). Treat the roadmap, not this list, as the
+authoritative source for what remains open.
 
 See the [proposed pipeline design](pipeline-design.md) for stage contracts and lineage metadata. The
 directory structure defines ownership; it does not imply that the archived workflow has already

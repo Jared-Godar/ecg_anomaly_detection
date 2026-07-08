@@ -123,6 +123,49 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   "tutorial code adaptation extent... unaudited"/"remains under review"
   claim (`MODEL_CARD.md`, `README.md`'s limitations list) missed by the
   #74 doc sweep, which only caught the "Current status" table's copy.
+- Completed a systematic audit of every model and pipeline claim in
+  `README.md`, `MODEL_CARD.md`, and `docs/*` against generated evidence,
+  actual configuration files, and code behavior (#71). Verified accurate
+  and left unchanged: clean-checkout reproducibility across the `dev`,
+  `notebooks`, and `experiments` locked sync groups (tested via a real
+  `git clone` into a throwaway location, not inherited from CI); the
+  historical confusion matrix and metric values in `docs/historical-
+  results.md` against `archive/original_2022/report.ipynb`'s actual saved
+  cell outputs, digit for digit; the annotation-mapping table and its
+  24-symbol exclusion count against `configs/annotation-map-v1.toml`;
+  the 70/15/15 split ratios and `configs/training-baseline-v1.toml`'s
+  32 projection components; and the 144-source-file count (48 records
+  x 3 extensions) in `docs/data-provenance.md`. Found and fixed:
+  - `README.md`, `MODEL_CARD.md` (two places), and
+    `docs/window-extraction.md` all claimed "the first signal channel"
+    or "channel index 0" is used without a channel-selection analysis.
+    PIPE-006 (#56) already replaced positional channel selection with
+    name-based `MLII` resolution specifically because channel `0` isn't
+    consistently `MLII` across records -- confirmed against the real
+    `configs/windowing-v1.toml` and `windows.py`. Also confirmed, by
+    fetching the actual MIT-BIH `.hea` headers for records 102, 104, and
+    114, that `configs/windowing-v1.toml`'s `exclude_record_ids =
+    ["102", "104"]` is exactly correct: those two records have no
+    `MLII` channel at all (`V5`/`V2` only), while `114` (which shares
+    the same historical `channel_index = 0` instability) does have an
+    `MLII` channel and needs no exclusion under name-based selection.
+  - `docs/architecture.md`'s "Planned migration sequence" claimed
+    "**Next:** define protected test evaluation and model-card policy"
+    and listed creating curated notebooks as a future, unnumbered step.
+    Both are long complete (`MODEL_CARD.md`, `docs/benchmark-
+    governance.md`, and `notebooks/00`-`02` all exist and are
+    execution-validated); marked both items `Completed` and added a
+    pointer to `docs/modernization-roadmap.md` as the authoritative,
+    currently-maintained source, to keep this superseded list from
+    drifting the same way again. Also updated the directory map, which
+    was missing `.github/`, `notebooks/local/`, and `tests/scripts/`.
+  - `docs/README.md`'s documentation index was missing an entry for
+    `docs/baseline-training.md`, a real, linked-from-elsewhere file.
+  - `docs/environment-reproducibility.md` implied `scikit-learn` is only
+    installed with `--group experiments`; it is directly declared in
+    the `notebooks` group and already available with `--group notebooks`
+    alone. Fixed the workflow table and both import-verification
+    commands, confirmed against a real clean-checkout sync.
 
 ### Security
 

@@ -173,7 +173,9 @@ The repository's [MIT License](LICENSE) applies to project code and original doc
 
 - The dataset is small and is not representative of modern deployment populations.
 - The binary target collapses heterogeneous annotations and excludes others.
-- The first signal channel is used without a channel-selection analysis.
+- A single named channel (`MLII`, resolved per record rather than by position — see
+  [window extraction](docs/window-extraction.md#channel-identity-contract)) is used without a
+  comparative channel-selection analysis.
 - Adjacent beat-centered windows may overlap.
 
 ### Evaluation
