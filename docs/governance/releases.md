@@ -7,9 +7,10 @@ reviewable snapshot of the repository's source, configuration, documentation,
 and reproducibility contracts. They are not a distribution channel for data,
 models, benchmark results, or medical functionality.
 
-The package metadata currently starts at `0.1.0`. The repository has no tags or
-GitHub releases. This policy documents how a future release should be reviewed;
-it does not authorize or automate a tag, GitHub release, or package publication.
+The package metadata is versioned `1.0.0`, tagged as the `v1.0.0` GitHub release.
+This policy documents how each release should be reviewed; it does not by
+itself authorize a future tag, GitHub release, or package publication -- each
+still requires separately authorized work.
 
 A release does not imply production readiness, clinical suitability, medical
 utility, or regulatory compliance. This project remains a research, education,
