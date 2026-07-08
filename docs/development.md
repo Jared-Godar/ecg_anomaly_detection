@@ -86,6 +86,10 @@ execution counts, and `--include-narrative` to add the tracked walkthrough to de
 discovery. These flags never execute notebook cells. Full behavior, boundaries, and troubleshooting
 are documented in the [local notebook sandbox guide](../notebooks/local/README.md).
 
+This is distinct from the three curated public notebooks' own execution check, which does execute
+every cell (against synthetic data, never the real dataset) — see
+[notebook validation](../notebooks/README.md#validation).
+
 ## Clean up local pipeline runs
 
 `list-runs` and `purge-run` reclaim disk space from local `run-pipeline` output without touching
@@ -115,9 +119,10 @@ historical record is not rewritten. A separate CI job scans the complete Git his
 GitHub Actions recreates the locked environment, runs the test suite, and runs all repository
 type checks and repository checks for every pull request and every push to `main`. It also builds
 the package (wheel and source distribution) as a build-only assurance check and confirms the
-result is not committed — see [release governance](governance/releases.md#artifact-hygiene). Third-
-party Actions are pinned to immutable commit SHAs, and Dependabot proposes weekly updates for
-Actions and pre-commit hooks.
+result is not committed — see [release governance](governance/releases.md#artifact-hygiene) — and
+executes the three curated public notebooks end to end against synthetic data — see
+[notebook validation](../notebooks/README.md#validation). Third-party Actions are pinned to
+immutable commit SHAs, and Dependabot proposes weekly updates for Actions and pre-commit hooks.
 
 A separate workflow validates pull request and linked-issue planning metadata (assignee,
 milestone, labels, closing reference, and Project field completeness) on every pull request. See

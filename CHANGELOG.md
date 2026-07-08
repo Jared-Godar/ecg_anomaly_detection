@@ -32,6 +32,16 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   `LICENSE`; hatchling's unconfigured default previously bundled the entire
   git-tracked tree, including `archive/original_2022/`'s historical images
   and notebooks (2.6 MB, 170 files, down to 72 KB, 29 files).
+- `scripts/validate_curated_notebooks.py` and
+  `.github/workflows/notebook-validation.yml` execute the three curated
+  public notebooks end to end on every pull request, in an isolated `git
+  worktree` copy seeded with a small synthetic WFDB record set and a
+  matching acquisition manifest, so `acquire_dataset` takes its existing
+  verify-and-reuse path and the real MIT-BIH dataset is never downloaded.
+  This is genuine cell-by-cell execution of the real, unmodified curated
+  notebooks, distinct from `scripts/notebook_quality.py`'s structural/
+  hygiene-only check, which never executes a cell. See
+  [notebook validation](notebooks/README.md#validation).
 
 ### Changed
 
@@ -40,6 +50,12 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 - Pipeline progress output is now flushed per line so subprocess consumers
   (including the Step 0 notebook) receive it live instead of buffered until
   process exit, which is the default for non-TTY stdout in Python.
+- Notebook 02's Step 2 readiness check and `resolve_indexed_file()` read
+  `shard["path"]`/`shard["relative_path"]`, but the dataset index nests a
+  shard's path and hash under `shard["file"]["path"]`/`shard["file"]["sha256"]`
+  (`ShardIndex.file: IndexedFile`). This made Step 2 fail with "Missing train
+  shard files: None None..." for any real Step 0 run, not just the new
+  synthetic execution check that caught it.
 
 ### Removed
 

@@ -17,7 +17,7 @@ The labels are simplified reference-annotation classes from a historical dataset
 | **What is this?** | A responsible modernization of a notebook-oriented ECG classification project into a configuration-driven local data pipeline. |
 | **Why modernize it?** | The original work used absolute paths, an unrecorded environment, and random beat-window splits that cannot establish generalization to unseen patients. |
 | **What is implemented?** | Reproducible setup, acquisition, subject-aware preparation, deterministic baseline training, validation-only metrics, orchestration, and run manifests. |
-| **What comes next?** | Automated data-independent notebook execution checks and a separately reviewed protected test-partition evaluation. No supported modern benchmark exists yet. |
+| **What comes next?** | A separately reviewed protected test-partition evaluation. No supported modern benchmark exists yet. |
 
 ## Engineering capabilities demonstrated
 
@@ -63,7 +63,7 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 | Locked package environment and CLI | Test-partition evaluation |
 | Versioned, fail-safe dataset retrieval | Test-evaluation release policy |
 | File inventory, local integrity baseline, and model card | Modern held-out benchmark |
-| Typed WFDB ingestion and record validation | Automated notebook execution checks |
+| Typed WFDB ingestion and record validation | |
 | Auditable annotation mapping and window extraction | |
 | Deterministic subject-aware split manifests | |
 | Model-ready index over immutable record shards | |
@@ -76,6 +76,7 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 | Directory-based shard discovery for `split-windows`/`index-dataset` | |
 | [Subject-grouped guarantees across paired records](docs/record-grouped-splitting.md) (e.g. 201/202) from the same source | |
 | [Automated package build assurance check](docs/governance/releases.md#artifact-hygiene) (build-only, never published) | |
+| [Automated curated-notebook execution checks](notebooks/README.md#validation) (synthetic data, no dataset download) | |
 
 Cloud deployment/orchestration and cross-host runtime/resource benchmarking are intentionally out
 of scope for this local, portfolio case study rather than pending gaps — see [pipeline
@@ -186,8 +187,7 @@ The repository's [MIT License](LICENSE) applies to project code and original doc
 
 - The archived 2022 environment and exact dependency versions were not captured.
 - The supported pipeline is local and sequential; no production or cloud deployment is implemented.
-- Automated notebook execution checks remain pending; runtime and resource evidence is produced
-  per run but is not a cross-host benchmark.
+- Runtime and resource evidence is produced per run but is not a cross-host benchmark.
 - Some archived exploratory notebooks contain saved errors and duplicated implementation.
 
 ### Third-party material
