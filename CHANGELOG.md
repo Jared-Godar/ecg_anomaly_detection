@@ -17,6 +17,14 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Documentation
 
+- `docs/governance/repository-governance.md` now describes the branch protection actually
+  applied to `main` (#91) -- required status checks, 0-approval pull-request requirement,
+  admin enforcement, linear history, and force-push/deletion restrictions -- verified against
+  live settings, replacing the prior aspirational validation checklist. Discloses a known
+  residual gap (repository-level merge-method settings still permit rebase merges; tracked in
+  #98). `docs/governance/github-metadata-automation.md` updated to note the metadata gate is
+  now a required status check.
+
 ### Security
 
 ## 1.0.0 - 2026-07-08
