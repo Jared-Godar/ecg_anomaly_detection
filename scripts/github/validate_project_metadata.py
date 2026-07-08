@@ -3,9 +3,17 @@
 
 Enforces the PR-level and linked-issue-level metadata requirements described in
 docs/governance/github-project.md and docs/governance/github-metadata-automation.md:
-a pull request must have an assignee, a milestone, a type:* label, an area:* label,
-and a closing reference to an issue; that issue must be a member of the tracked
+a pull request must have an assignee, a type:* label, an area:* label, and a
+closing reference to an issue; that issue must be a member of the tracked
 GitHub Project and have every required Project field populated.
+
+A pull request must also have a milestone -- unless every issue it closes is
+itself deliberately unmilestoned, per docs/governance/issue-workflow.md's rule
+that a milestone is a delivery commitment assigned only when work requires
+one. The milestone requirement is inherited from the closing issue(s) rather
+than forced onto the PR, so an issue's own milestone decision is the single
+source of truth and cannot drift out of sync the way a separate opt-out label
+could.
 
 This intentionally does not attempt to validate issues at creation time. GitHub
 provides no clean rejection mechanism for issue creation comparable to a required
@@ -94,12 +102,19 @@ def _has_label_with_prefix(labels: Sequence[str], prefix: str) -> bool:
     return any(label.replace(" ", "").lower().startswith(normalized_prefix) for label in labels)
 
 
-def validate_pull_request(pr: PullRequestMetadata) -> tuple[str, ...]:
-    """Return PR-level violations; an empty tuple means the PR-level checks pass."""
+def validate_pull_request(
+    pr: PullRequestMetadata, *, require_milestone: bool = True
+) -> tuple[str, ...]:
+    """Return PR-level violations; an empty tuple means the PR-level checks pass.
+
+    require_milestone defaults to True so every existing caller keeps the original,
+    conservative behavior unless it explicitly opts out based on closing-issue state
+    (see closing_issue_milestones_require_pr_milestone).
+    """
     violations: list[str] = []
     if not pr.assignees:
         violations.append("pull request has no assignee")
-    if not pr.milestone:
+    if require_milestone and not pr.milestone:
         violations.append("pull request has no milestone")
     if not _has_label_with_prefix(pr.labels, "type:"):
         violations.append("pull request is missing a type:* label")
@@ -108,6 +123,18 @@ def validate_pull_request(pr: PullRequestMetadata) -> tuple[str, ...]:
     if not extract_closing_issue_numbers(pr.body):
         violations.append("pull request body has no closing issue reference (e.g. 'Closes #123')")
     return tuple(violations)
+
+
+def closing_issue_milestones_require_pr_milestone(milestones: Sequence[str | None]) -> bool:
+    """Return whether the PR must carry a milestone, inherited from its closing issues.
+
+    Exempt only when every closing issue is itself deliberately unmilestoned. No
+    closing issues (or a milestone that could not be determined) fails closed and
+    still requires one, matching this check's original, more conservative behavior.
+    """
+    if not milestones:
+        return True
+    return any(milestone is not None for milestone in milestones)
 
 
 def build_project_field_report(
@@ -171,6 +198,20 @@ def fetch_pull_request(pr_number: int, repo: str | None) -> PullRequestMetadata:
     )
 
 
+def fetch_issue_milestone(issue_number: int, repo: str | None) -> str | None:
+    """Fetch one issue's own milestone via the gh CLI.
+
+    Reads only the issue's native milestone field, not Project #5 data, so this
+    needs no elevated Project-scope token -- the default GITHUB_TOKEN suffices.
+    """
+    args = ["issue", "view", str(issue_number), "--json", "milestone"]
+    if repo:
+        args.extend(["--repo", repo])
+    payload = json.loads(_run_gh(args))
+    milestone = payload.get("milestone")
+    return milestone.get("title") if milestone else None
+
+
 def fetch_project_items(owner: str, project_number: int) -> list[dict[str, Any]]:
     """Fetch every item in the tracked Project, once, for reuse across issue lookups.
 
@@ -219,8 +260,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"error: {error}", file=sys.stderr)
         return 2
 
-    violations = list(validate_pull_request(pr))
     closing_issues = extract_closing_issue_numbers(pr.body)
+
+    require_milestone = True
+    if closing_issues:
+        try:
+            closing_milestones = tuple(
+                fetch_issue_milestone(number, args.repo) for number in closing_issues
+            )
+        except MetadataValidationError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
+        require_milestone = closing_issue_milestones_require_pr_milestone(closing_milestones)
+
+    violations = list(validate_pull_request(pr, require_milestone=require_milestone))
 
     if closing_issues:
         try:
