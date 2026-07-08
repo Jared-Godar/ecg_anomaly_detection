@@ -66,7 +66,7 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 | Typed WFDB ingestion and record validation | Automated notebook execution checks |
 | Auditable annotation mapping and window extraction | Cloud deployment or orchestration |
 | Deterministic subject-aware split manifests | Runtime and resource benchmarks |
-| Model-ready index over immutable record shards | Subject-grouped guarantees across the two records from one person |
+| Model-ready index over immutable record shards | |
 | Run manifests and synthetic end-to-end coverage | Historical tutorial code adaptation-extent audit |
 | Deterministic baseline training and validation-only tested metrics | Threshold, ROC/AUC, calibration, and generated figures |
 | Historical archive image attribution and provenance audit | |
@@ -74,6 +74,7 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 | Local run listing and purge helpers (`list-runs`/`purge-run`) | |
 | Local experiment checkpoint, resume, and progress/ETA reporting | |
 | Directory-based shard discovery for `split-windows`/`index-dataset` | |
+| [Subject-grouped guarantees across paired records](docs/record-grouped-splitting.md) (e.g. 201/202) from the same source | |
 
 See the [modernization roadmap](docs/modernization-roadmap.md) for phase-level status.
 

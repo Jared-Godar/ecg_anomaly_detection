@@ -56,6 +56,10 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 - Completed the historical archive attribution and provenance audit for
   `archive/original_2022/images/`, adding `archive/original_2022/ATTRIBUTION.md`
   and `PROVENANCE.md` (retroactive entry for #59, missed when that PR merged).
+- Fixed `README.md`'s "Current status" table, which listed subject-grouped
+  guarantees across paired records (e.g. 201/202, sharing one source tape)
+  as not yet implemented; split schema v2 has enforced this since its
+  introduction (see `docs/record-grouped-splitting.md`).
 
 ### Security
 
