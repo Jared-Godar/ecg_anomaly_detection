@@ -37,3 +37,7 @@ Regardless of attribution status:
 - prefer replacement figures generated directly from appropriately licensed data.
 
 The archive's [preservation policy](archive/original_2022/README.md#preservation-policy) excludes replacing or removing archived images. Attribution documentation, not replacement, is how this repository closes the gap for imagery that predates the modernization.
+
+## Documentation banner images
+
+The three banner images in `docs/assets/` (`ecg-readme-project-overview-banner.png`, `ecg-first-time-environment-setup-banner.png`, `ecg-notebook-workflow-banner.png`) are AI-generated original assets created specifically for this project's modernization documentation. They are not third-party material and are unrelated to the unresolved-provenance imagery described above under "Images and notebook research material."

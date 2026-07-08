@@ -1,5 +1,7 @@
 # Notebooks
 
+![Notebook Workflow — a guided path from setup to validation: environment and artifact generation, narrative walkthrough, validation-only model example](../docs/assets/ecg-notebook-workflow-banner.png)
+
 This directory uses a small, ordered public notebook workflow.
 
 ## Recommended order
