@@ -3,9 +3,10 @@
 ## Version source
 
 The project uses semantic versioning for the package and repository contract.
-The current initial version is `0.1.0`, declared in `pyproject.toml`. A version
-number in package metadata is not evidence that a Git tag, GitHub release, or
-published Python distribution exists.
+The current version is `1.0.0`, declared in `pyproject.toml`; the initial
+package version was `0.1.0`. A version number in package metadata is not
+evidence that a Git tag, GitHub release, or published Python distribution
+exists.
 
 For a release, the package metadata, changelog heading, tag, and release notes
 must identify the same version. Until a release is intentionally created, the

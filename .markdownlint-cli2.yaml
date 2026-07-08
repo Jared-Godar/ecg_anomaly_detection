@@ -2,6 +2,12 @@ config:
   # Prose and tables are intentionally optimized for rendered readability.
   MD013: false
   MD060: false
+  # CHANGELOG.md repeats "### Added"/"### Changed"/etc. under every version
+  # heading, per Keep a Changelog convention. siblings_only only flags
+  # duplicate headings that are true siblings (same parent), not the same
+  # subheading repeated under different version sections.
+  MD024:
+    siblings_only: true
 
 globs:
   - "**/*.md"

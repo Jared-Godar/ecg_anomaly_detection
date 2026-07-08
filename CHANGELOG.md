@@ -7,6 +7,22 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+### Governance
+
+### Documentation
+
+### Security
+
+## 1.0.0 - 2026-07-08
+
+### Added
+
 - `ecg-data run-pipeline` now prints per-stage progress banners (start, completion,
   elapsed time, and key counts or artifact paths) for acquisition, inventory, record
   processing, split, split diagnostics, training, and validation evaluation, plus
