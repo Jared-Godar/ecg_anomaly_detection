@@ -75,7 +75,9 @@ support clinical interpretation. See [annotation mapping](docs/annotation-mappin
   devices, acquisition practices, or deployment conditions.
 - Public availability does not make the records project-owned or appropriate for unrestricted
   redistribution. Re-identification attempts or linkage with identifying data are prohibited.
-- The pipeline uses channel index 0 without a channel-selection or signal-quality study.
+- The pipeline uses a single named channel (`MLII`, resolved per record by name — see
+  [window extraction](docs/window-extraction.md#channel-identity-contract)) without a
+  comparative channel-selection or signal-quality study.
 - Adjacent beat-centered windows can overlap; grouping prevents them from crossing partitions only
   because every record follows its subject assignment.
 - Class prevalence and coverage can vary by subject partition. Quality diagnostics expose selected
@@ -136,7 +138,7 @@ The documented baseline assumes that:
 
 - upstream files match the configured MIT-BIH v1.0.0 inventory and repository-reviewed digests;
 - configured record-to-subject identities are complete and correct for the included records;
-- the selected annotations, first channel, six-second geometry, and exclusion policy are suitable
+- the selected annotations, `MLII` channel, six-second geometry, and exclusion policy are suitable
   only for reproducing this educational project definition;
 - each generated shard and artifact matches its recorded size, digest, schema, counts, and lineage;
 - train, validation, and test remain subject- and record-disjoint under split schema v2;

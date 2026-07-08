@@ -19,8 +19,8 @@ Run the smallest command that supports the work being performed:
 |---|---|---|
 | Core package and CLI | `uv sync --locked` | Package runtime dependencies (`numpy`, `wfdb`) |
 | Repository engineering | `uv sync --locked --dev` | Core plus tests, coverage, type checking, and hooks |
-| Supported notebooks | `uv sync --locked --group notebooks` | Core plus IPython, Jupyter, kernel, plotting, and static notebook validation infrastructure |
-| Local model experiments | `uv sync --locked --group notebooks --group experiments` | Notebook stack plus scikit-learn, LightGBM, and XGBoost |
+| Supported notebooks | `uv sync --locked --group notebooks` | Core plus IPython, Jupyter, kernel, plotting, scikit-learn, and static notebook validation infrastructure |
+| Local model experiments | `uv sync --locked --group notebooks --group experiments` | Notebook stack (already includes scikit-learn) plus LightGBM and XGBoost |
 
 The `dev` group must contain repository engineering tools only. Notebook infrastructure belongs in
 `notebooks`; optional modeling and playground libraries belong in `experiments`. `nbformat` is the
@@ -49,8 +49,8 @@ The executable path must end in this repository's `.venv/bin/python`. Validate o
 with the group on every `uv run` command so `uv` selects the intended environment:
 
 ```fish
-uv run --group notebooks python -c "import IPython, ipykernel, matplotlib, matplotlib_inline, nbformat; print('notebooks ok')"
-uv run --group notebooks --group experiments python -c "import sklearn, lightgbm, xgboost; print('experiments ok')"
+uv run --group notebooks python -c "import IPython, ipykernel, matplotlib, matplotlib_inline, nbformat, sklearn; print('notebooks ok')"
+uv run --group notebooks --group experiments python -c "import lightgbm, xgboost; print('experiments ok')"
 ```
 
 ## Register and select the notebook kernel
@@ -89,10 +89,10 @@ checkpoints, local data, generated artifacts, models, or machine-specific config
 
 ## Troubleshooting
 
-- Missing `IPython`, `ipykernel`, `matplotlib`, or `matplotlib_inline`: sync and run with
-  `--group notebooks`; do not install the package globally.
-- Missing `sklearn`, `lightgbm`, or `xgboost`: add `--group experiments` together with the notebook
-  group for local playground work.
+- Missing `IPython`, `ipykernel`, `matplotlib`, `matplotlib_inline`, or `sklearn`: sync and run
+  with `--group notebooks`; do not install the package globally.
+- Missing `lightgbm` or `xgboost`: add `--group experiments` together with the notebook group for
+  local playground work.
 - Kernel absent from an editor: run `jupyter kernelspec list`, register it again, then reload the
   editor's kernel list.
 - Correct kernel name but wrong Python: inspect `sys.executable`; remove the stale kernelspec and

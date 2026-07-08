@@ -18,15 +18,19 @@ configured channel and window geometry are appropriate for another purpose.
 | Pre-window duration | 3 seconds | 1,080 samples at 360 Hz |
 | Post-window duration | 3 seconds | 1,080 samples at 360 Hz |
 | Total width | 6 seconds | 2,160 samples |
-| Channel index | 0 | First loaded WFDB channel |
+| Channel selector | `channel_name = "MLII"` | Resolved per record by name (see [channel identity contract](#channel-identity-contract)), not a fixed position |
+| Excluded records | `102`, `104` | These two records have no `MLII` channel at all (`V5`/`V2` only); a third record with the same historical `channel_index = 0` instability, `114`, has an `MLII` channel and needs no exclusion under name-based selection |
 | Boundary policy | `exclude` | Do not pad or truncate incomplete windows |
 
 For a center sample `c`, the slice is `[c - 1080:c + 1080]`. Python's exclusive right bound gives
 2,160 samples. The annotation is at offset 1,080. The implementation rejects duration/sample-rate
 combinations that do not produce whole sample counts.
 
-Channel index 0 preserves the historical project behavior but is not a channel-selection analysis.
-The selected channel name is recorded in every extraction report and artifact.
+Name-based `MLII` selection replaced the historical project's implicit assumption that the first
+loaded channel is always `MLII` (see [channel identity contract](#channel-identity-contract) for
+why that assumption was unsafe) but is not a channel-selection analysis: no comparative study of
+`MLII` against other channels' modeling suitability has been performed. The selected channel name
+is recorded in every extraction report and artifact.
 
 ## Extract one record
 
