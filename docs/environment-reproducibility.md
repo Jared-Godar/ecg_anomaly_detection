@@ -1,5 +1,7 @@
 # Local environment reproducibility
 
+![Technical banner for environment reproducibility, showing local execution and dependency motifs.](assets/ecg-environment-reproducibility-banner.png)
+
 ## Reproducibility contract
 
 The supported local environments are declared by `pyproject.toml` and resolved exactly by
