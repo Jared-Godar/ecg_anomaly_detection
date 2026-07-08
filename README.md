@@ -75,6 +75,7 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 | Local experiment checkpoint, resume, and progress/ETA reporting | |
 | Directory-based shard discovery for `split-windows`/`index-dataset` | |
 | [Subject-grouped guarantees across paired records](docs/record-grouped-splitting.md) (e.g. 201/202) from the same source | |
+| [Automated package build assurance check](docs/governance/releases.md#artifact-hygiene) (build-only, never published) | |
 
 Cloud deployment/orchestration and cross-host runtime/resource benchmarking are intentionally out
 of scope for this local, portfolio case study rather than pending gaps — see [pipeline

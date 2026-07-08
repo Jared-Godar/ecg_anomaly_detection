@@ -24,6 +24,14 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   Directory and file arguments can be mixed and repeated; an empty directory,
   missing path, symlink, or duplicate resolved file fails with a clear
   diagnostic instead of a confusing downstream error.
+- `.github/workflows/quality.yml` adds a `package-build` job that runs
+  `uv build` on every pull request as a build-only assurance check (wheel and
+  source distribution), confirms the result is not committed to Git, and
+  never uploads or publishes anywhere. `pyproject.toml` scopes the source
+  distribution to `src/`, `README.md`, `CHANGELOG.md`, `NOTICE.md`, and
+  `LICENSE`; hatchling's unconfigured default previously bundled the entire
+  git-tracked tree, including `archive/original_2022/`'s historical images
+  and notebooks (2.6 MB, 170 files, down to 72 KB, 29 files).
 
 ### Changed
 

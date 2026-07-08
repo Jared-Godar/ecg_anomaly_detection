@@ -78,7 +78,7 @@ Exit criterion: core transformations, split integrity, and metrics have automate
 - [x] Add Pyright Basic static type checking for source and tests.
 - [ ] Validate curated notebooks without downloading the complete dataset.
 - [x] Add dependency updates and secret scanning.
-- [ ] Build documentation or package artifacts without automatic external publication.
+- [x] Build documentation or package artifacts without automatic external publication.
 
 Exit criterion: every proposed change receives automated, data-independent quality checks.
 

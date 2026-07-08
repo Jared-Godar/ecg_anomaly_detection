@@ -62,6 +62,15 @@ distributions remain outside version control. A release review must use
 they are tracked in the future, remove them from Git in a reviewed change and
 retain an ignore policy; do not delete local artifacts blindly.
 
+`.github/workflows/quality.yml`'s `package-build` job runs this same
+confirmation automatically on every pull request, alongside a build-only
+`uv build` assurance check (wheel and source distribution) that never
+uploads or publishes anywhere. This is a data-independent quality check per
+the [modernization roadmap](../modernization-roadmap.md) Phase 6, not a
+release action; it does not create a tag, GitHub release, or package
+publication, and does not change this policy's separately-reviewed
+publication requirement above.
+
 Raw data, derived patient-level data, trained models, generated reports, and
 local manifests remain governed by the repository's existing data and artifact
 boundaries regardless of release status.

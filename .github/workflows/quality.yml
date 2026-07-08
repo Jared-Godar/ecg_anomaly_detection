@@ -78,3 +78,45 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: "false"
           GITLEAKS_VERSION: 8.30.1
+
+  package-build:
+    name: Build package artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+
+      # Build-only assurance check: confirms the package builds cleanly with
+      # every proposed change. Never uploads or publishes anywhere -- package
+      # publication remains a separate, explicitly reviewed decision per
+      # docs/governance/releases.md.
+      - name: Build wheel and source distribution
+        run: uv build
+
+      - name: Verify built artifacts exist
+        run: |
+          test -n "$(find dist -maxdepth 1 -name '*.whl')" || {
+            echo "::error::no wheel produced under dist/"
+            exit 1
+          }
+          test -n "$(find dist -maxdepth 1 -name '*.tar.gz')" || {
+            echo "::error::no source distribution produced under dist/"
+            exit 1
+          }
+
+      - name: Confirm built artifacts are not tracked in Git
+        run: |
+          tracked=$(git ls-files dist)
+          if [[ -n "$tracked" ]]; then
+            echo "::error::built package artifacts must not be committed:"
+            echo "$tracked"
+            exit 1
+          fi

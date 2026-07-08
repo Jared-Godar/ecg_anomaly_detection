@@ -25,6 +25,19 @@ dependencies = [
 [project.scripts]
 ecg-data = "ecg_anomaly_detection.cli:main"
 
+[tool.hatch.build.targets.sdist]
+# Without this, hatchling's default sdist includes the entire git-tracked tree
+# (archive/original_2022/'s historical notebooks and images, .github/, tests/,
+# docs/) -- unrelated to installing the package. Scope it to what a source
+# distribution actually needs to build and identify the package.
+include = [
+  "src/",
+  "README.md",
+  "CHANGELOG.md",
+  "NOTICE.md",
+  "LICENSE",
+]
+
 [dependency-groups]
 dev = [
   "nbformat>=5.10,<6",

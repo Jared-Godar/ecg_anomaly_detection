@@ -113,9 +113,11 @@ historical record is not rewritten. A separate CI job scans the complete Git his
 ## Pull request checks
 
 GitHub Actions recreates the locked environment, runs the test suite, and runs all repository
-type checks and repository checks for every pull request and every push to `main`. Third-party
-Actions are pinned to immutable commit SHAs, and Dependabot proposes weekly updates for Actions and
-pre-commit hooks.
+type checks and repository checks for every pull request and every push to `main`. It also builds
+the package (wheel and source distribution) as a build-only assurance check and confirms the
+result is not committed — see [release governance](governance/releases.md#artifact-hygiene). Third-
+party Actions are pinned to immutable commit SHAs, and Dependabot proposes weekly updates for
+Actions and pre-commit hooks.
 
 A separate workflow validates pull request and linked-issue planning metadata (assignee,
 milestone, labels, closing reference, and Project field completeness) on every pull request. See
