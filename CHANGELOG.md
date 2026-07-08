@@ -15,7 +15,23 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- `.github/labels.json` gains seven labels that were already in active current use but never
+  backported into the manifest: `area: ci-cd`, `area: cli`, `area: data`, `area: pipeline`,
+  `area: validation`, `portfolio: operational-maturity`, and `risk: low` (#67). This resolves the
+  label drift `repository-hygiene.yml` reports against currently-open issues and pull requests;
+  `scripts/detect_label_drift.py` (no `--include-closed`) now finds zero drift. A 31-item residual
+  of pre-taxonomy legacy labels and unused GitHub defaults remains on closed/merged history --
+  documented in `docs/governance/label-taxonomy.md`'s expanded normalization table, left for a
+  separate, deliberate maintainer decision (per-issue relabeling and label deletion are both
+  higher-consequence than a manifest edit, and are not performed by this change).
+
 ### Documentation
+
+- `docs/governance/label-taxonomy.md`'s `area:*` dimension list and existing-label normalization
+  table expanded to cover all 40 labels found undeclared by #67's live drift scan, marking each as
+  a confident migration target or an open judgment call for the maintainer. `docs/governance/
+  repository-hygiene.md` updated to describe the reconciled state rather than the original
+  drift finding.
 
 - `docs/governance/repository-governance.md` now describes the branch protection actually
   applied to `main` (#91) -- required status checks, 0-approval pull-request requirement,

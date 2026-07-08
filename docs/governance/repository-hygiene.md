@@ -29,14 +29,18 @@ permissions, unlike the Project V2 field checks in
 A label can match the canonical *formatting* (a space after the colon) while
 still not being in the manifest — the check compares against the actual
 manifest set, not just a style pattern. Running this for the first time
-against this repository's real state surfaced 40 labels in use that are not
-declared in `.github/labels.json`, including several new-format labels in
-active current use (`area: cli`, `area: pipeline`, `area: ci-cd`,
-`area: validation`, `area: data`, `portfolio: operational-maturity`,
-`risk: low`) alongside pre-taxonomy legacy labels and unused GitHub default
-labels. That is a manifest-completeness question distinct from this tool's
-job of flagging drift against whatever the manifest currently says, and is
-tracked separately rather than resolved here.
+against this repository's real state surfaced 40 labels in use that were not
+declared in `.github/labels.json`. Issue #67 reconciled that drift: the seven
+new-format labels in active current use (`area: cli`, `area: pipeline`,
+`area: ci-cd`, `area: validation`, `area: data`, `portfolio: operational-
+maturity`, `risk: low`) are now declared in the manifest, which resolves the
+drift this check reports against currently-open issues and pull requests.
+The remaining pre-taxonomy legacy labels and unused GitHub default labels
+identified in that reconciliation are documented in
+[label taxonomy § Existing-label normalization](label-taxonomy.md#existing-label-normalization);
+they only appear as drift on closed/merged history (`--include-closed`) and
+their per-issue migration or deletion remains a separate, deliberate
+maintainer action.
 
 ## Stale issue and pull request handling: declined
 
