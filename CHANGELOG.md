@@ -84,6 +84,21 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   column and added a short explanatory note instead. Also removed the
   stale "Historical tutorial code adaptation-extent audit" row, resolved
   by the prior entry above but never removed from this table at the time.
+- Scoped `MODEL_CARD.md`'s bundled "no threshold analysis, ROC/AUC,
+  calibration analysis" limitation into two distinct dispositions.
+  ROC/AUC and calibration analysis are confirmed permanently out of
+  scope: the supported estimator predicts a hard class by nearest-centroid
+  assignment and exposes no ranked score or predicted probability for
+  either to evaluate against, so adding one would be a new modeling
+  choice, not an evaluation-reporting addition. Threshold-based decision
+  analysis over the existing per-window centroid-distance margin, and
+  generated figures, are identified as a candidate follow-up (not created
+  as an issue without further review) since that margin is already
+  computed internally and reporting a sweep over it doesn't require any
+  new modeling choice. Also fixed two more copies of the already-stale
+  "tutorial code adaptation extent... unaudited"/"remains under review"
+  claim (`MODEL_CARD.md`, `README.md`'s limitations list) missed by the
+  #74 doc sweep, which only caught the "Current status" table's copy.
 
 ### Security
 

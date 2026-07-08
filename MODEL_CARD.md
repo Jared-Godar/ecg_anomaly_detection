@@ -213,15 +213,24 @@ and [baseline evaluation](docs/baseline-evaluation.md).
   sparse-class checks are warnings, so an accepted run can still have weak class coverage.
 - The nearest-centroid baseline, random projection, fixed binary labels, and default class decision
   are engineering fixtures rather than evidence-backed modeling choices for another context.
-- No threshold analysis, ROC/AUC, calibration analysis, uncertainty estimate, robustness study,
-  subgroup analysis, external validation, device/site shift analysis, or held-out test result is
-  supported or claimed.
+- ROC/AUC and calibration analysis are not supported or claimed, and are not planned: the
+  supported estimator predicts a hard class by nearest-centroid assignment
+  (`np.argmin` over centroid distances) and exposes no ranked score or predicted
+  probability for either to score against. Adding one would be a new modeling
+  choice, not an evaluation-reporting addition, and is out of scope for this
+  baseline's intentionally fixture-grade role (see above).
+- Threshold-based decision analysis over the existing per-window centroid-distance
+  margin, and figures generated from validation-only evaluation output, are
+  candidate follow-up work, not yet scoped or implemented. Any such work must
+  stay within the `validation` partition per [evaluation policy](docs/evaluation-policy.md).
+- No uncertainty estimate, robustness study, subgroup analysis, external validation,
+  device/site shift analysis, or held-out test result is supported or claimed.
 - Determinism depends on the recorded software, configuration, inputs, and execution contract.
   Runtime and resource values are host observations, not performance benchmarks.
 - The original 2022 environment was not captured, and its results are not exactly reproducible.
-- Historical archive image attribution is audited (see [NOTICE.md](NOTICE.md) and
-  [`ATTRIBUTION.md`](archive/original_2022/ATTRIBUTION.md)); historical tutorial code
-  adaptation extent remains under review. Neither is reused in this card.
+- Historical archive image attribution and `wrangle.py` tutorial-code adaptation extent are both
+  audited (see [NOTICE.md](NOTICE.md), [`ATTRIBUTION.md`](archive/original_2022/ATTRIBUTION.md),
+  and [`PROVENANCE.md`](archive/original_2022/PROVENANCE.md)). Neither is reused in this card.
 
 ## Maintenance and change control
 

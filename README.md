@@ -68,7 +68,7 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 | Deterministic subject-aware split manifests | |
 | Model-ready index over immutable record shards | |
 | Run manifests and synthetic end-to-end coverage | |
-| Deterministic baseline training and validation-only tested metrics | Threshold, ROC/AUC, calibration, and generated figures |
+| Deterministic baseline training and validation-only tested metrics | Threshold analysis and generated figures (candidate follow-up) |
 | Historical archive image attribution and provenance audit | |
 | Per-stage pipeline progress reporting for `run-pipeline` | |
 | Local run listing and purge helpers (`list-runs`/`purge-run`) | |
@@ -79,7 +79,9 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 Cloud deployment/orchestration and cross-host runtime/resource benchmarking are intentionally out
 of scope for this local, portfolio case study rather than pending gaps — see [pipeline
 design](docs/pipeline-design.md#proposed-cloud-mapping) and [reproducibility
-evidence](docs/reproducibility-evidence.md) for the reasoning.
+evidence](docs/reproducibility-evidence.md) for the reasoning. ROC/AUC and calibration analysis are
+likewise out of scope: the baseline exposes no ranked score or predicted probability to evaluate
+either against — see [known limitations](MODEL_CARD.md#known-limitations-and-residual-risks).
 
 See the [modernization roadmap](docs/modernization-roadmap.md) for phase-level status.
 
@@ -189,10 +191,11 @@ The repository's [MIT License](LICENSE) applies to project code and original doc
 
 ### Third-party material
 
-- Historical archive image attribution is audited; see [NOTICE.md](NOTICE.md) and
-  [`ATTRIBUTION.md`](archive/original_2022/ATTRIBUTION.md) for per-file status, including assets
-  where provenance could not be resolved. Historical tutorial code adaptation extent remains
-  unaudited. Unverified assets are not reused in new portfolio material.
+- Historical archive image attribution and `wrangle.py` tutorial-code adaptation extent are both
+  audited; see [NOTICE.md](NOTICE.md), [`ATTRIBUTION.md`](archive/original_2022/ATTRIBUTION.md),
+  and [`PROVENANCE.md`](archive/original_2022/PROVENANCE.md) for per-file status, including assets
+  where provenance could not be resolved. Unverified assets are not reused in new portfolio
+  material.
 
 ## Citation, contribution, and license
 
