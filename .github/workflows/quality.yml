@@ -56,7 +56,14 @@ jobs:
       - name: Run repository checks
         env:
           # A dedicated job below performs the full-history secret scan.
-          SKIP: gitleaks,pyright
+          # no-commit-to-branch guards local developer commits directly to
+          # main; it provides no protective value in CI, which only ever
+          # checks out an existing commit and can't "commit" anything, and
+          # it unconditionally fails on the push-to-main trigger since that
+          # trigger's checked-out branch legitimately is main. Skipped here
+          # only -- .pre-commit-config.yaml still enforces it for every
+          # local `pre-commit run` and `git commit`.
+          SKIP: gitleaks,pyright,no-commit-to-branch
         run: uvx --from pre-commit==4.6.0 pre-commit run --all-files --show-diff-on-failure
 
   secrets:
