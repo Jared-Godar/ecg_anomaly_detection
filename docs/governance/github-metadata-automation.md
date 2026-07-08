@@ -160,7 +160,10 @@ checks (Project membership and field completeness) both enforce immediately once
 `PROJECT_METADATA_TOKEN` is configured.
 
 Marking this workflow as a required status check in branch protection is a separate, manual
-repository-settings decision and is not configured by the workflow itself.
+repository-settings decision, not configured by the workflow itself. As of #91, `Validate PR and
+linked-issue metadata` is one of the required status checks on `main` — see [repository
+governance](repository-governance.md#current-branch-protection-on-main) for the current
+configuration.
 
 ### Why issue creation is not blocked
 

@@ -57,27 +57,52 @@ including comments raised during self-review or by automated tooling.
 ## Enforcement boundary
 
 Committed files document ownership and the expected workflow. GitHub branch
-protection or rulesets, allowed merge methods, automatic branch deletion, and
-required-review behavior are configured in repository settings. They are not
-enforced by `CODEOWNERS` or this document alone. Repository settings must be
-configured and periodically checked against the validation checklist below.
+protection, allowed merge methods, automatic branch deletion, and
+required-review behavior are configured in repository settings, not enforced
+by `CODEOWNERS` or this document alone. The current configuration is recorded
+below; re-verify it periodically against `gh api repos/Jared-Godar/
+ecg_anomaly_detection/branches/main/protection` rather than trusting this
+document to stay current on its own.
 
-## PR-ready validation checklist
+## Current branch protection on `main`
 
-Before merging this governance change, confirm:
+Applied 2026-07-08 (#91), verified live against the API above:
 
-- [ ] `main` branch protection or an equivalent ruleset is enabled.
-- [ ] Pull requests are required before merge.
-- [ ] Required CI status checks are enabled.
-- [ ] Branches are required to be up to date before merge.
-- [ ] Stale approvals are dismissed when new commits are pushed.
-- [ ] Review conversations must be resolved before merge.
-- [ ] Force pushes to `main` are blocked.
-- [ ] Deletion of `main` is blocked.
-- [ ] Linear history is required.
-- [ ] Merge commits are disabled.
-- [ ] Rebase merges are disabled.
-- [ ] Squash merging is enabled and retained as the only merge method.
-- [ ] Automatic deletion of head branches after merge is enabled.
-- [ ] GitHub recognizes `.github/CODEOWNERS` and assigns `@Jared-Godar`.
-- [ ] CI passes on the pull request.
+- **Required status checks** (strict — the branch must be up to date before
+  merge): `Locked environment and tests`, `Pre-commit checks`, `Secret scan`,
+  `Build package artifacts`, `Execute curated notebooks without the full
+  dataset`, `Validate PR and linked-issue metadata`.
+- **`Detect label drift` is intentionally not a required check.** Its
+  workflow triggers only on `schedule` and `workflow_dispatch`, never
+  `pull_request`, so it structurally cannot post a status to a pull
+  request's head commit — marking it required would make every pull request
+  permanently unmergeable. It also fails by design until #67 is resolved.
+  This is a deliberate exclusion, not an oversight.
+- **Pull requests are required before merge; 0 approvals are required.**
+  This repository has one maintainer (`@Jared-Godar`), who is both author and
+  would-be reviewer on every pull request, and GitHub does not allow a pull
+  request author to approve their own pull request — requiring any approval
+  would make every pull request permanently unmergeable. Requiring the
+  pull-request mechanism itself (branch, required checks, review surface,
+  conversation resolution) without a second-approver requirement is the
+  enforceable ceiling for a single-maintainer repository; self-review per
+  the CI and review model above remains the actual review discipline.
+- **Enforced for administrators**: the repository owner is bound by the same
+  rules as any other contributor; there is no merge-button bypass.
+- **Linear history is required.** Merge commits cannot be merged into
+  `main`. In practice every merge to date has also been a squash merge
+  (verified: `git log --merges` shows no two-parent commits on `main`), but
+  see the known residual gap below.
+- **Force pushes and deletion of `main` are both disabled.**
+- **Conversation resolution is required** before merge.
+- **`.github/CODEOWNERS` assigns `@Jared-Godar`** as default owner of all
+  repository content; confirmed present and correctly scoped.
+
+### Known residual gap
+
+The repository-level merge-method settings (`allow_merge_commit`,
+`allow_rebase_merge`) are still both enabled, even though squash-only is the
+documented and, so far, actual practice. Branch protection's linear-history
+requirement blocks true two-parent merge commits, but does not by itself
+disable the rebase-merge option in the GitHub merge-button UI. Tracked in
+issue #98; not yet applied.
