@@ -84,6 +84,9 @@ ipython_config.py
 /notebooks/local/**
 !/notebooks/local/README.md
 
+# Kept debug copy from scripts/validate_curated_notebooks.py --keep-worktree
+/.notebook-validation-worktree/
+
 # Generated documentation sites
 /site/
 docs/_build/
