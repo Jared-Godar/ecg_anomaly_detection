@@ -49,6 +49,12 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   `.github/labels.json`. Read-only; never relabels anything. Stale issue/PR bot automation
   was considered and explicitly declined as not justified by this repository's actual
   activity — see `docs/governance/repository-hygiene.md`.
+- Fixed the pull-request metadata gate's milestone check
+  (`scripts/github/validate_project_metadata.py`), which previously required every pull
+  request to carry a milestone unconditionally. It now inherits the requirement from the
+  issue(s) the pull request closes, exempting a pull request only when every closing issue
+  is itself deliberately unmilestoned, per the existing "milestone is a delivery commitment,
+  not a mandatory tag" policy.
 
 ### Documentation
 

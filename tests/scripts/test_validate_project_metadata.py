@@ -106,6 +106,49 @@ def test_a_thematic_label_alone_does_not_satisfy_the_type_or_area_requirement() 
     assert "pull request is missing an area:* label" in violations
 
 
+def test_missing_milestone_passes_when_not_required() -> None:
+    pr = vpm.PullRequestMetadata(
+        number=5,
+        assignees=("x",),
+        milestone=None,
+        labels=("type: documentation", "area: documentation"),
+        body="Closes #78",
+    )
+    violations = vpm.validate_pull_request(pr, require_milestone=False)
+    assert "pull request has no milestone" not in violations
+
+
+def test_missing_milestone_still_fails_when_required() -> None:
+    pr = vpm.PullRequestMetadata(
+        number=6,
+        assignees=("x",),
+        milestone=None,
+        labels=("type: documentation", "area: documentation"),
+        body="Closes #78",
+    )
+    violations = vpm.validate_pull_request(pr, require_milestone=True)
+    assert "pull request has no milestone" in violations
+
+
+# --- closing_issue_milestones_require_pr_milestone ----------------------------------
+
+
+def test_milestone_required_when_no_closing_issues_are_known() -> None:
+    assert vpm.closing_issue_milestones_require_pr_milestone(()) is True
+
+
+def test_milestone_not_required_when_every_closing_issue_is_unmilestoned() -> None:
+    assert vpm.closing_issue_milestones_require_pr_milestone((None, None)) is False
+
+
+def test_milestone_required_when_any_closing_issue_has_one() -> None:
+    assert vpm.closing_issue_milestones_require_pr_milestone((None, "M8")) is True
+
+
+def test_milestone_required_when_every_closing_issue_has_one() -> None:
+    assert vpm.closing_issue_milestones_require_pr_milestone(("M5", "M5")) is True
+
+
 # --- build_project_field_report / validate_project_membership ----------------------
 
 
@@ -190,6 +233,36 @@ def test_fetch_pull_request_raises_on_gh_failure() -> None:
     ):
         with pytest.raises(vpm.MetadataValidationError, match="pull request not found"):
             vpm.fetch_pull_request(999999, repo=None)
+
+
+def test_fetch_issue_milestone_parses_gh_output_with_a_milestone() -> None:
+    with patch.object(
+        subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess(
+            [], 0, stdout='{"milestone": {"title": "M8"}}', stderr=""
+        ),
+    ):
+        assert vpm.fetch_issue_milestone(69, repo=None) == "M8"
+
+
+def test_fetch_issue_milestone_returns_none_when_absent() -> None:
+    with patch.object(
+        subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess([], 0, stdout='{"milestone": null}', stderr=""),
+    ):
+        assert vpm.fetch_issue_milestone(67, repo=None) is None
+
+
+def test_fetch_issue_milestone_raises_on_gh_failure() -> None:
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="issue not found"),
+    ):
+        with pytest.raises(vpm.MetadataValidationError, match="issue not found"):
+            vpm.fetch_issue_milestone(999999, repo=None)
 
 
 def test_fetch_project_items_raises_metadata_validation_error_on_failure() -> None:

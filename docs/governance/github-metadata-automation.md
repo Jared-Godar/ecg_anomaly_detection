@@ -131,9 +131,13 @@ uv run python scripts/github/validate_project_metadata.py --pr-number 65
 
 The check validates two layers:
 
-- **Pull request level**: an assignee, a milestone, at least one `type:*` label, at least one
-  `area:*` label, and a body closing reference (`Closes #N`, `Fixes #N`, `Resolves #N`, and their
-  keyword variants) to an issue.
+- **Pull request level**: an assignee, at least one `type:*` label, at least one `area:*` label,
+  and a body closing reference (`Closes #N`, `Fixes #N`, `Resolves #N`, and their keyword
+  variants) to an issue. A milestone is also required, unless every issue the pull request closes
+  is itself deliberately unmilestoned (per [issue workflow](issue-workflow.md)'s rule that a
+  milestone is a delivery commitment, not a mandatory tag) — the check reads each closing issue's
+  own milestone field and inherits that decision rather than forcing an unrelated milestone onto
+  the pull request.
 - **Linked issue level**: for every issue number extracted from a closing reference, that the
   issue is a member of the tracked Project and has every field in
   [Required fields](github-project.md#required-fields) populated.
