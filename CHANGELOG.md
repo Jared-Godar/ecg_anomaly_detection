@@ -47,6 +47,12 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   #100). `AGENTS.md`'s pull-request-metadata guidance corrected to use `Review` (not `In Progress`)
   for an open pull request awaiting merge, matching this document's own lifecycle description.
 
+- Added three AI-generated banner images (`docs/assets/`) to the root `README.md`, `notebooks/
+  README.md`, and the Step 0 environment-setup notebook, giving the repository's highest-visibility
+  entry points a consistent visual identity. `NOTICE.md` records their AI-generated-original
+  provenance, distinct from the unresolved-provenance historical imagery covered by the MOD-008
+  audit (#107).
+
 ### Security
 
 ## 1.0.0 - 2026-07-08

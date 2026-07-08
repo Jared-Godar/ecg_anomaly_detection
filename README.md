@@ -1,5 +1,7 @@
 # ECG Data Pipeline Modernization
 
+![ECG Anomaly Detection — Modernization Case Study: governance, reproducibility, engineering discipline, validation-only, responsible ML](docs/assets/ecg-readme-project-overview-banner.png)
+
 > A historical ECG machine-learning project being modernized into a reproducible, auditable data-engineering case study.
 
 This repository preserves a 2022 educational experiment built on the public MIT-BIH Arrhythmia Database and incrementally replaces its notebook-bound workflow with tested package boundaries, versioned configuration, explicit lineage, and subject-aware data preparation.
