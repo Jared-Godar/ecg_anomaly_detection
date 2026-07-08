@@ -5,7 +5,9 @@
 This model card documents the supported deterministic baseline and the pipeline that produces it.
 It is a transparency and reproducibility record for a historical educational project under
 modernization, not a performance claim. It describes repository state at the checked-out revision;
-generated models, datasets, and metrics are deliberately not committed.
+generated models, datasets, and metrics are deliberately not committed. For the tagged repository
+version this corresponds to, see the [changelog](CHANGELOG.md) and [GitHub
+releases](https://github.com/Jared-Godar/ecg_anomaly_detection/releases).
 
 The repository is a modernization, reproducibility, data-engineering, operational-maturity, and
 responsible machine-learning documentation case study. It is not medical or clinical software,

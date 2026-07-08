@@ -84,12 +84,13 @@ Exit criterion: every proposed change receives automated, data-independent quali
 
 ## Phase 7 — Portfolio polish
 
-**v1.0.0 scope versus post-1.0 roadmap:** every claim in `README.md`, `MODEL_CARD.md`, and
-`docs/*` has been audited against generated evidence and code behavior (#71); the one remaining
-unchecked box below (held-out evaluation) is intentionally scoped out of v1.0.0 and tracked
-separately in `M9 — Held-out Evaluation`, not silently checked off or hidden. Phase 7 therefore
-completes its v1.0.0-relevant scope with one honestly-open, deliberately-deferred item — this is
-accurate reporting, not an incomplete audit.
+**v1.0.0 scope versus post-1.0 roadmap:** the repository has shipped its [`v1.0.0`
+release](https://github.com/Jared-Godar/ecg_anomaly_detection/releases/tag/v1.0.0). Every claim in
+`README.md`, `MODEL_CARD.md`, and `docs/*` was audited against generated evidence and code behavior
+before the release (#71); the one remaining unchecked box below (held-out evaluation) was
+intentionally scoped out of v1.0.0 and is tracked separately in `M9 — Held-out Evaluation`, not
+silently checked off or hidden. Phase 7 therefore completed its v1.0.0-relevant scope with one
+honestly-open, deliberately-deferred item — this is accurate reporting, not an incomplete audit.
 
 - [x] Document repository architecture and proposed data lineage.
 - [ ] Define and execute a separately reviewed held-out evaluation protocol. **Deliberately deferred
@@ -97,7 +98,7 @@ accurate reporting, not an incomplete audit.
   governance this requires is already defined (next item), but forcing the single irreversible,
   governance-gated protected-test execution itself against a release milestone would contradict
   that governance's own deliberate gating. Tracked in the `M9 — Held-out Evaluation` milestone
-  (#72, #73). v1.0.0 ships honestly documenting that no held-out benchmark exists yet, per the
+  (#72, #73). v1.0.0 shipped honestly documenting that no held-out benchmark exists yet, per the
   existing evaluation-policy and benchmark-governance boundaries below.
 - [x] Publish a validation-only model card covering assumptions, evidence boundaries, limitations,
   intended use, and prohibited use without implying that a held-out benchmark exists.
