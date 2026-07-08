@@ -24,6 +24,12 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   residual gap (repository-level merge-method settings still permit rebase merges; tracked in
   #98). `docs/governance/github-metadata-automation.md` updated to note the metadata gate is
   now a required status check.
+- `docs/governance/github-project.md` gains a CLI reference for setting Project #5's Status field
+  via `gh project item-edit`, with the live field/option IDs, confirmed writable by a round-trip
+  test (moved an item, verified, reverted). Discloses that the `Pull request merged` workflow has
+  consistently landed merged items at `Closed` rather than the documented `Merged` (tracked in
+  #100). `AGENTS.md`'s pull-request-metadata guidance corrected to use `Review` (not `In Progress`)
+  for an open pull request awaiting merge, matching this document's own lifecycle description.
 
 ### Security
 

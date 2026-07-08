@@ -58,8 +58,10 @@
   size, and release planning in Project fields rather than duplicating them as labels.
 - Assign the delivery milestone that the work is required to complete. Do not use milestones as topic labels.
 - Add the pull request to the `ECG Pipeline Modernization` GitHub Project when it contributes to the tracked roadmap.
-- Set the project status to `In Progress` for an open pull request, `Merged` after merge, and
-  `Closed` when its linked issue is completed.
+- Set the project status to `In Progress` once implementation starts, `Review` once the pull
+  request is open and awaiting merge, `Merged` after merge (the built-in workflow can leave it at
+  `Closed` instead; correct manually when that happens -- see #100), and `Closed` when its linked
+  issue is completed.
 - Verify assignee, labels, milestone, project membership, and project status after creating the pull request; do not infer success from the creation command alone.
 - When metadata is ambiguous, report the unresolved choice instead of inventing a classification.
 
@@ -68,8 +70,10 @@
 - Add every issue and pull request to the `ECG Pipeline Modernization` Project #5.
 - Populate Status, Workstream, Issue Type, Priority, Risk, Size, Repository Area, Portfolio Signal,
   and Target Release for every project item.
-- Set new issues to `Backlog`, active pull requests to `In Progress`, merged pull requests to
-  `Merged`, and completed closed issues to `Closed`.
+- Set new issues to `Backlog`, active pull requests to `In Progress` while implementation is
+  underway and `Review` once open and awaiting merge, merged pull requests to `Merged` (correcting
+  manually if the built-in workflow leaves it at `Closed` -- see #100), and completed closed issues
+  to `Closed`.
 - Preserve manually curated project values unless they are blank or demonstrably inconsistent
   with repository state.
 - Link each implementation pull request to its issue with a supported closing reference when the

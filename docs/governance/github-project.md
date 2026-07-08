@@ -85,8 +85,45 @@ The project is linked to this repository. Built-in workflows should provide thes
 | Pull request merged | Merged |
 | Issue closed | Closed |
 
+In practice, a merged pull request's item has consistently landed at `Closed` rather than `Merged`
+-- merging also closes the pull request, so both the `Pull request merged` and `Item closed`
+workflows fire on the same event, and `Closed` appears to win. Confirmed live via the project's
+Workflows panel that both are enabled; the public API does not expose each workflow's configured
+target or execution order. Tracked in #100. Until resolved, set `Merged` explicitly after
+confirming a pull request merged (see the CLI reference below).
+
 Automatic priority, risk, size, and portfolio assignments are intentionally avoided. Those fields
 require reviewable engineering judgment.
+
+## Setting Status via the CLI
+
+The Status field is writable through `gh project item-edit` (confirmed by round-trip test: moved
+an item to a different option, verified via a fresh read, reverted). Field and option IDs are
+internal GraphQL identifiers specific to this project; re-verify them with
+`gh project field-list 5 --owner Jared-Godar` if this table stops matching the live schema.
+
+```fish
+set -l project_id PVT_kwHOAQEwMM4BcY39
+set -l status_field_id PVTSSF_lAHOAQEwMM4BcY39zhXCFmM
+
+# Find an item's ID:
+gh project item-list 5 --owner Jared-Godar --format json --limit 200 \
+  | jq '.items[] | select(.content.number == <ISSUE_OR_PR_NUMBER>) | .id'
+
+gh project item-edit --id <ITEM_ID> --field-id $status_field_id --project-id $project_id \
+  --single-select-option-id <OPTION_ID>
+```
+
+| Status | Option ID |
+|---|---|
+| Backlog | `f75ad846` |
+| Ready | `1e06bed4` |
+| In Progress | `47fc9ee4` |
+| Blocked | `044cc57b` |
+| Review | `34b40d2e` |
+| Validation | `54cd2334` |
+| Merged | `03b2e725` |
+| Closed | `98236657` |
 
 Completeness of the required fields above is checked automatically on every pull request; see
 [Automated pull-request metadata gate](github-metadata-automation.md#automated-pull-request-metadata-gate).
