@@ -64,10 +64,10 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 | Versioned, fail-safe dataset retrieval | Test-evaluation release policy |
 | File inventory, local integrity baseline, and model card | Modern held-out benchmark |
 | Typed WFDB ingestion and record validation | Automated notebook execution checks |
-| Auditable annotation mapping and window extraction | Cloud deployment or orchestration |
-| Deterministic subject-aware split manifests | Runtime and resource benchmarks |
+| Auditable annotation mapping and window extraction | |
+| Deterministic subject-aware split manifests | |
 | Model-ready index over immutable record shards | |
-| Run manifests and synthetic end-to-end coverage | Historical tutorial code adaptation-extent audit |
+| Run manifests and synthetic end-to-end coverage | |
 | Deterministic baseline training and validation-only tested metrics | Threshold, ROC/AUC, calibration, and generated figures |
 | Historical archive image attribution and provenance audit | |
 | Per-stage pipeline progress reporting for `run-pipeline` | |
@@ -75,6 +75,11 @@ The supported workflow is local and sequential. It fits a deterministic baseline
 | Local experiment checkpoint, resume, and progress/ETA reporting | |
 | Directory-based shard discovery for `split-windows`/`index-dataset` | |
 | [Subject-grouped guarantees across paired records](docs/record-grouped-splitting.md) (e.g. 201/202) from the same source | |
+
+Cloud deployment/orchestration and cross-host runtime/resource benchmarking are intentionally out
+of scope for this local, portfolio case study rather than pending gaps — see [pipeline
+design](docs/pipeline-design.md#proposed-cloud-mapping) and [reproducibility
+evidence](docs/reproducibility-evidence.md) for the reasoning.
 
 See the [modernization roadmap](docs/modernization-roadmap.md) for phase-level status.
 

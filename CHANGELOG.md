@@ -75,6 +75,15 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   not — the source splits by patient identity, while `split_my_data` uses
   an ordinary beat-level split, independent of the cited approach. No
   archived file was modified.
+- Resolved `README.md`'s ambiguous "Not yet implemented" listing for cloud
+  deployment/orchestration and runtime/resource benchmarks: both are
+  permanent, by-design scope exclusions for this local portfolio case
+  study, not pending work, per `docs/pipeline-design.md`'s existing
+  "Proposed cloud mapping" framing and `docs/reproducibility-evidence.md`'s
+  existing host-variance disclosure. Removed both from the "pending" table
+  column and added a short explanatory note instead. Also removed the
+  stale "Historical tutorial code adaptation-extent audit" row, resolved
+  by the prior entry above but never removed from this table at the time.
 
 ### Security
 
