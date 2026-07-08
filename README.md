@@ -4,6 +4,8 @@
 
 This repository preserves a 2022 educational experiment built on the public MIT-BIH Arrhythmia Database and incrementally replaces its notebook-bound workflow with tested package boundaries, versioned configuration, explicit lineage, and subject-aware data preparation.
 
+The repository is at its [`v1.0.0` release](https://github.com/Jared-Godar/ecg_anomaly_detection/releases/tag/v1.0.0). See the [changelog](CHANGELOG.md) for what shipped.
+
 ## Important use limitation
 
 This project is for research, education, and software-engineering demonstration only. It is not medical software, has not been clinically validated, and must not be used for diagnosis, monitoring, treatment, or patient-care decisions.
