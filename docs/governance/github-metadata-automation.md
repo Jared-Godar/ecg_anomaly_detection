@@ -160,8 +160,14 @@ Scope it to `project` (read and write — needed by
 [`project-status-sync.yml`](../../.github/workflows/project-status-sync.yml), which reuses this
 same secret to explicitly set a merged pull request's Status field, see [GitHub Project
 governance](github-project.md#automation)) plus `public_repo` (this repository is public; grants
-the read access to pull requests and issues this gate itself needs). Prefer the narrowest scopes
-that satisfy both consumers rather than the broader `repo` scope.
+the read access to pull requests and issues this gate itself needs) plus `read:org`. The last one
+is easy to miss: every `gh project` subcommand resolves `--owner` by querying both the user and
+organization GraphQL types, and a token without `read:org` fails that resolution with a
+misleading `unknown owner type` error — indistinguishable at a glance from an actual ownership
+problem, even though Project #5's owner (`Jared-Godar`, a user account) is correct (confirmed
+live: see [cli/cli#7985](https://github.com/cli/cli/issues/7985) and
+[cli/cli#8885](https://github.com/cli/cli/issues/8885)). Prefer these three narrow scopes over
+the broader `repo` scope.
 
 The workflow passes `--strict-project-checks`: an unreadable Project (missing or misconfigured
 token) is a hard failure, not an advisory warning. The `GITHUB_TOKEN` fallback in the workflow's
