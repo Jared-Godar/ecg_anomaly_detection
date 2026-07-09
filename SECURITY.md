@@ -1,5 +1,7 @@
 # Security policy
 
+![Technical banner for the security policy, showing responsible disclosure and scope motifs.](docs/assets/ecg-security-policy-banner.png)
+
 ## Scope
 
 This policy covers security issues in the maintained repository content and

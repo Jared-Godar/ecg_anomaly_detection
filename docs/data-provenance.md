@@ -1,5 +1,7 @@
 # Data provenance
 
+![Technical banner for data provenance, showing lineage and licensing motifs.](assets/ecg-data-provenance-banner.png)
+
 ## Source
 
 This project uses the MIT-BIH Arrhythmia Database, version 1.0.0, distributed by PhysioNet.
