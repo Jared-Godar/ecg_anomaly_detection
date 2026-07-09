@@ -100,9 +100,13 @@ Applied 2026-07-08 (#91), verified live against the API above:
 
 ### Known residual gap
 
-The repository-level merge-method settings (`allow_merge_commit`,
-`allow_rebase_merge`) are still both enabled, even though squash-only is the
-documented and, so far, actual practice. Branch protection's linear-history
-requirement blocks true two-parent merge commits, but does not by itself
-disable the rebase-merge option in the GitHub merge-button UI. Tracked in
-issue #98; not yet applied.
+Resolved 2026-07-09 (#98): the repository-level merge-method settings
+(`allow_merge_commit`, `allow_rebase_merge`) were both still enabled even
+though squash-only was the documented and, so far, actual practice. Branch
+protection's linear-history requirement blocked true two-parent merge
+commits, but did not by itself disable the rebase-merge option in the GitHub
+merge-button UI. Applied via `gh api -X PATCH repos/Jared-Godar/
+ecg_anomaly_detection -f allow_merge_commit=false -f allow_rebase_merge=false`
+and confirmed live: `allow_merge_commit` and `allow_rebase_merge` are now
+both `false`; `allow_squash_merge` remains `true`. Squash is now the only
+merge method GitHub's UI and API will accept for this repository.
