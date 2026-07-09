@@ -1,5 +1,7 @@
 # Security governance policy
 
+![Technical banner for governance security policy, showing scope and stewardship motifs.](../assets/ecg-governance-security-policy-banner.png)
+
 ## Purpose and stewardship
 
 Security governance in this repository supports responsible stewardship of a

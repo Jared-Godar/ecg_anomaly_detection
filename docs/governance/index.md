@@ -1,5 +1,7 @@
 # Governance documentation
 
+![Technical banner for the governance index, showing policies, workflows, and controls motifs.](../assets/ecg-governance-index-banner.png)
+
 Repository governance defines how work is selected, reviewed, maintained, and
 prepared for a possible release. These policies document expectations; controls
 that depend on GitHub settings remain subject to the enforcement boundaries in

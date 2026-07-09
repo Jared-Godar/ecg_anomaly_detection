@@ -1,5 +1,7 @@
 # Evaluation policy
 
+![Technical banner for evaluation policy, showing validation boundaries and limitation motifs.](assets/ecg-evaluation-policy-banner.png)
+
 ## Supported development evaluation
 
 The implemented evaluator scores only the `validation` partition. Validation evidence supports
