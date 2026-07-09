@@ -1,5 +1,7 @@
 # Changelog
 
+![Technical banner for the changelog, showing version history and governance motifs.](docs/assets/ecg-changelog-banner.png)
+
 This changelog records notable repository changes using a structure inspired by
 Keep a Changelog. It does not claim formal compliance with that specification.
 

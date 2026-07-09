@@ -1,5 +1,7 @@
 # Release checklist
 
+![Technical banner for the release checklist, showing review steps and evidence motifs.](../assets/ecg-release-checklist-banner.png)
+
 This checklist prepares and reviews a future release. It does not instruct a
 maintainer to publish a package, create a tag, or create a GitHub release unless
 those actions are explicitly authorized in separate work.

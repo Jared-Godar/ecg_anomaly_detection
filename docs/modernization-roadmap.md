@@ -1,5 +1,7 @@
 # Modernization roadmap
 
+![Technical banner for the modernization roadmap, showing roadmap and governance motifs.](assets/ecg-modernization-roadmap-banner.png)
+
 The work is intentionally incremental so that the original project remains inspectable while each
 replacement gains tests and documentation. Checkboxes report repository state, not aspirations.
 

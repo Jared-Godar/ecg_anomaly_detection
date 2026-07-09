@@ -1,5 +1,7 @@
 # Release governance
 
+![Technical banner for release governance, showing tags, evidence, and review motifs.](../assets/ecg-release-governance-banner.png)
+
 ## Purpose and current state
 
 Releases are versioned engineering portfolio artifacts: they provide a stable,

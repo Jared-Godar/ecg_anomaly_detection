@@ -1,5 +1,7 @@
 # Historical results
 
+![Technical banner for historical results audit, showing preserved history and limitation motifs.](assets/ecg-historical-results-audit-banner.png)
+
 ## Scope
 
 This page records the outputs and known evaluation limitations of the original 2022 experiment. It is an audit trail, not a claim that the model is suitable for medical or clinical use.

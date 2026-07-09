@@ -1,5 +1,7 @@
 # Development workflow
 
+![Technical banner for development workflow, showing branches, checks, and review motifs.](assets/ecg-development-workflow-banner.png)
+
 ## Prerequisites
 
 - macOS or Linux

@@ -1,5 +1,7 @@
 # Proposed pipeline and data lineage
 
+![Technical banner for pipeline design, showing validated data lifecycle motifs.](assets/ecg-pipeline-design-banner.png)
+
 ## Status
 
 This document is a target design. The repository currently implements the package boundary,

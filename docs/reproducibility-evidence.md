@@ -1,5 +1,7 @@
 # Reproducibility evidence
 
+![Technical banner for reproducibility evidence, showing deterministic run and lineage motifs.](assets/ecg-reproducibility-evidence-banner.png)
+
 ## Purpose and boundaries
 
 Each supported pipeline run writes machine-readable operational evidence under its ignored

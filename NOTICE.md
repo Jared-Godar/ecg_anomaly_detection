@@ -1,5 +1,7 @@
 # Third-party notices and attribution status
 
+![Technical banner for repository notices, showing third-party notices and obligation motifs.](docs/assets/ecg-notice-banner.png)
+
 This repository contains project code, public-dataset references, and historical presentation materials. The root MIT license applies only to material owned by this repository's author.
 
 ## MIT-BIH Arrhythmia Database

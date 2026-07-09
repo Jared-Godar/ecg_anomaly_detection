@@ -1,5 +1,7 @@
 # Documentation guide
 
+![Technical banner for the documentation index, showing architecture, pipeline, and governance motifs.](assets/ecg-docs-index-banner.png)
+
 The maintained documentation is organized by the question a reader is trying to answer.
 
 | Document | Purpose |
