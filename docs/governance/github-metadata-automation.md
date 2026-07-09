@@ -148,8 +148,12 @@ Reading Project V2 field values requires a token with the `project` scope. The d
 repository-scoped `GITHUB_TOKEN` a workflow receives does not have that scope for a user-owned
 project (the same limitation recorded above for the historical bootstrap). A repository secret
 named `PROJECT_METADATA_TOKEN` — a fine-grained personal access token scoped to this repository,
-with read-only Pull requests and Issues (Repository permissions) and read-only Projects (Account
-permissions) — supplies it.
+with read-only Pull requests and Issues (Repository permissions) and read-and-write Projects
+(Account permissions) — supplies it. The write half of that scope is not needed by this gate
+(read-only would suffice here); it is required by
+[`project-status-sync.yml`](../../.github/workflows/project-status-sync.yml), which reuses the
+same secret to explicitly set a merged pull request's Status field — see [GitHub Project
+governance](github-project.md#automation).
 
 The workflow passes `--strict-project-checks`: an unreadable Project (missing or misconfigured
 token) is a hard failure, not an advisory warning. The `GITHUB_TOKEN` fallback in the workflow's
