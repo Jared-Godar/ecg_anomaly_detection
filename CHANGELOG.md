@@ -20,6 +20,12 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Disabled `allow_merge_commit` and `allow_rebase_merge` on the repository via `gh api -X PATCH`,
+  leaving `allow_squash_merge` as the only enabled merge method: closes the gap where GitHub's
+  merge-button UI still offered merge-commit and rebase-merge options despite squash-only being
+  the documented and actual practice. Confirmed live via a follow-up `gh api` read-back. The
+  `docs/governance/repository-governance.md` "Known residual gap" note (added under #97) is
+  updated to record the fix instead of the gap (#98).
 - Changed `modernization: ux`'s color from `d4c5f9` to `e99695` in `.github/labels.json` and
   synced live via `scripts/sync_github_labels.py`: `d4c5f9` was still shared with
   `portfolio: case-study`, and `e99695` is not used by any other declared label. Confirmed live
