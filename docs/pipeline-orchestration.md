@@ -1,5 +1,7 @@
 # Local pipeline orchestration
 
+![Technical banner for pipeline orchestration, showing repeatable execution flow motifs.](assets/ecg-pipeline-orchestration-banner.png)
+
 ## Scope
 
 The supported orchestration command connects the implemented data stages through one

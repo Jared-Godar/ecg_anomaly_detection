@@ -1,5 +1,7 @@
 # Model card: deterministic ECG baseline
 
+![Technical banner for the model card, showing validation-only context and responsible ML governance motifs.](docs/assets/ecg-model-card-banner.png)
+
 ## Card scope and status
 
 This model card documents the supported deterministic baseline and the pipeline that produces it.

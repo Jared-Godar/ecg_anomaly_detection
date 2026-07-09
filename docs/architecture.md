@@ -1,5 +1,7 @@
 # Repository architecture
 
+![Technical banner for repository architecture, showing package, documentation, and governance motifs.](assets/ecg-repository-architecture-banner.png)
+
 ## Purpose
 
 This document defines the implemented repository boundaries and target component ownership for the
