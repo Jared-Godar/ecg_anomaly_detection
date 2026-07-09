@@ -225,10 +225,13 @@ and [baseline evaluation](docs/baseline-evaluation.md).
   probability for either to score against. Adding one would be a new modeling
   choice, not an evaluation-reporting addition, and is out of scope for this
   baseline's intentionally fixture-grade role (see above).
-- Threshold-based decision analysis over the existing per-window centroid-distance
-  margin, and figures generated from validation-only evaluation output, are
-  candidate follow-up work, not yet scoped or implemented. Any such work must
-  stay within the `validation` partition per [evaluation policy](docs/evaluation-policy.md).
+- A validation-only threshold sweep over the existing per-window centroid-distance margin is
+  implemented (`configs/threshold-sweep-v1.toml`, `ecg-data evaluate-threshold-sweep`; see
+  [threshold sweep analysis](docs/threshold-sweep-analysis.md)). The margin is a raw squared
+  distance in projected feature space, not a probability, and this does not add ROC, AUC, or
+  calibration analysis, which remain unsupported per the point above. It runs only within the
+  `validation` partition per [evaluation policy](docs/evaluation-policy.md). Figures generated
+  from sweep or evaluation output remain candidate follow-up work, not yet implemented.
 - No uncertainty estimate, robustness study, subgroup analysis, external validation,
   device/site shift analysis, or held-out test result is supported or claimed.
 - Determinism depends on the recorded software, configuration, inputs, and execution contract.
