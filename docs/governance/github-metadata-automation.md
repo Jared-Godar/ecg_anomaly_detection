@@ -163,6 +163,21 @@ Pull-request-level checks (assignee, milestone, labels, closing reference) and l
 checks (Project membership and field completeness) both enforce immediately once
 `PROJECT_METADATA_TOKEN` is configured.
 
+### Local credential handling
+
+`PROJECT_METADATA_TOKEN` is a GitHub Actions secret and is consumed only in CI. Never
+materialize its value to a file on a local machine, even inside a gitignored directory such as
+`secrets/` — a gitignored file is still plaintext on disk, readable by any local process, script,
+backup, or tool with filesystem access, not just Git. Nothing in `scripts/` or `docs/` reads a
+local token file, so there is never a reason to create one.
+
+Running `scripts/github/validate_project_metadata.py`,
+`scripts/github/set_merged_project_status.py`, or any ad hoc `gh project`/`gh pr`/`gh issue`
+command locally instead needs only an interactive `gh auth login` session with the `project`
+scope (`gh auth status` reports the active scopes; add it with `gh auth refresh -s project` if
+it's missing). That session-based token is managed by the `gh` CLI's own credential storage, not
+a file this repository's tooling ever touches.
+
 Marking this workflow as a required status check in branch protection is a separate, manual
 repository-settings decision, not configured by the workflow itself. As of #91, `Validate PR and
 linked-issue metadata` is one of the required status checks on `main` — see [repository

@@ -17,6 +17,13 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Documented local credential handling for `PROJECT_METADATA_TOKEN`-adjacent tooling:
+  `docs/governance/github-metadata-automation.md` now states explicitly that the secret is a
+  CI-only credential and that local `gh project`/`gh pr`/`gh issue` commands should authenticate
+  via an interactive `gh auth login` session (with the `project` scope), never a token file --
+  even a gitignored one is still plaintext on disk. Prompted by finding an undocumented local
+  token file left over from earlier manual bootstrap work; the token itself was separately
+  revoked and rotated (#121).
 - Added `project-status-sync.yml`, a GitHub Action that listens for `pull_request: closed` and,
   when the pull request merged, explicitly sets its Project #5 item's Status to `Merged` via
   `scripts/github/set_merged_project_status.py` -- resolving the #100 race where the built-in
