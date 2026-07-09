@@ -17,6 +17,20 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Documented local credential handling for `PROJECT_METADATA_TOKEN`-adjacent tooling:
+  `docs/governance/github-metadata-automation.md` now states explicitly that the secret is a
+  CI-only credential and that local `gh project`/`gh pr`/`gh issue` commands should authenticate
+  via an interactive `gh auth login` session (with the `project` scope), never a token file --
+  even a gitignored one is still plaintext on disk. Prompted by finding an undocumented local
+  token file left over from earlier manual bootstrap work; the token itself was separately
+  revoked and rotated (#121).
+- Corrected `PROJECT_METADATA_TOKEN`'s documented token type from "fine-grained personal access
+  token" to classic: fine-grained tokens do not expose a Projects permission for a user-owned
+  project at all (a documented GitHub platform limitation, confirmed against current GitHub
+  docs), and Project #5 is user-owned. Scope guidance updated to `project` (read/write) +
+  `public_repo` + `read:org` on a classic token -- the last one live-tested and confirmed
+  necessary: without it, every `gh project` subcommand fails its `--owner` resolution with a
+  misleading `unknown owner type` error rather than an auth error (#121, #123).
 - Added `project-status-sync.yml`, a GitHub Action that listens for `pull_request: closed` and,
   when the pull request merged, explicitly sets its Project #5 item's Status to `Merged` via
   `scripts/github/set_merged_project_status.py` -- resolving the #100 race where the built-in

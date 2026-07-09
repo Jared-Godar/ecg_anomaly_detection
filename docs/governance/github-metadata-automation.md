@@ -147,13 +147,27 @@ The check validates two layers:
 Reading Project V2 field values requires a token with the `project` scope. The default
 repository-scoped `GITHUB_TOKEN` a workflow receives does not have that scope for a user-owned
 project (the same limitation recorded above for the historical bootstrap). A repository secret
-named `PROJECT_METADATA_TOKEN` — a fine-grained personal access token scoped to this repository,
-with read-only Pull requests and Issues (Repository permissions) and read-and-write Projects
-(Account permissions) — supplies it. The write half of that scope is not needed by this gate
-(read-only would suffice here); it is required by
-[`project-status-sync.yml`](../../.github/workflows/project-status-sync.yml), which reuses the
-same secret to explicitly set a merged pull request's Status field — see [GitHub Project
-governance](github-project.md#automation).
+named `PROJECT_METADATA_TOKEN` supplies it.
+
+That token must be a **classic** personal access token, not a fine-grained one. GitHub's
+fine-grained tokens do not currently expose a Projects permission for a project owned by a user
+account at all (only for organization-owned projects) — this is a documented platform limitation,
+not a configuration mistake; see GitHub's own [personal access tokens
+documentation](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
+and [Projects API guide](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects).
+Project #5 here is user-owned (`Jared-Godar`), so a classic token is the only supported option.
+Scope it to `project` (read and write — needed by
+[`project-status-sync.yml`](../../.github/workflows/project-status-sync.yml), which reuses this
+same secret to explicitly set a merged pull request's Status field, see [GitHub Project
+governance](github-project.md#automation)) plus `public_repo` (this repository is public; grants
+the read access to pull requests and issues this gate itself needs) plus `read:org`. The last one
+is easy to miss: every `gh project` subcommand resolves `--owner` by querying both the user and
+organization GraphQL types, and a token without `read:org` fails that resolution with a
+misleading `unknown owner type` error — indistinguishable at a glance from an actual ownership
+problem, even though Project #5's owner (`Jared-Godar`, a user account) is correct (confirmed
+live: see [cli/cli#7985](https://github.com/cli/cli/issues/7985) and
+[cli/cli#8885](https://github.com/cli/cli/issues/8885)). Prefer these three narrow scopes over
+the broader `repo` scope.
 
 The workflow passes `--strict-project-checks`: an unreadable Project (missing or misconfigured
 token) is a hard failure, not an advisory warning. The `GITHUB_TOKEN` fallback in the workflow's
@@ -162,6 +176,21 @@ in the job log rather than the workflow silently not running; it is not a soft-e
 Pull-request-level checks (assignee, milestone, labels, closing reference) and linked-issue-level
 checks (Project membership and field completeness) both enforce immediately once
 `PROJECT_METADATA_TOKEN` is configured.
+
+### Local credential handling
+
+`PROJECT_METADATA_TOKEN` is a GitHub Actions secret and is consumed only in CI. Never
+materialize its value to a file on a local machine, even inside a gitignored directory such as
+`secrets/` — a gitignored file is still plaintext on disk, readable by any local process, script,
+backup, or tool with filesystem access, not just Git. Nothing in `scripts/` or `docs/` reads a
+local token file, so there is never a reason to create one.
+
+Running `scripts/github/validate_project_metadata.py`,
+`scripts/github/set_merged_project_status.py`, or any ad hoc `gh project`/`gh pr`/`gh issue`
+command locally instead needs only an interactive `gh auth login` session with the `project`
+scope (`gh auth status` reports the active scopes; add it with `gh auth refresh -s project` if
+it's missing). That session-based token is managed by the `gh` CLI's own credential storage, not
+a file this repository's tooling ever touches.
 
 Marking this workflow as a required status check in branch protection is a separate, manual
 repository-settings decision, not configured by the workflow itself. As of #91, `Validate PR and
