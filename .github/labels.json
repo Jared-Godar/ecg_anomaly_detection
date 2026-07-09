@@ -22,7 +22,6 @@
     {"name": "area: ci-cd", "color": "1d76db", "description": "Continuous integration workflows, required checks, or deployment automation"},
     {"name": "area: cli", "color": "5319e7", "description": "Command-line entry points, subcommands, or terminal execution ergonomics"},
     {"name": "area: data", "color": "c2e0c6", "description": "Dataset composition, schema, or data-asset concerns"},
-    {"name": "area: data-pipeline", "color": "0052cc", "description": "Acquisition, validation, transformation, or orchestration"},
     {"name": "area: documentation", "color": "0075ca", "description": "Maintained guides, references, or attribution"},
     {"name": "area: evaluation", "color": "006b75", "description": "Grouped evaluation, metrics, or result reporting"},
     {"name": "area: modeling", "color": "006b75", "description": "Baseline model training or model-ready interfaces"},
@@ -35,6 +34,7 @@
     {"name": "modernization: reproducibility", "color": "bfdadc", "description": "Improves repeatability, provenance, or run evidence"},
     {"name": "modernization: split-integrity", "color": "bfd4f2", "description": "Protects record or patient grouping and leakage controls"},
     {"name": "modernization: testability", "color": "c2e0c6", "description": "Adds deterministic seams or regression coverage"},
+    {"name": "modernization: ux", "color": "d4c5f9", "description": "Improves developer-facing workflow ergonomics or usability"},
 
     {"name": "portfolio: case-study", "color": "d4c5f9", "description": "Improves the responsible modernization narrative"},
     {"name": "portfolio: operational-maturity", "color": "5319e7", "description": "Demonstrates repository operational rigor for the case-study audience"},

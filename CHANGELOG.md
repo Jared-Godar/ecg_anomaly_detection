@@ -17,6 +17,15 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Executed the #105-documented migrate/retire pass against every remaining legacy label: 26 legacy
+  spellings relabeled onto their canonical successor across 9 issues and 26 pull requests, then
+  deleted once empty; `modernization:ux` renamed directly to a newly declared `modernization: ux`
+  (no conflicting canonical existed); 5 zero-usage GitHub default labels (`duplicate`,
+  `good first issue`, `help wanted`, `invalid`, `wontfix`) deleted, `bug` and `question` kept.
+  `.github/labels.json` and `docs/governance/label-taxonomy.md` reconciled to the final label set;
+  `area: data-pipeline` removed from both now that every carrier moved to `area: pipeline`. Two
+  additional stale `status: in-progress` labels found by #113's full-history audit removed from
+  issue #89 and PR #34 (#105, #113).
 - Closed/merged items no longer carry a stale `status:*` label: removed leftover
   `status: in-progress` from issues #67, #107, #109, and PR #110 (#111).
 - PR #108's Project #5 Status corrected from `Closed` to `Merged` (the #100 race, now applied to a

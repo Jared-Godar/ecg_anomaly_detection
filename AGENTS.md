@@ -57,11 +57,11 @@
   label, and useful modernization, portfolio, or dependency labels. Keep status, priority, risk,
   size, and release planning in Project fields rather than duplicating them as labels.
 - New work must use current-taxonomy label spellings only (`namespace: value`, with the space).
-  Never apply a legacy pre-taxonomy spelling (e.g. `type:modernization`, `area:notebooks`,
-  bare `documentation`) to a new issue or pull request, even if it appears in autocomplete because
-  an old label of that name still exists — see [Label taxonomy](docs/governance/label-taxonomy.md)'s
-  "Existing-label normalization" table for the legacy-to-current mapping. That table documents
-  historical drift for a future migration pass; it is not a menu of acceptable label spellings.
+  Never mint a legacy pre-taxonomy spelling (e.g. `type:modernization`, `area:notebooks`, bare
+  `documentation`) as a new label on an issue or pull request — see
+  [Label taxonomy](docs/governance/label-taxonomy.md)'s "Completed legacy-label migration" section.
+  That migration (#105, #113) already normalized every historical instance; the section is a
+  historical record, not a menu of acceptable spellings for new work.
 - Assign the delivery milestone that the work is required to complete. Do not use milestones as topic labels.
 - Add the pull request to the `ECG Pipeline Modernization` GitHub Project when it contributes to the tracked roadmap.
 - Set the project status to `In Progress` once implementation starts, `Review` once the pull
