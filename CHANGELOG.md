@@ -17,6 +17,18 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Closed/merged items no longer carry a stale `status:*` label: removed leftover
+  `status: in-progress` from issues #67, #107, #109, and PR #110 (#111).
+- PR #108's Project #5 Status corrected from `Closed` to `Merged` (the #100 race, now applied to a
+  PR item directly), its previously-empty custom fields backfilled, and its conflicting label set
+  resolved to one `type:*` label, canonical `area: documentation`, and an added `priority:*` label.
+  PR #110 added to Project #5 (it was absent entirely) and fully populated. #107/#109's Issue Type
+  and Target Release fields reconciled to consistent values (#112).
+- Added an explicit guard against minting legacy-format labels on new work: `AGENTS.md` and
+  `docs/governance/label-taxonomy.md` now state that the existing-label normalization table records
+  historical drift for a future migration pass, not acceptable spellings for new issues/PRs. Also
+  documented (but did not execute) a full migrate/retire classification for the remaining legacy
+  labels, posted to #105, ready for a future explicitly-authorized destructive pass (#105).
 - `.github/labels.json` gains seven labels that were already in active current use but never
   backported into the manifest: `area: ci-cd`, `area: cli`, `area: data`, `area: pipeline`,
   `area: validation`, `portfolio: operational-maturity`, and `risk: low` (#67). This resolves the
