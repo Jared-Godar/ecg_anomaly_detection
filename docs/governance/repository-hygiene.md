@@ -13,7 +13,7 @@ label that is not in that manifest. It is read-only: it never creates, renames,
 deletes, or applies a label, and never guesses a corrected name. Remediation
 (migrating a legacy label with `gh label edit`, or adding a genuinely-missing
 label to the manifest) remains the maintainer decision described in
-[label taxonomy § Existing-label normalization](label-taxonomy.md#existing-label-normalization).
+[label taxonomy § Completed legacy-label migration](label-taxonomy.md#completed-legacy-label-migration-105-113).
 
 ```fish
 uv run python scripts/detect_label_drift.py
@@ -30,17 +30,15 @@ A label can match the canonical *formatting* (a space after the colon) while
 still not being in the manifest — the check compares against the actual
 manifest set, not just a style pattern. Running this for the first time
 against this repository's real state surfaced 40 labels in use that were not
-declared in `.github/labels.json`. Issue #67 reconciled that drift: the seven
-new-format labels in active current use (`area: cli`, `area: pipeline`,
-`area: ci-cd`, `area: validation`, `area: data`, `portfolio: operational-
-maturity`, `risk: low`) are now declared in the manifest, which resolves the
-drift this check reports against currently-open issues and pull requests.
-The remaining pre-taxonomy legacy labels and unused GitHub default labels
-identified in that reconciliation are documented in
-[label taxonomy § Existing-label normalization](label-taxonomy.md#existing-label-normalization);
-they only appear as drift on closed/merged history (`--include-closed`) and
-their per-issue migration or deletion remains a separate, deliberate
-maintainer action.
+declared in `.github/labels.json`. Issue #67 reconciled the open/current-work
+portion of that drift: the seven new-format labels in active current use
+(`area: cli`, `area: pipeline`, `area: ci-cd`, `area: validation`, `area: data`,
+`portfolio: operational-maturity`, `risk: low`) are declared in the manifest.
+Issues #105 and #113 then reconciled the remaining historical residue: every
+pre-taxonomy legacy label was relabeled to its canonical successor and
+deleted, and the zero-usage unused GitHub default labels were retired (see
+[label taxonomy § Completed legacy-label migration](label-taxonomy.md#completed-legacy-label-migration-105-113)
+for the full record). `--include-closed` now reports zero drift as well.
 
 ## Stale issue and pull request handling: declined
 
