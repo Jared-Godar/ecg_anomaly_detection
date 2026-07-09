@@ -9,6 +9,9 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Added
 
+- Added CI status, license, and Python-version badges to `README.md` (`Quality gates` workflow
+  badge, MIT license, Python 3.12/3.13), confirmed green on `main` before badging (#94).
+
 ### Changed
 
 ### Fixed
@@ -17,6 +20,11 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Changed `modernization: ux`'s color from `d4c5f9` to `e99695` in `.github/labels.json` and
+  synced live via `scripts/sync_github_labels.py`: `d4c5f9` was still shared with
+  `portfolio: case-study`, and `e99695` is not used by any other declared label. Confirmed live
+  after sync that only `modernization: ux` changed color and `portfolio: case-study` was
+  untouched (#115).
 - Documented local credential handling for `PROJECT_METADATA_TOKEN`-adjacent tooling:
   `docs/governance/github-metadata-automation.md` now states explicitly that the secret is a
   CI-only credential and that local `gh project`/`gh pr`/`gh issue` commands should authenticate

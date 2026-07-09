@@ -1,5 +1,9 @@
 # ECG Data Pipeline Modernization
 
+[![Quality gates](https://github.com/Jared-Godar/ecg_anomaly_detection/actions/workflows/quality.yml/badge.svg)](https://github.com/Jared-Godar/ecg_anomaly_detection/actions/workflows/quality.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.12 | 3.13](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)](pyproject.toml)
+
 ![ECG Anomaly Detection — Modernization Case Study: governance, reproducibility, engineering discipline, validation-only, responsible ML](docs/assets/ecg-readme-project-overview-banner.png)
 
 > A historical ECG machine-learning project being modernized into a reproducible, auditable data-engineering case study.
