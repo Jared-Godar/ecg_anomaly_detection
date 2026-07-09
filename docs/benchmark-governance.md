@@ -68,6 +68,28 @@ Steps 3-5 — a separately reviewed execution command, the single run against th
 partition, and archival before publication — remain future, gated work tracked by a dependent
 issue and are not implemented by this command.
 
+### Scaffolding for a future execution command (not steps 3-5)
+
+Two additional, inert pieces of scaffolding exist so that a future, separately reviewed execution
+command has a place to plug into. Neither implements execution, opens the `test` partition, or
+changes `evaluate_validation_from_index(...)`'s validation-only behavior:
+
+- `configs/evaluation-heldout.toml`, loaded by `load_held_out_config(...)` in
+  `held_out_config.py`, is a disabled-by-default configuration schema for a future held-out
+  execution. It fails closed the same way `BenchmarkPolicy` does: the loader rejects any config
+  where `execution.execution_enabled` is not `false` or `execution.requires_recorded_approval` is
+  not `true`.
+- `scripts/check_held_out_trigger_safety.py` is a read-only governance-as-code check, run as a
+  job in `.github/workflows/repository-hygiene.yml`, that parses every workflow file and fails if
+  any workflow whose name matches a held-out/benchmark-execution naming convention could trigger
+  on a routine `push` or `pull_request` event instead of only `workflow_dispatch` and/or a `push`
+  restricted to `release-*` tags. No such workflow exists yet; this guards against one being added
+  later with an unsafe trigger.
+
+This scaffolding is a dependency-free precondition for steps 3-5, not a substitute for them. The
+execution command itself remains future, gated work tracked by a dependent issue and requires a
+named benchmark owner's real approval before it can proceed.
+
 ## Reruns
 
 A rerun requires new recorded approval and is limited to a documented infrastructure failure before

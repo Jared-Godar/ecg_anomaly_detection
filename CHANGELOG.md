@@ -23,6 +23,18 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   reviewed execution step remains tracked by #73; a previously scoped disabled-by-default
   execution-gating config and CI stretch item was cut to keep this change reviewable and filed
   as #126 (#72).
+- Added `configs/evaluation-heldout.toml` and `src/ecg_anomaly_detection/held_out_config.py`
+  (`HeldOutExecutionConfig`, `HeldOutConfigError`, `load_held_out_config()`), a disabled-by-default
+  configuration schema for a future held-out execution that fails closed the same way
+  `BenchmarkPolicy` does: the loader rejects any config where `execution.execution_enabled` is not
+  `false` or `execution.requires_recorded_approval` is not `true`. Also adds
+  `scripts/check_held_out_trigger_safety.py`, a read-only governance-as-code check — wired into
+  `.github/workflows/repository-hygiene.yml` alongside label drift detection — that fails if any
+  workflow whose name matches a held-out/benchmark-execution naming convention could trigger on a
+  routine `push` or `pull_request` event instead of only `workflow_dispatch` and/or a `push`
+  restricted to `release-*` tags. Neither piece implements execution, opens the `test` partition,
+  or changes `evaluation.py`'s `SUPPORTED_PARTITION`; both exist only so the execution command
+  tracked by #73 has a validated, fail-closed place to plug into. Closes #126 (#130).
 
 ### Changed
 
