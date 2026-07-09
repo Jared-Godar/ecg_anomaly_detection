@@ -10,6 +10,10 @@ from time import perf_counter
 from typing import Sequence
 
 from ecg_anomaly_detection.acquisition import AcquisitionError, acquire_dataset
+from ecg_anomaly_detection.benchmark_approval import (
+    BenchmarkApprovalError,
+    record_benchmark_approval,
+)
 from ecg_anomaly_detection.benchmark_policy import (
     BenchmarkPolicyError,
     load_benchmark_policy,
@@ -237,6 +241,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     policy_parser.add_argument("--policy", type=Path, required=True)
 
+    approval_parser = subparsers.add_parser(
+        "record-benchmark-approval",
+        help=(
+            "verify benchmark eligibility, approval, and lineage, and record approval-gate "
+            "evidence without accessing the protected test partition"
+        ),
+    )
+    approval_parser.add_argument("--repository-root", type=Path, default=Path.cwd())
+    approval_parser.add_argument("--policy", type=Path, required=True)
+    approval_parser.add_argument("--run-manifest", type=Path, required=True)
+    approval_parser.add_argument("--approval", type=Path, required=True)
+    approval_parser.add_argument("--output", type=Path, required=True)
+
     notebook_parser = subparsers.add_parser(
         "check-local-notebooks",
         help="validate and optionally normalize local notebooks without executing cells",
@@ -326,6 +343,19 @@ def main(arguments: Sequence[str] | None = None) -> int:
         if options.command == "validate-benchmark-policy":
             policy = load_benchmark_policy(options.policy)
             print(f"validated benchmark policy {policy.policy_id} version {policy.version}")
+            return 0
+        if options.command == "record-benchmark-approval":
+            record = record_benchmark_approval(
+                options.repository_root,
+                options.policy,
+                options.run_manifest,
+                options.approval,
+                options.output,
+            )
+            print(
+                f"recorded benchmark approval for candidate {record.candidate_run_id} "
+                f"in {options.output}"
+            )
             return 0
         if options.command == "index-dataset":
             index = create_dataset_index(
@@ -470,6 +500,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         AcquisitionError,
         AnnotationMappingError,
         ArtifactDiscoveryError,
+        BenchmarkApprovalError,
         BenchmarkPolicyError,
         ConfigurationError,
         DatasetIndexError,

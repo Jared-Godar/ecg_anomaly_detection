@@ -12,6 +12,7 @@ from ecg_anomaly_detection.run_manifest import (
     RunManifest,
     RunManifestError,
     create_run_manifest,
+    read_run_manifest,
     write_run_manifest,
 )
 
@@ -152,6 +153,32 @@ def test_run_manifest_rejects_naive_clock(repository: Path) -> None:
 def test_run_manifest_output_must_stay_under_ignored_artifacts(repository: Path) -> None:
     with pytest.raises(RunManifestError, match="under artifacts"):
         write_run_manifest(_create_manifest(repository), repository, Path("run.json"))
+
+
+def test_read_run_manifest_round_trips_a_written_manifest(repository: Path) -> None:
+    manifest = _create_manifest(repository)
+    output = repository / "artifacts" / "run.json"
+    write_run_manifest(manifest, repository, output)
+
+    reloaded = read_run_manifest(output)
+
+    assert reloaded == manifest
+
+
+def test_read_run_manifest_rejects_invalid_json(tmp_path: Path) -> None:
+    path = tmp_path / "run.json"
+    path.write_text("not json", encoding="utf-8")
+
+    with pytest.raises(RunManifestError, match="could not read run manifest"):
+        read_run_manifest(path)
+
+
+def test_read_run_manifest_rejects_incomplete_document(tmp_path: Path) -> None:
+    path = tmp_path / "run.json"
+    path.write_text(json.dumps({"schema_version": 1}), encoding="utf-8")
+
+    with pytest.raises(RunManifestError, match="invalid run manifest"):
+        read_run_manifest(path)
 
 
 def _create_manifest(repository: Path) -> RunManifest:
