@@ -45,6 +45,29 @@ The current `evaluate_validation_from_index(...)` path remains validation-only. 
 `SUPPORTED_PARTITION`, reusing the validation command for test data, or manually opening test shards
 is not an approved benchmark procedure.
 
+### Implemented: approval and lineage verification (steps 1-2)
+
+`ecg-data record-benchmark-approval` implements steps 1 and 2 above. Given a human-authored
+approval-input record, a validated `BenchmarkPolicy`, and an existing `RunManifest`, it verifies
+that the policy is still disabled by default, that the approval's candidate identity matches the
+run manifest, and that every entry in `policy.required_lineage_references` resolves to a concrete,
+present value on that manifest. It fails closed, listing exactly which references are missing, and
+writes an `ApprovalRecord` as audit evidence that the gate was checked — not a benchmark result and
+not authorization to execute anything. It never opens, reads, or scores a `test`-partition shard.
+
+```fish
+uv run ecg-data record-benchmark-approval \
+  --repository-root . \
+  --policy configs/benchmark-policy-v1.toml \
+  --run-manifest artifacts/runs/<run-id>/run-manifest.json \
+  --approval <path-to-approval-input>.toml \
+  --output artifacts/runs/<run-id>/benchmark_approval.json
+```
+
+Steps 3-5 — a separately reviewed execution command, the single run against the protected
+partition, and archival before publication — remain future, gated work tracked by a dependent
+issue and are not implemented by this command.
+
 ## Reruns
 
 A rerun requires new recorded approval and is limited to a documented infrastructure failure before

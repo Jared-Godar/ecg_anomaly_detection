@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
 
 from ecg_anomaly_detection.inventory import InventoryError, InventoryManifest, read_manifest
 from ecg_anomaly_detection.splitting import SplitError, read_split_manifest
@@ -213,6 +213,91 @@ def write_run_manifest(manifest: RunManifest, repository_root: Path, output_path
             f"run manifest parent directory does not exist: {resolved_output.parent}"
         )
     resolved_output.write_text(manifest.to_json(), encoding="utf-8")
+
+
+def read_run_manifest(path: Path) -> RunManifest:
+    """Load a previously written run manifest without recomputing any evidence."""
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise RunManifestError(f"could not read run manifest {path}: {error}") from error
+    if not isinstance(document, dict):
+        raise RunManifestError(f"run manifest must be a JSON object: {path}")
+    try:
+        return _manifest_from_document(document)
+    except (KeyError, TypeError, ValueError) as error:
+        raise RunManifestError(f"invalid run manifest {path}: {error}") from error
+
+
+def _manifest_from_document(document: dict[str, Any]) -> RunManifest:
+    git = document["git"]
+    environment = document["environment"]
+    dataset = document["dataset"]
+    split = document["split"]
+    return RunManifest(
+        schema_version=document["schema_version"],
+        run_id=document["run_id"],
+        created_at_utc=document["created_at_utc"],
+        git=GitState(revision=git["revision"], dirty=git["dirty"]),
+        environment=EnvironmentSnapshot(
+            python_version=environment["python_version"],
+            python_implementation=environment["python_implementation"],
+            platform=environment["platform"],
+            machine=environment["machine"],
+            installed_packages=dict(environment["installed_packages"]),
+        ),
+        dependency_lock=_file_evidence_from_document(document["dependency_lock"]),
+        dataset=DatasetEvidence(
+            dataset_slug=dataset["dataset_slug"],
+            dataset_version=dataset["dataset_version"],
+            inventory_created_at_utc=dataset["inventory_created_at_utc"],
+            file_count=dataset["file_count"],
+            total_size_bytes=dataset["total_size_bytes"],
+            source_files=tuple(
+                _file_evidence_from_document(item) for item in dataset["source_files"]
+            ),
+            inventory_manifest=_file_evidence_from_document(dataset["inventory_manifest"]),
+        ),
+        split=SplitEvidence(
+            split_name=split["split_name"],
+            split_version=split["split_version"],
+            strategy=split["strategy"],
+            seed=split["seed"],
+            mapping_name=split["mapping_name"],
+            mapping_version=split["mapping_version"],
+            window_config_name=split["window_config_name"],
+            window_config_version=split["window_config_version"],
+            total_subject_count=split["total_subject_count"],
+            total_record_count=split["total_record_count"],
+            total_window_count=split["total_window_count"],
+            partitions={
+                name: PartitionEvidence(
+                    subject_ids=tuple(partition["subject_ids"]),
+                    subject_count=partition["subject_count"],
+                    record_ids=tuple(partition["record_ids"]),
+                    record_subjects=dict(partition["record_subjects"]),
+                    record_count=partition["record_count"],
+                    window_count=partition["window_count"],
+                    target_value_counts=dict(partition["target_value_counts"]),
+                )
+                for name, partition in split["partitions"].items()
+            },
+            split_manifest=_file_evidence_from_document(split["split_manifest"]),
+        ),
+        configuration_files=tuple(
+            _file_evidence_from_document(item) for item in document["configuration_files"]
+        ),
+        evidence_files=tuple(
+            _file_evidence_from_document(item) for item in document["evidence_files"]
+        ),
+        artifact_files=tuple(
+            _file_evidence_from_document(item) for item in document["artifact_files"]
+        ),
+    )
+
+
+def _file_evidence_from_document(value: dict[str, Any]) -> FileEvidence:
+    return FileEvidence(path=value["path"], size_bytes=value["size_bytes"], sha256=value["sha256"])
 
 
 def _dataset_evidence(
