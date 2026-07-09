@@ -315,17 +315,14 @@ def create_split_quality_summary(
     binary = observed_classes == (0, 1)
     diagnostics: dict[str, dict[str, Any]] = {}
     violations: list[QualityViolation] = []
+    total_unique_shards = len(set(metadata.record_shards.values()))
     for name in names:
         partition = manifest.partitions[name]
         shards = sorted(
             {
-                metadata.record_shards.get(record_id, source)
+                metadata.record_shards[record_id]
                 for record_id in partition.record_ids
-                for source in (
-                    metadata.source_artifacts[0]
-                    if len(metadata.source_artifacts) == 1
-                    else record_id,
-                )
+                if record_id in metadata.record_shards
             }
         )
         class_counts = partition.target_value_counts
@@ -336,7 +333,7 @@ def create_split_quality_summary(
         actual_ratios = {
             "subjects": partition.subject_count / manifest.total_subject_count,
             "records": partition.record_count / manifest.total_record_count,
-            "shards": len(shards) / max(1, len(set(metadata.record_shards.values()) or shards)),
+            "shards": len(shards) / max(1, total_unique_shards),
             "windows": partition.window_count / manifest.total_window_count,
         }
         diagnostics[name] = {
