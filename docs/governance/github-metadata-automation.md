@@ -147,13 +147,21 @@ The check validates two layers:
 Reading Project V2 field values requires a token with the `project` scope. The default
 repository-scoped `GITHUB_TOKEN` a workflow receives does not have that scope for a user-owned
 project (the same limitation recorded above for the historical bootstrap). A repository secret
-named `PROJECT_METADATA_TOKEN` — a fine-grained personal access token scoped to this repository,
-with read-only Pull requests and Issues (Repository permissions) and read-and-write Projects
-(Account permissions) — supplies it. The write half of that scope is not needed by this gate
-(read-only would suffice here); it is required by
-[`project-status-sync.yml`](../../.github/workflows/project-status-sync.yml), which reuses the
-same secret to explicitly set a merged pull request's Status field — see [GitHub Project
-governance](github-project.md#automation).
+named `PROJECT_METADATA_TOKEN` supplies it.
+
+That token must be a **classic** personal access token, not a fine-grained one. GitHub's
+fine-grained tokens do not currently expose a Projects permission for a project owned by a user
+account at all (only for organization-owned projects) — this is a documented platform limitation,
+not a configuration mistake; see GitHub's own [personal access tokens
+documentation](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
+and [Projects API guide](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects).
+Project #5 here is user-owned (`Jared-Godar`), so a classic token is the only supported option.
+Scope it to `project` (read and write — needed by
+[`project-status-sync.yml`](../../.github/workflows/project-status-sync.yml), which reuses this
+same secret to explicitly set a merged pull request's Status field, see [GitHub Project
+governance](github-project.md#automation)) plus `public_repo` (this repository is public; grants
+the read access to pull requests and issues this gate itself needs). Prefer the narrowest scopes
+that satisfy both consumers rather than the broader `repo` scope.
 
 The workflow passes `--strict-project-checks`: an unreadable Project (missing or misconfigured
 token) is a hard failure, not an advisory warning. The `GITHUB_TOKEN` fallback in the workflow's

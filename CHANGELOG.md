@@ -24,6 +24,11 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   even a gitignored one is still plaintext on disk. Prompted by finding an undocumented local
   token file left over from earlier manual bootstrap work; the token itself was separately
   revoked and rotated (#121).
+- Corrected `PROJECT_METADATA_TOKEN`'s documented token type from "fine-grained personal access
+  token" to classic: fine-grained tokens do not expose a Projects permission for a user-owned
+  project at all (a documented GitHub platform limitation, confirmed against current GitHub
+  docs), and Project #5 is user-owned. Scope guidance updated to `project` (read/write) +
+  `public_repo` on a classic token (#121).
 - Added `project-status-sync.yml`, a GitHub Action that listens for `pull_request: closed` and,
   when the pull request merged, explicitly sets its Project #5 item's Status to `Merged` via
   `scripts/github/set_merged_project_status.py` -- resolving the #100 race where the built-in
