@@ -1,5 +1,7 @@
 # Contributing
 
+![Technical banner for contributing, showing issues, pull requests, and validation motifs.](docs/assets/ecg-contributing-banner.png)
+
 This repository is a historical educational ECG machine-learning project under incremental
 modernization. Contributions should improve its value as a reproducible data-engineering case
 study without implying that it is medical software or clinically validated.
