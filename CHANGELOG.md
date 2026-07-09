@@ -11,6 +11,18 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 - Added CI status, license, and Python-version badges to `README.md` (`Quality gates` workflow
   badge, MIT license, Python 3.12/3.13), confirmed green on `main` before badging (#94).
+- Added `src/ecg_anomaly_detection/benchmark_approval.py` (`ApprovalInput`, `ApprovalRecord`,
+  `BenchmarkApprovalError`, `record_benchmark_approval()`) and the `ecg-data
+  record-benchmark-approval` CLI subcommand, implementing `docs/benchmark-governance.md`'s
+  eligibility, approval-recording, and lineage-verification steps as a fail-closed gate that
+  reuses `load_benchmark_policy()` and a `RunManifest` for lineage identity. Also adds
+  `run_manifest.read_run_manifest()` as a JSON-to-dataclass counterpart to the existing
+  `write_run_manifest()`. Covers governance steps 1-2 (approval recording and lineage
+  verification) only; never opens, reads, or scores the protected `test` partition anywhere in
+  code or tests, and `evaluation.py`'s `SUPPORTED_PARTITION` is unchanged. The separately
+  reviewed execution step remains tracked by #73; a previously scoped disabled-by-default
+  execution-gating config and CI stretch item was cut to keep this change reviewable and filed
+  as #126 (#72).
 
 ### Changed
 
