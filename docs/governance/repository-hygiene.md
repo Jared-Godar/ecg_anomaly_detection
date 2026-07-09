@@ -40,6 +40,26 @@ deleted, and the zero-usage unused GitHub default labels were retired (see
 [label taxonomy § Completed legacy-label migration](label-taxonomy.md#completed-legacy-label-migration-105-113)
 for the full record). `--include-closed` now reports zero drift as well.
 
+## Held-out execution trigger safety
+
+`scripts/check_held_out_trigger_safety.py` is a read-only governance-as-code check that parses
+every `.github/workflows/*.yml` file and fails if any workflow whose filename or declared `name:`
+matches a held-out/benchmark-execution naming convention could trigger on a routine `push` or
+`pull_request` event. Such a workflow is only considered safe if its triggers are limited to
+`workflow_dispatch` and/or a `push` restricted to `release-*` tags. It never runs, dispatches, or
+inspects a workflow's job contents, and never touches the protected `test` partition — see
+[Benchmark governance](../benchmark-governance.md).
+
+```fish
+uv run python scripts/check_held_out_trigger_safety.py
+```
+
+No held-out/benchmark-execution workflow exists yet, so this currently passes trivially. Its
+purpose is to guard against one being added later — when a future execution command (issue #73)
+actually gets a workflow file — with an unsafe trigger that could run against a routine push or
+pull request. `.github/workflows/repository-hygiene.yml` runs this weekly (Monday 06:00 UTC)
+and on manual dispatch, alongside label drift detection.
+
 ## Stale issue and pull request handling: declined
 
 The originating issue for this automation framed it as conditional: add
