@@ -1,0 +1,51 @@
+name: Project status sync
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-status-sync-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  set-merged-status:
+    name: Force Project #5 status to Merged
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+
+      - name: Create locked environment
+        run: uv sync --locked --dev
+
+      # A merged pull request also closes it, so GitHub Project's built-in
+      # "Pull request merged" and "Item closed" workflows race on the same
+      # event and "Closed" has consistently won -- see
+      # docs/governance/github-project.md#automation. This step wins the
+      # race explicitly, after the fact.
+      #
+      # PROJECT_METADATA_TOKEN is a fine-grained PAT scoped to this repository
+      # with read-and-write Projects access (Account permissions) -- see
+      # docs/governance/github-metadata-automation.md. It is also used
+      # read-only by metadata-governance.yml; the write scope required here
+      # is a superset, so the same secret covers both.
+      - name: Set Project #5 status to Merged
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_METADATA_TOKEN }}
+        run: |
+          uv run python scripts/github/set_merged_project_status.py \
+            --pr-number "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}"
