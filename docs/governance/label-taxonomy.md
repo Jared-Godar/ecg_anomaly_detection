@@ -42,6 +42,14 @@ and `wontfix` may remain when useful. They supplement this taxonomy and are not 
 
 ## Existing-label normalization
 
+This table records historical drift for a future, explicitly-authorized migration pass (tracked in
+[#105](https://github.com/Jared-Godar/ecg_anomaly_detection/issues/105)); it is not a menu of
+acceptable spellings for new work. New issues and pull requests must use the label in the
+"Normalized label" column below, never mint the legacy "Existing label" spelling — see
+[AGENTS.md](../../AGENTS.md)'s "Pull request metadata" section. #112 found legacy-format labels
+freshly applied to a new PR (not just left over from before the taxonomy existed), which is what
+prompted this explicit guard.
+
 Normalize legacy labels when applying this taxonomy. Renaming a legacy label directly with `gh label edit` only
 works when no label with the target name already exists; where the canonical name is already a separate,
 declared label (the common case below, per the #67 reconciliation), migration instead means: add the canonical
