@@ -89,8 +89,15 @@ In practice, a merged pull request's item has consistently landed at `Closed` ra
 -- merging also closes the pull request, so both the `Pull request merged` and `Item closed`
 workflows fire on the same event, and `Closed` appears to win. Confirmed live via the project's
 Workflows panel that both are enabled; the public API does not expose each workflow's configured
-target or execution order. Tracked in #100. Until resolved, set `Merged` explicitly after
-confirming a pull request merged (see the CLI reference below).
+target or execution order. Reordering or disabling one of the two built-in workflows is also not
+exposed as a supported mutation.
+
+Rather than rely on the built-in workflows to resolve that race, `.github/workflows/project-status-sync.yml`
+listens for `pull_request: closed` and, when `github.event.pull_request.merged == true`, calls
+[`scripts/github/set_merged_project_status.py`](../../scripts/github/set_merged_project_status.py)
+to explicitly set the item's Status to `Merged` after the built-in workflows have already run,
+winning the race deterministically instead of leaving `Closed` as the final value. Originally
+tracked in #100, superseded by #117.
 
 Automatic priority, risk, size, and portfolio assignments are intentionally avoided. Those fields
 require reviewable engineering judgment.
@@ -98,7 +105,10 @@ require reviewable engineering judgment.
 ## Setting Status via the CLI
 
 The Status field is writable through `gh project item-edit` (confirmed by round-trip test: moved
-an item to a different option, verified via a fresh read, reverted). Field and option IDs are
+an item to a different option, verified via a fresh read, reverted). `project-status-sync.yml`
+automates this for the merged-pull-request case; every other transition (Backlog, Ready, In
+Progress, Blocked, Review, Validation, and Closed on issue closure) is still set manually, and
+this is also the fallback if that workflow ever fails. Field and option IDs are
 internal GraphQL identifiers specific to this project; re-verify them with
 `gh project field-list 5 --owner Jared-Godar` if this table stops matching the live schema.
 

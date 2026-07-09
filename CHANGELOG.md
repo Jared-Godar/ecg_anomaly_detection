@@ -17,6 +17,12 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Added `project-status-sync.yml`, a GitHub Action that listens for `pull_request: closed` and,
+  when the pull request merged, explicitly sets its Project #5 item's Status to `Merged` via
+  `scripts/github/set_merged_project_status.py` -- resolving the #100 race where the built-in
+  `Pull request merged` and `Item closed` workflows fire on the same event and `Closed` wins.
+  `docs/governance/github-project.md` and `AGENTS.md` updated to describe the fix instead of the
+  manual-correction workaround (#117).
 - Executed the #105-documented migrate/retire pass against every remaining legacy label: 26 legacy
   spellings relabeled onto their canonical successor across 9 issues and 26 pull requests, then
   deleted once empty; `modernization:ux` renamed directly to a newly declared `modernization: ux`

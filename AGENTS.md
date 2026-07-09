@@ -65,9 +65,10 @@
 - Assign the delivery milestone that the work is required to complete. Do not use milestones as topic labels.
 - Add the pull request to the `ECG Pipeline Modernization` GitHub Project when it contributes to the tracked roadmap.
 - Set the project status to `In Progress` once implementation starts, `Review` once the pull
-  request is open and awaiting merge, `Merged` after merge (the built-in workflow can leave it at
-  `Closed` instead; correct manually when that happens -- see #100), and `Closed` when its linked
-  issue is completed.
+  request is open and awaiting merge, `Merged` after merge (`project-status-sync.yml` sets this
+  automatically; verify with a read-back and correct manually if it ever doesn't -- see
+  [GitHub Project governance](docs/governance/github-project.md#automation)), and `Closed` when
+  its linked issue is completed.
 - Verify assignee, labels, milestone, project membership, and project status after creating the pull request; do not infer success from the creation command alone.
 - When metadata is ambiguous, report the unresolved choice instead of inventing a classification.
 
@@ -77,9 +78,10 @@
 - Populate Status, Workstream, Issue Type, Priority, Risk, Size, Repository Area, Portfolio Signal,
   and Target Release for every project item.
 - Set new issues to `Backlog`, active pull requests to `In Progress` while implementation is
-  underway and `Review` once open and awaiting merge, merged pull requests to `Merged` (correcting
-  manually if the built-in workflow leaves it at `Closed` -- see #100), and completed closed issues
-  to `Closed`.
+  underway and `Review` once open and awaiting merge, merged pull requests to `Merged`
+  (`project-status-sync.yml` sets this automatically; correct manually if it ever doesn't -- see
+  [GitHub Project governance](docs/governance/github-project.md#automation)), and completed closed
+  issues to `Closed`.
 - Preserve manually curated project values unless they are blank or demonstrably inconsistent
   with repository state.
 - Link each implementation pull request to its issue with a supported closing reference when the
