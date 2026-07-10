@@ -79,10 +79,9 @@ class AnnotationMappingResult:
 
 def load_annotation_mapping(path: Path) -> AnnotationMappingConfig:
     """Load and validate a versioned annotation mapping from TOML."""
-    # Attempt this boundary operation here so (OSError, tomllib.TOMLDecodeError) can be translated
-    # or cleaned up under the repository contract.
+    # Translate a missing, unreadable, or malformed-TOML file into AnnotationMappingError.
     try:
-        # Scope `path.open('rb')` here so resource cleanup occurs on both success and failure paths.
+        # The `with` block ensures the file handle closes even if tomllib.load raises.
         with path.open("rb") as config_file:
             document = tomllib.load(config_file)
     except (OSError, tomllib.TOMLDecodeError) as error:
@@ -90,16 +89,15 @@ def load_annotation_mapping(path: Path) -> AnnotationMappingConfig:
             f"could not load annotation mapping {path}: {error}"
         ) from error
 
-    # Evaluate `document.get('schema_version') != 1` explicitly so invalid or alternate states
-    # follow the documented contract.
+    # schema_version pins this loader's understanding of the document's shape.
     if document.get("schema_version") != 1:
         raise AnnotationMappingError("annotation mapping must use schema_version = 1")
     mapping = document.get("mapping")
     targets = document.get("targets")
     exclusions = document.get("exclusions")
-    # Evaluate `not isinstance(mapping, dict) or not isinstance(targets, list) or (not
-    # isinstance(exclusions, dict))` explicitly so invalid or alternate states follow the documented
-    # contract.
+    # All three sections are required: [mapping] carries identity/policy fields,
+    # [[targets]] is the array of target rules, and [exclusions] names symbols that
+    # are deliberately dropped rather than mapped to any target.
     if (
         not isinstance(mapping, dict)
         or not isinstance(targets, list)
@@ -127,14 +125,18 @@ def map_annotations(
     annotations: AnnotationSet,
 ) -> AnnotationMappingResult:
     """Apply a closed-world mapping and report every inclusion and exclusion."""
-    # Evaluate `len(annotations.sample_indices) != len(annotations.symbols)` explicitly so invalid
-    # or alternate states follow the documented contract.
+    # sample_indices and symbols are parallel arrays (one entry per annotation); an
+    # unequal length means the annotation set was corrupted or constructed some other
+    # way than the supported record-validation stage.
     if len(annotations.sample_indices) != len(annotations.symbols):
         raise AnnotationMappingError("annotation samples and symbols must have equal lengths")
     target_by_symbol = {symbol: rule for rule in config.targets for symbol in rule.symbols}
     excluded = set(config.excluded_symbols)
     unknown = sorted(set(annotations.symbols) - set(target_by_symbol) - excluded)
-    # Evaluate `unknown` explicitly so invalid or alternate states follow the documented contract.
+    # This is the closed-world enforcement this module is documented for: every source
+    # symbol must be explicitly classified as either a target or an exclusion. A symbol
+    # this mapping has never seen fails loudly rather than silently falling through to
+    # either category, which would misrepresent the mapping's actual coverage.
     if unknown:
         raise AnnotationMappingError(f"unmapped annotation symbols: {', '.join(unknown)}")
 
@@ -144,12 +146,12 @@ def map_annotations(
     target_counts: Counter[str] = Counter()
     excluded_counts: Counter[str] = Counter()
 
-    # Iterate over `zip(annotations.sample_indices, annotations.symbols, strict=True)` one item at a
-    # time so ordering, validation, and failure attribution remain explicit.
+    # Classify every annotation in its original order, so the resulting mapped set's
+    # row order is deterministic and traceable back to the source annotation sequence.
     for sample_index, symbol in zip(annotations.sample_indices, annotations.symbols, strict=True):
         rule = target_by_symbol.get(symbol)
-        # Evaluate `rule is None` explicitly so invalid or alternate states follow the documented
-        # contract.
+        # A symbol with no matching target rule was already confirmed to be in the
+        # excluded_symbols set by the closed-world check above; count and skip it.
         if rule is None:
             excluded_counts[symbol] += 1
             continue
@@ -185,8 +187,8 @@ def map_annotations(
 
 def write_mapping_report(report: AnnotationMappingReport, output_path: Path) -> None:
     """Write a mapping audit report to an existing directory."""
-    # Evaluate `not output_path.parent.is_dir()` explicitly so invalid or alternate states follow
-    # the documented contract.
+    # Fail before attempting the write rather than letting a missing parent directory
+    # surface as a generic OSError from write_text.
     if not output_path.parent.is_dir():
         raise AnnotationMappingError(
             f"report parent directory does not exist: {output_path.parent}"
@@ -195,25 +197,20 @@ def write_mapping_report(report: AnnotationMappingReport, output_path: Path) -> 
 
 
 def _load_target_rule(value: Any) -> TargetRule:
-    """Load target rule according to the repository contract.
-
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    """Parse and validate one `[[targets]]` table into a TargetRule.
 
     Args:
-        value: Candidate value whose contract is being enforced.
+        value: One raw TOML target-array entry.
 
     Returns:
-        The value produced by the documented operation.
+        The validated target rule.
     """
 
-    # Evaluate `not isinstance(value, dict)` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # Every field access below assumes value is a dict.
     if not isinstance(value, dict):
         raise AnnotationMappingError("each target must be a TOML table")
     target_value = value.get("value")
-    # Evaluate `not isinstance(target_value, int) or isinstance(target_value, bool)` explicitly so
-    # invalid or alternate states follow the documented contract.
+    # bool is an int subclass in Python, so it's excluded explicitly.
     if not isinstance(target_value, int) or isinstance(target_value, bool):
         raise AnnotationMappingError("target.value must be an integer")
     return TargetRule(
@@ -224,82 +221,83 @@ def _load_target_rule(value: Any) -> TargetRule:
 
 
 def _validate_mapping_config(config: AnnotationMappingConfig) -> None:
-    """Validate mapping config according to the repository contract.
+    """Cross-check a mapping config's targets and exclusions as a whole.
 
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    Runs after every individual target rule has already been parsed and validated by
+    _load_target_rule; this checks the properties that only make sense once every rule
+    is known -- uniqueness across rules, and that no symbol is claimed by more than
+    one target or exclusion.
 
     Args:
-        config: Validated configuration controlling the documented operation.
+        config: The mapping config to validate as a whole.
     """
 
-    # Evaluate `config.unknown_symbol_policy != 'error'` explicitly so invalid or alternate states
-    # follow the documented contract.
+    # This module only implements the "error" policy (raise on any unmapped symbol,
+    # enforced in map_annotations); a config naming any other policy would silently be
+    # ignored rather than actually changing behavior.
     if config.unknown_symbol_policy != "error":
         raise AnnotationMappingError("unknown_symbol_policy must be 'error'")
-    # Evaluate `not config.targets` explicitly so invalid or alternate states follow the documented
-    # contract.
+    # A mapping with zero targets would classify every annotation as excluded (or
+    # unknown), which is never a useful configuration.
     if not config.targets:
         raise AnnotationMappingError("annotation mapping must define at least one target")
     names = [rule.name for rule in config.targets]
     values = [rule.value for rule in config.targets]
-    # Evaluate `len(set(names)) != len(names) or len(set(values)) != len(values)` explicitly so
-    # invalid or alternate states follow the documented contract.
+    # Duplicate names would make target_counts (keyed by name) silently merge two
+    # distinct rules; duplicate values would make two different target names map to
+    # the same encoded integer, losing the distinction downstream.
     if len(set(names)) != len(names) or len(set(values)) != len(values):
         raise AnnotationMappingError("target names and values must be unique")
 
     classified_symbols = [symbol for rule in config.targets for symbol in rule.symbols]
     all_symbols = classified_symbols + list(config.excluded_symbols)
-    # Evaluate `len(set(all_symbols)) != len(all_symbols)` explicitly so invalid or alternate states
-    # follow the documented contract.
+    # A symbol assigned to two targets (or a target and an exclusion) would make its
+    # classification in map_annotations depend on dict-insertion order rather than
+    # being a well-defined, closed-world mapping.
     if len(set(all_symbols)) != len(all_symbols):
         raise AnnotationMappingError("source symbols must occur in exactly one target or exclusion")
 
 
 def _required_string(values: dict[str, Any], key: str) -> str:
-    """Compute and return required string for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """Require and return a non-empty string from the requested structured field.
 
     Args:
-        values: Structured values to validate, transform, or serialize.
-        key: The key value supplied by the caller or surrounding test fixture.
+        values: The parsed table to read from.
+        key: The field name to extract.
 
     Returns:
-        The value produced by the documented operation.
+        The field's value with surrounding whitespace stripped.
     """
 
     value = values.get(key)
-    # Evaluate `not isinstance(value, str) or not value.strip()` explicitly so invalid or alternate
-    # states follow the documented contract.
+    # Reject a missing/wrong-typed value and a whitespace-only placeholder alike.
     if not isinstance(value, str) or not value.strip():
         raise AnnotationMappingError(f"{key} must be a non-empty string")
     return value.strip()
 
 
 def _required_symbols(values: dict[str, Any], key: str) -> tuple[str, ...]:
-    """Compute and return required symbols for the documented repository workflow.
+    """Require and return a non-empty array of unique, non-empty annotation symbols.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    Shared by both target.symbols and exclusions.symbols, since both fields have the
+    same shape requirement.
 
     Args:
-        values: Structured values to validate, transform, or serialize.
-        key: The key value supplied by the caller or surrounding test fixture.
+        values: The parsed table to read from.
+        key: The field name to extract.
 
     Returns:
-        The value produced by the documented operation.
+        The validated symbols.
     """
 
     value = values.get(key)
-    # Evaluate `not isinstance(value, list) or not value or (not all((isinstance(item, str) for item
-    # in value)))` explicitly so invalid or alternate states follow the documented contract.
+    # Reject a missing/empty list or any non-string element before normalization below.
     if not isinstance(value, list) or not value or not all(isinstance(item, str) for item in value):
         raise AnnotationMappingError(f"{key} must be a non-empty string array")
     symbols = tuple(value)
-    # Evaluate `any((not symbol for symbol in symbols)) or len(set(symbols)) != len(symbols)`
-    # explicitly so invalid or alternate states follow the documented contract.
+    # A duplicated or empty symbol within this one list would already violate the
+    # uniqueness this mapping depends on, before even cross-checking against other
+    # targets/exclusions in _validate_mapping_config.
     if any(not symbol for symbol in symbols) or len(set(symbols)) != len(symbols):
         raise AnnotationMappingError(f"{key} must contain unique, non-empty symbols")
     return symbols

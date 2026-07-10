@@ -16,7 +16,11 @@ from typing import Any
 
 from ecg_anomaly_detection.training import SUPPORTED_ESTIMATOR
 
-# Centralize SUPPORTED_PARTITION so every caller shares the same documented invariant.
+# The one partition this future, not-yet-implemented execution config is scoped to.
+# Deliberately named separately from evaluation.py's own SUPPORTED_PARTITION ("validation")
+# constant -- the two are unrelated by design, since this module governs a different,
+# still-disabled partition and must never be confused with the one evaluation.py
+# actually reads from.
 SUPPORTED_PARTITION = "test"
 
 
@@ -39,17 +43,15 @@ class HeldOutExecutionConfig:
 
 def load_held_out_config(path: Path) -> HeldOutExecutionConfig:
     """Load and validate the held-out execution config without accessing data or model artifacts."""
-    # Attempt this boundary operation here so (OSError, tomllib.TOMLDecodeError) can be translated
-    # or cleaned up under the repository contract.
+    # Translate a missing, unreadable, or malformed-TOML file into HeldOutConfigError.
     try:
-        # Scope `path.open('rb')` here so resource cleanup occurs on both success and failure paths.
+        # The `with` block ensures the file handle closes even if tomllib.load raises.
         with path.open("rb") as source:
             document = tomllib.load(source)
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise HeldOutConfigError(f"could not load held-out config {path}: {error}") from error
     values = document.get("execution")
-    # Evaluate `document.get('schema_version') != 1 or not isinstance(values, dict)` explicitly so
-    # invalid or alternate states follow the documented contract.
+    # schema_version pins this loader's understanding of the [execution] table's shape.
     if document.get("schema_version") != 1 or not isinstance(values, dict):
         raise HeldOutConfigError(
             "held-out config must use schema_version = 1 and an [execution] table"
@@ -65,64 +67,65 @@ def load_held_out_config(path: Path) -> HeldOutExecutionConfig:
         execution_enabled=execution_enabled,
         requires_recorded_approval=requires_recorded_approval,
     )
-    # Evaluate `config.evaluator != SUPPORTED_ESTIMATOR` explicitly so invalid or alternate states
-    # follow the documented contract.
+    # This module only describes the same frozen-baseline evaluator training.py
+    # implements; a config naming any other estimator would be describing execution
+    # behavior that doesn't exist anywhere in this package.
     if config.evaluator != SUPPORTED_ESTIMATOR:
         raise HeldOutConfigError(f"execution.evaluator must be {SUPPORTED_ESTIMATOR!r}")
-    # Evaluate `config.partition != SUPPORTED_PARTITION` explicitly so invalid or alternate states
-    # follow the documented contract.
+    # This module governs exactly one partition, named "test" (this module's own
+    # SUPPORTED_PARTITION); a config naming any other value describes a different,
+    # unsupported gate.
     if config.partition != SUPPORTED_PARTITION:
         raise HeldOutConfigError(f"execution.partition must be {SUPPORTED_PARTITION!r}")
-    # Evaluate `config.execution_enabled` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # This is the core governance invariant this module exists to enforce: no config
+    # may enable held-out execution. It's a deliberately deferred, separately governed
+    # milestone -- this loader fails closed on any config that tries to flip that
+    # switch, rather than merely warning, since this module implements no execution
+    # command to actually run even if this flag were somehow set.
     if config.execution_enabled:
         raise HeldOutConfigError("execution.execution_enabled must be false")
-    # Evaluate `not config.requires_recorded_approval` explicitly so invalid or alternate states
-    # follow the documented contract.
+    # Symmetric to the check above: any future execution must require a recorded
+    # approval (see benchmark_approval.py) rather than running unconditionally.
     if not config.requires_recorded_approval:
         raise HeldOutConfigError("execution.requires_recorded_approval must be true")
     return config
 
 
 def _string(values: dict[str, Any], key: str) -> str:
-    """Require and return a non-empty string from the requested structured field.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """Require and return a non-empty string from the requested `[execution]` field.
 
     Args:
-        values: Structured values to validate, transform, or serialize.
-        key: The key value supplied by the caller or surrounding test fixture.
+        values: The parsed `[execution]` table to read from.
+        key: The field name to extract.
 
     Returns:
-        The value produced by the documented operation.
+        The field's value with surrounding whitespace stripped.
     """
 
     value = values.get(key)
-    # Evaluate `not isinstance(value, str) or not value.strip()` explicitly so invalid or alternate
-    # states follow the documented contract.
+    # Reject a missing/wrong-typed value and a whitespace-only placeholder alike.
     if not isinstance(value, str) or not value.strip():
         raise HeldOutConfigError(f"execution.{key} must be a non-empty string")
     return value.strip()
 
 
 def _boolean(values: dict[str, Any], key: str) -> bool:
-    """Require and return a strict boolean from the requested structured field.
+    """Require and return a strict boolean from the requested `[execution]` field.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    "Strict" here means TOML's actual boolean type, not a truthy value like the
+    string "true" or the integer 1 -- these are governance flags this module fails
+    closed on, so they shouldn't be ambiguous about what counts as enabled.
 
     Args:
-        values: Structured values to validate, transform, or serialize.
-        key: The key value supplied by the caller or surrounding test fixture.
+        values: The parsed `[execution]` table to read from.
+        key: The field name to extract.
 
     Returns:
-        The value produced by the documented operation.
+        The field's boolean value.
     """
 
     value = values.get(key)
-    # Evaluate `not isinstance(value, bool)` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # bool is checked with isinstance, not truthiness, so "true"/1/etc. are rejected.
     if not isinstance(value, bool):
         raise HeldOutConfigError(f"execution.{key} must be a boolean")
     return value
