@@ -41,13 +41,15 @@ def test_fetch_project_id_parses_gh_output() -> None:
 
 
 def test_fetch_project_id_raises_on_gh_failure() -> None:
-    with patch.object(
-        subprocess,
-        "run",
-        side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="project not found"),
+    with (
+        patch.object(
+            subprocess,
+            "run",
+            side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="project not found"),
+        ),
+        pytest.raises(smps.ProjectStatusSyncError, match="project not found"),
     ):
-        with pytest.raises(smps.ProjectStatusSyncError, match="project not found"):
-            smps.fetch_project_id("Jared-Godar", 5)
+        smps.fetch_project_id("Jared-Godar", 5)
 
 
 # --- fetch_status_field ---------------------------------------------------------------
@@ -73,16 +75,20 @@ def test_fetch_status_field_raises_when_status_field_missing() -> None:
     import json
 
     payload = json.dumps({"fields": [{"id": "x", "name": "Priority", "options": []}]})
-    with patch.object(subprocess, "run", return_value=_completed(payload)):
-        with pytest.raises(smps.ProjectStatusSyncError, match="no 'Status' field"):
-            smps.fetch_status_field("Jared-Godar", 5)
+    with (
+        patch.object(subprocess, "run", return_value=_completed(payload)),
+        pytest.raises(smps.ProjectStatusSyncError, match="no 'Status' field"),
+    ):
+        smps.fetch_status_field("Jared-Godar", 5)
 
 
 def test_fetch_status_field_raises_when_merged_option_missing() -> None:
     payload = _status_field_payload([{"id": "backlog", "name": "Backlog"}])
-    with patch.object(subprocess, "run", return_value=_completed(payload)):
-        with pytest.raises(smps.ProjectStatusSyncError, match="no 'Merged' option"):
-            smps.fetch_status_field("Jared-Godar", 5)
+    with (
+        patch.object(subprocess, "run", return_value=_completed(payload)),
+        pytest.raises(smps.ProjectStatusSyncError, match="no 'Merged' option"),
+    ):
+        smps.fetch_status_field("Jared-Godar", 5)
 
 
 # --- find_pull_request_item_id ---------------------------------------------------------

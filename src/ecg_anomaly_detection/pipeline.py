@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Callable
 
 from ecg_anomaly_detection.acquisition import Fetcher, acquire_dataset
 from ecg_anomaly_detection.config import load_dataset_config

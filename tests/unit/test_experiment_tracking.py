@@ -82,10 +82,9 @@ def test_track_without_predictions_leaves_predictions_unset(tmp_path: Path) -> N
 def test_track_does_not_persist_a_candidate_whose_body_raises(tmp_path: Path) -> None:
     tracker = ExperimentTracker(tmp_path, ["a"])
 
-    with pytest.raises(RuntimeError, match="boom"):
-        with tracker.track("a") as recorder:
-            recorder.set_metrics({"accuracy": 0.5})
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError, match="boom"), tracker.track("a") as recorder:
+        recorder.set_metrics({"accuracy": 0.5})
+        raise RuntimeError("boom")
 
     assert tracker.is_completed("a") is False
     assert tracker.completed_candidate_ids() == ()
@@ -94,9 +93,11 @@ def test_track_does_not_persist_a_candidate_whose_body_raises(tmp_path: Path) ->
 def test_track_rejects_an_unknown_candidate_id(tmp_path: Path) -> None:
     tracker = ExperimentTracker(tmp_path, ["a"])
 
-    with pytest.raises(ExperimentTrackingError, match="unknown candidate ID"):
-        with tracker.track("not-a-candidate"):
-            pass
+    with (
+        pytest.raises(ExperimentTrackingError, match="unknown candidate ID"),
+        tracker.track("not-a-candidate"),
+    ):
+        pass
 
 
 def test_load_result_raises_for_a_candidate_with_no_checkpoint(tmp_path: Path) -> None:

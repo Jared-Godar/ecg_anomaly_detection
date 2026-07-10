@@ -68,7 +68,8 @@ def main() -> int:
         if args.dry_run:
             print(json.dumps(command))
         else:
-            subprocess.run(command, cwd=ROOT, check=True)
+            # command is a fixed literal list built above, not runtime/user-constructed input.
+            subprocess.run(command, cwd=ROOT, check=True)  # noqa: S603
     return 0
 
 

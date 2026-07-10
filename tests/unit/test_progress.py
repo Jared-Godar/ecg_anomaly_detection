@@ -60,9 +60,8 @@ def test_stage_reports_failure_and_reraises_without_a_completion_detail() -> Non
     stream = io.StringIO()
     reporter = ProgressReporter(stream=stream, monotonic=lambda: 0.0)
 
-    with pytest.raises(ValueError, match="boom"):
-        with reporter.stage("training", 6, 7):
-            raise ValueError("boom")
+    with pytest.raises(ValueError, match="boom"), reporter.stage("training", 6, 7):
+        raise ValueError("boom")
 
     lines = stream.getvalue().splitlines()
     assert lines == [

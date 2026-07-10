@@ -13,9 +13,10 @@ import argparse
 import json
 import subprocess
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / ".github" / "labels.json"
@@ -68,7 +69,14 @@ def find_drifted_items(
 
 def _run_gh(args: list[str]) -> str:
     try:
-        result = subprocess.run(["gh", *args], check=True, capture_output=True, text=True)
+        # command is a fixed literal ("gh", *args) built from this module's own
+        # subcommand arguments, not runtime/user-constructed input.
+        result = subprocess.run(  # noqa: S603
+            ["gh", *args],  # noqa: S607
+            check=True,
+            capture_output=True,
+            text=True,
+        )
     except FileNotFoundError as error:
         raise LabelDriftError("gh CLI is not installed or not on PATH") from error
     except subprocess.CalledProcessError as error:

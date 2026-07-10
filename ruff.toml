@@ -3,13 +3,20 @@ extend-exclude = ["archive/original_2022"]
 
 [lint]
 select = [
-  "B",  # flake8-bugbear
-  "E4", # import and indentation errors
-  "E7", # statement errors
-  "E9", # runtime and syntax errors
-  "F",  # Pyflakes
-  "I",  # import ordering
+  "B",   # flake8-bugbear
+  "E4",  # import and indentation errors
+  "E7",  # statement errors
+  "E9",  # runtime and syntax errors
+  "F",   # Pyflakes
+  "I",   # import ordering
+  "UP",  # pyupgrade
+  "S",   # flake8-bandit (security)
+  "SIM", # flake8-simplify
 ]
+
+[lint.per-file-ignores]
+# assert is the test mechanism itself in pytest, not a stripped-under-`-O` production guard.
+"tests/**" = ["S101"]
 
 [format]
 quote-style = "double"

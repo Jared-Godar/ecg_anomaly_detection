@@ -5,9 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from time import perf_counter
-from typing import Sequence
 
 from ecg_anomaly_detection.acquisition import AcquisitionError, acquire_dataset
 from ecg_anomaly_detection.benchmark_approval import (

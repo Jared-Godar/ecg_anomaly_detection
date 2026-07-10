@@ -49,6 +49,17 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Changed
 
+- Changed `ruff.toml`'s `lint.select` to add `UP` (pyupgrade), `S` (flake8-bandit), and `SIM`
+  (flake8-simplify) for ongoing regression protection, plus a `tests/**` per-file-ignore for
+  `S101` (`assert` is the test mechanism itself under pytest, not a stripped-under-`-O` production
+  guard). Of the 627 violations the expanded rule set surfaced, 577 were that `S101`-in-tests
+  case; the remainder were resolved with zero behavior change: mechanical auto-fixes
+  (`typing.Callable`/`Sequence`/`Iterator`/`Mapping` → `collections.abc`, Yoda-condition
+  rewrites, import re-sorting), hand-merged nested `with` statements where ruff couldn't
+  auto-fix due to line length, and targeted `# noqa` suppressions with one-line justifications
+  on `subprocess` calls that only ever run a fixed, hardcoded command list (`S603`/`S607`), one
+  already-validated `urllib.request.Request` call (`S310`), and one deterministic seeded shuffle
+  used for reproducible splitting rather than cryptographic purposes (`S311`). Closes #136.
 - Changed `run_manifest._capture_git_state()` to degrade gracefully instead of raising
   `RunManifestError` when Git is unavailable or exits non-zero, matching the existing
   `reproducibility.capture_git_metadata()` pattern: it now returns a sentinel `GitState(revision=
