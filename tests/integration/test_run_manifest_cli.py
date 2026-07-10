@@ -57,10 +57,12 @@ def test_create_run_manifest_command_records_local_evidence(tmp_path: Path) -> N
         ),
         encoding="utf-8",
     )
-    subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    # every git invocation below is a fixed literal command list, not
+    # runtime/user-constructed input.
+    subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, check=True)  # noqa: S607
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)  # noqa: S607
     subprocess.run(
-        [
+        [  # noqa: S607
             "git",
             "-c",
             "user.name=Test User",

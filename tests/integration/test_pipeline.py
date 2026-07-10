@@ -326,10 +326,12 @@ zero_division = 0.0
 """.strip(),
         encoding="utf-8",
     )
-    subprocess.run(["git", "init", "--quiet"], cwd=root, check=True)
-    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    # every git invocation below is a fixed literal command list, not
+    # runtime/user-constructed input.
+    subprocess.run(["git", "init", "--quiet"], cwd=root, check=True)  # noqa: S607
+    subprocess.run(["git", "add", "."], cwd=root, check=True)  # noqa: S607
     subprocess.run(
-        [
+        [  # noqa: S607
             "git",
             "-c",
             "user.name=Test User",

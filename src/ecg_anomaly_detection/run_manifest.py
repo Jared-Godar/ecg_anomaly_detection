@@ -9,11 +9,12 @@ import string
 import subprocess
 import sys
 import uuid
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any
 
 from ecg_anomaly_detection.inventory import InventoryError, InventoryManifest, read_manifest
 from ecg_anomaly_detection.splitting import SplitError, read_split_manifest
@@ -363,15 +364,16 @@ def _read_split_evidence(path: Path, split_file: FileEvidence) -> SplitEvidence:
 
 def _capture_git_state(repository_root: Path) -> GitState:
     try:
+        # both command lists below are fixed literals, not runtime/user-constructed input.
         revision = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
+            ["git", "rev-parse", "HEAD"],  # noqa: S607
             cwd=repository_root,
             capture_output=True,
             text=True,
             check=True,
         ).stdout.strip()
         status = subprocess.run(
-            ["git", "status", "--porcelain", "--untracked-files=normal"],
+            ["git", "status", "--porcelain", "--untracked-files=normal"],  # noqa: S607
             cwd=repository_root,
             capture_output=True,
             text=True,

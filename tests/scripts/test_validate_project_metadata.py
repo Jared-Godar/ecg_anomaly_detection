@@ -226,13 +226,15 @@ def test_fetch_pull_request_parses_gh_output() -> None:
 
 
 def test_fetch_pull_request_raises_on_gh_failure() -> None:
-    with patch.object(
-        subprocess,
-        "run",
-        side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="pull request not found"),
+    with (
+        patch.object(
+            subprocess,
+            "run",
+            side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="pull request not found"),
+        ),
+        pytest.raises(vpm.MetadataValidationError, match="pull request not found"),
     ):
-        with pytest.raises(vpm.MetadataValidationError, match="pull request not found"):
-            vpm.fetch_pull_request(999999, repo=None)
+        vpm.fetch_pull_request(999999, repo=None)
 
 
 def test_fetch_issue_milestone_parses_gh_output_with_a_milestone() -> None:
@@ -256,20 +258,24 @@ def test_fetch_issue_milestone_returns_none_when_absent() -> None:
 
 
 def test_fetch_issue_milestone_raises_on_gh_failure() -> None:
-    with patch.object(
-        subprocess,
-        "run",
-        side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="issue not found"),
+    with (
+        patch.object(
+            subprocess,
+            "run",
+            side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="issue not found"),
+        ),
+        pytest.raises(vpm.MetadataValidationError, match="issue not found"),
     ):
-        with pytest.raises(vpm.MetadataValidationError, match="issue not found"):
-            vpm.fetch_issue_milestone(999999, repo=None)
+        vpm.fetch_issue_milestone(999999, repo=None)
 
 
 def test_fetch_project_items_raises_metadata_validation_error_on_failure() -> None:
-    with patch.object(
-        subprocess,
-        "run",
-        side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="insufficient scope"),
+    with (
+        patch.object(
+            subprocess,
+            "run",
+            side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="insufficient scope"),
+        ),
+        pytest.raises(vpm.MetadataValidationError, match="insufficient scope"),
     ):
-        with pytest.raises(vpm.MetadataValidationError, match="insufficient scope"):
-            vpm.fetch_project_items("Jared-Godar", 5)
+        vpm.fetch_project_items("Jared-Godar", 5)

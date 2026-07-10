@@ -115,10 +115,12 @@ def test_fetch_items_combines_issues_and_pull_requests() -> None:
 
 
 def test_fetch_items_raises_label_drift_error_on_gh_failure() -> None:
-    with patch.object(
-        subprocess,
-        "run",
-        side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="not authenticated"),
+    with (
+        patch.object(
+            subprocess,
+            "run",
+            side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="not authenticated"),
+        ),
+        pytest.raises(dld.LabelDriftError, match="not authenticated"),
     ):
-        with pytest.raises(dld.LabelDriftError, match="not authenticated"):
-            dld.fetch_items(repo=None, include_closed=False)
+        dld.fetch_items(repo=None, include_closed=False)

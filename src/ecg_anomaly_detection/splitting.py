@@ -6,9 +6,10 @@ import json
 import random
 import tomllib
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 from zipfile import BadZipFile
 
 import numpy as np
@@ -468,7 +469,9 @@ def create_split_manifest(config: SplitConfig, metadata: WindowMetadata) -> Spli
         raise SplitError("subject-grouped splitting requires at least 3 subjects")
 
     shuffled_subjects = unique_subjects.copy()
-    random.Random(config.seed).shuffle(shuffled_subjects)
+    # deterministic seeded shuffle for reproducible train/val/test partitioning,
+    # not a cryptographic use.
+    random.Random(config.seed).shuffle(shuffled_subjects)  # noqa: S311
     sizes = _partition_sizes(
         len(shuffled_subjects),
         (config.train_ratio, config.validation_ratio, config.test_ratio),

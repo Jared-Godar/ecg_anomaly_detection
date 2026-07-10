@@ -17,10 +17,10 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterator, Mapping, Sequence
 
 import numpy as np
 

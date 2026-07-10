@@ -30,9 +30,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 NOTEBOOKS: tuple[str, ...] = (
     "notebooks/00-environment-setup-and-artifact-generation.ipynb",
@@ -239,7 +239,9 @@ def _run(
     command: Sequence[str], *, cwd: Path, timeout_seconds: float
 ) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(
+        # every call site below passes a fixed literal command list, not
+        # runtime/user-constructed input.
+        return subprocess.run(  # noqa: S603
             command,
             cwd=cwd,
             capture_output=True,
@@ -264,8 +266,10 @@ def create_worktree(repository_root: Path, worktree: Path) -> None:
 
 
 def remove_worktree(repository_root: Path, worktree: Path) -> None:
-    subprocess.run(
-        ["git", "worktree", "remove", "--force", str(worktree)],
+    # command is a fixed literal ("git", "worktree", "remove", "--force", <path>),
+    # not runtime/user-constructed input.
+    subprocess.run(  # noqa: S603
+        ["git", "worktree", "remove", "--force", str(worktree)],  # noqa: S607
         cwd=repository_root,
         capture_output=True,
         text=True,
