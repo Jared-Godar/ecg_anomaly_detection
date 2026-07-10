@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
+import shutil
 import string
 import tempfile
 import urllib.error
@@ -433,6 +435,37 @@ def _write_manifest_once(manifest: AcquisitionManifest, output_path: Path) -> No
 def _install_without_overwrite(source: Path, destination: Path) -> None:
     try:
         os.link(source, destination)
+        return
+    except FileExistsError as error:
+        raise AcquisitionError(
+            f"refusing to overwrite acquired file: {destination.name}"
+        ) from error
+    except OSError as error:
+        if error.errno != errno.EXDEV:
+            raise AcquisitionError(
+                f"could not install acquired file {destination.name}: {error}"
+            ) from error
+
+    # source and destination are on different filesystems, so a hard link is
+    # not possible. Copy into a temporary file alongside destination (always
+    # the same filesystem as destination) and hard-link from there, so the
+    # atomic no-overwrite guarantee above still holds instead of being lost to
+    # a plain copy-and-replace.
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            dir=destination.parent,
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            with source.open("rb") as source_file:
+                shutil.copyfileobj(source_file, temporary, BUFFER_SIZE)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        shutil.copystat(source, temporary_path)
+        os.link(temporary_path, destination)
     except FileExistsError as error:
         raise AcquisitionError(
             f"refusing to overwrite acquired file: {destination.name}"
@@ -441,6 +474,9 @@ def _install_without_overwrite(source: Path, destination: Path) -> None:
         raise AcquisitionError(
             f"could not install acquired file {destination.name}: {error}"
         ) from error
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def _hash_file(path: Path) -> TransferResult:
