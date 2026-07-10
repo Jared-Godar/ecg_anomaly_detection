@@ -10,7 +10,7 @@ import numpy as np
 
 from ecg_anomaly_detection.cli import main
 
-# Centralize _CONFIG so every caller shares the same documented invariant.
+# A minimal two-threshold, validation-partition sweep config shared by both tests below.
 _CONFIG = (
     "schema_version = 1\n\n"
     "[threshold_sweep]\n"
@@ -23,13 +23,11 @@ _CONFIG = (
 
 
 def test_evaluate_threshold_sweep_command_writes_metrics(tmp_path: Path) -> None:
-    """Verify that evaluate threshold sweep command writes metrics.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """`ecg-data evaluate-threshold-sweep` writes a metrics file with the sweep's own name,
+    partition, threshold count, and never references a "test"-partition shard path.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     paths = _repository(tmp_path)
@@ -66,13 +64,10 @@ def test_evaluate_threshold_sweep_command_writes_metrics(tmp_path: Path) -> None
 
 
 def test_evaluate_threshold_sweep_command_fails_closed_on_digest_mismatch(tmp_path: Path) -> None:
-    """Verify that evaluate threshold sweep command fails closed on digest mismatch.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """A corrupted model file makes `evaluate-threshold-sweep` exit 1 and leave no output file behind.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     paths = _repository(tmp_path)
@@ -106,16 +101,19 @@ def test_evaluate_threshold_sweep_command_fails_closed_on_digest_mismatch(tmp_pa
 
 
 def _repository(root: Path) -> dict[str, Path]:
-    """Compute and return repository for the documented repository workflow.
+    """Build a minimal fixture repository: one validation shard, a dataset index, and a model.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    The dataset index's "test" partition intentionally points at a shard
+    path that is never written to disk ("test-must-not-open.npz"), so any
+    accidental read of the test partition fails loudly with a file-not-found
+    error instead of silently succeeding.
 
     Args:
-        root: Repository root used to enforce path and trust boundaries.
+        root: Pytest's per-test isolated temporary directory, used as the
+            fixture repository root.
 
     Returns:
-        The value produced by the documented operation.
+        A dict with "index", "model", "metadata", and "shard" paths.
     """
 
     (root / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
@@ -207,17 +205,15 @@ def _repository(root: Path) -> dict[str, Path]:
 
 
 def _identity(root: Path, path: Path) -> dict[str, object]:
-    """Compute and return identity for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """Compute the relative path, byte size, and SHA-256 digest that the digest check compares against.
 
     Args:
-        root: Repository root used to enforce path and trust boundaries.
-        path: Filesystem path identifying the input or output under review.
+        root: The fixture repository root, used to make the recorded path relative.
+        path: The file to fingerprint.
 
     Returns:
-        The value produced by the documented operation.
+        A dict with "path", "size_bytes", and "sha256" keys matching the
+        digest-tracked-input shape the evaluation code expects.
     """
 
     content = path.read_bytes()
@@ -229,16 +225,13 @@ def _identity(root: Path, path: Path) -> dict[str, object]:
 
 
 def _counts(values: np.ndarray) -> dict[str, int]:
-    """Compute and return counts for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """Tally how many times each distinct value in values occurs, keyed by its string form.
 
     Args:
-        values: Structured values to validate, transform, or serialize.
+        values: The target-value array to tally.
 
     Returns:
-        The value produced by the documented operation.
+        A dict mapping each distinct value's string representation to its count.
     """
 
     return {str(value): int(np.count_nonzero(values == value)) for value in np.unique(values)}
