@@ -19,7 +19,8 @@ from ecg_anomaly_detection.run_manifest import (
     write_run_manifest,
 )
 
-# Centralize RUN_ID so every caller shares the same documented invariant.
+# A well-formed canonical UUID used as the fixed run ID across these tests, injected
+# via run_id_factory so manifest content is deterministic and assertable.
 RUN_ID = "12345678-1234-5678-1234-567812345678"
 
 
@@ -30,14 +31,11 @@ class _FailingSubprocess:
 
     @staticmethod
     def run(*_args: object, **_kwargs: object) -> None:
-        """Build or exercise the run test fixture.
-
-        The helper keeps repeated test setup explicit without hiding the contract under
-        examination.
+        """Simulate `git` being absent from PATH, regardless of what command was requested.
 
         Args:
-            _args: The args value supplied by the caller or surrounding test fixture.
-            _kwargs: The kwargs value supplied by the caller or surrounding test fixture.
+            _args: Unused; every call raises regardless of the command.
+            _kwargs: Unused; every call raises regardless of the command.
         """
 
         raise FileNotFoundError("git executable not found")
@@ -45,16 +43,17 @@ class _FailingSubprocess:
 
 @pytest.fixture
 def repository(tmp_path: Path) -> Path:
-    """Build or exercise the repository test fixture.
+    """A fake repository with a valid, cross-referenced inventory manifest and split manifest.
 
-    The helper keeps repeated test setup explicit without hiding the contract under
-    examination.
+    Three records (100/101/102) are split one-per-partition with distinct target-class
+    distributions, so tests exercising leakage detection or manifest field values have
+    non-degenerate data to work with.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
 
     Returns:
-        The value produced by the documented operation.
+        The fake repository root path.
     """
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
@@ -123,13 +122,12 @@ def repository(tmp_path: Path) -> Path:
 def test_run_manifest_is_deterministic_with_injected_runtime_evidence(
     repository: Path,
 ) -> None:
-    """Verify that run manifest is deterministic with injected runtime evidence.
+    """Every injected evidence provider's output flows through into the written manifest.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        repository: The repository value supplied by the caller or surrounding test fixture.
+    Confirms create_run_manifest correctly assembles fields from every one of its
+    inputs -- inventory (file_count/total_size_bytes/digests), split (record counts,
+    per-partition record IDs), config/artifact paths (stored repository-relative, never
+    absolute), and the injected environment/clock/run-ID providers -- into one coherent document.
     """
 
     manifest = _create_manifest(repository)
@@ -157,21 +155,16 @@ def test_run_manifest_is_deterministic_with_injected_runtime_evidence(
 def test_run_manifest_rejects_evidence_outside_repository(
     repository: Path, tmp_path_factory: pytest.TempPathFactory
 ) -> None:
-    """Verify that run manifest rejects evidence outside repository.
+    """A config path outside the repository root is rejected, not silently included.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        repository: The repository value supplied by the caller or surrounding test fixture.
-        tmp_path_factory: The tmp path factory value supplied by the caller or surrounding test fixture.
+    Protects _resolve_evidence_path's containment check: `external` lives in a
+    completely separate temp directory, outside `repository`'s tree entirely.
     """
 
     external = tmp_path_factory.mktemp("external") / "outside.toml"
     external.write_text("secret=false\n", encoding="utf-8")
 
-    # Scope `pytest.raises(RunManifestError, match='within repository root')` here so the expected
-    # failure and fixture cleanup stay scoped to this assertion.
+    # `external` is outside `repository`'s directory tree entirely.
     with pytest.raises(RunManifestError, match="within repository root"):
         create_run_manifest(
             repository,
@@ -184,13 +177,11 @@ def test_run_manifest_rejects_evidence_outside_repository(
 
 
 def test_run_manifest_rejects_split_record_leakage(repository: Path) -> None:
-    """Verify that run manifest rejects split record leakage.
+    """A split manifest with a record duplicated across partitions is rejected on read.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        repository: The repository value supplied by the caller or surrounding test fixture.
+    create_run_manifest reads the split manifest via read_split_manifest, which
+    re-verifies leakage-freedom on every load; this confirms that check actually
+    propagates up through _read_split_evidence rather than being silently swallowed.
     """
 
     split_path = repository / "artifacts" / "split.json"
@@ -198,24 +189,19 @@ def test_run_manifest_rejects_split_record_leakage(repository: Path) -> None:
     document["partitions"]["test"]["record_ids"] = ["100"]
     split_path.write_text(json.dumps(document), encoding="utf-8")
 
-    # Scope `pytest.raises(RunManifestError, match='record leakage')` here so the expected failure
-    # and fixture cleanup stay scoped to this assertion.
+    # Record "100" was copied from train into test's record_ids above.
     with pytest.raises(RunManifestError, match="record leakage"):
         _create_manifest(repository)
 
 
 def test_run_manifest_rejects_naive_clock(repository: Path) -> None:
-    """Verify that run manifest rejects naive clock.
+    """A clock returning a naive (timezone-unaware) datetime is rejected.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        repository: The repository value supplied by the caller or surrounding test fixture.
+    created_at_utc is serialized with an explicit "Z" suffix, which would be a lie
+    about the actual timezone if the source datetime carried no timezone info at all.
     """
 
-    # Scope `pytest.raises(RunManifestError, match='timezone-aware')` here so the expected failure
-    # and fixture cleanup stay scoped to this assertion.
+    # datetime(2026, 1, 2) has no tzinfo.
     with pytest.raises(RunManifestError, match="timezone-aware"):
         create_run_manifest(
             repository,
@@ -230,29 +216,19 @@ def test_run_manifest_rejects_naive_clock(repository: Path) -> None:
 
 
 def test_run_manifest_output_must_stay_under_ignored_artifacts(repository: Path) -> None:
-    """Verify that run manifest output must stay under ignored artifacts.
+    """An output path outside artifacts/ is rejected, matching the directory contract."""
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        repository: The repository value supplied by the caller or surrounding test fixture.
-    """
-
-    # Scope `pytest.raises(RunManifestError, match='under artifacts')` here so the expected failure
-    # and fixture cleanup stay scoped to this assertion.
+    # Path("run.json") is repository-root-relative, not under artifacts/.
     with pytest.raises(RunManifestError, match="under artifacts"):
         write_run_manifest(_create_manifest(repository), repository, Path("run.json"))
 
 
 def test_read_run_manifest_round_trips_a_written_manifest(repository: Path) -> None:
-    """Verify that read run manifest round trips a written manifest.
+    """read_run_manifest reconstructs an object equal to the one write_run_manifest wrote.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        repository: The repository value supplied by the caller or surrounding test fixture.
+    Protects _manifest_from_document's field-by-field reconstruction: every nested
+    structure (GitState, EnvironmentSnapshot, DatasetEvidence, SplitEvidence and its
+    partitions) must round-trip through JSON without loss or reordering.
     """
 
     manifest = _create_manifest(repository)
@@ -265,39 +241,28 @@ def test_read_run_manifest_round_trips_a_written_manifest(repository: Path) -> N
 
 
 def test_read_run_manifest_rejects_invalid_json(tmp_path: Path) -> None:
-    """Verify that read run manifest rejects invalid json.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-    """
+    """Malformed JSON is rejected with a message naming the file, not a bare JSONDecodeError."""
 
     path = tmp_path / "run.json"
     path.write_text("not json", encoding="utf-8")
 
-    # Scope `pytest.raises(RunManifestError, match='could not read run manifest')` here so the
-    # expected failure and fixture cleanup stay scoped to this assertion.
+    # "not json" isn't valid JSON at all.
     with pytest.raises(RunManifestError, match="could not read run manifest"):
         read_run_manifest(path)
 
 
 def test_read_run_manifest_rejects_incomplete_document(tmp_path: Path) -> None:
-    """Verify that read run manifest rejects incomplete document.
+    """A structurally valid but field-incomplete JSON document is rejected on read.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    Protects read_run_manifest's KeyError-to-RunManifestError translation: a document
+    with only schema_version (missing every other required field) must raise the
+    module's own exception type, not propagate a bare KeyError.
     """
 
     path = tmp_path / "run.json"
     path.write_text(json.dumps({"schema_version": 1}), encoding="utf-8")
 
-    # Scope `pytest.raises(RunManifestError, match='invalid run manifest')` here so the expected
-    # failure and fixture cleanup stay scoped to this assertion.
+    # Only schema_version is present; every other required field is missing.
     with pytest.raises(RunManifestError, match="invalid run manifest"):
         read_run_manifest(path)
 
@@ -305,14 +270,11 @@ def test_read_run_manifest_rejects_incomplete_document(tmp_path: Path) -> None:
 def test_capture_git_state_degrades_gracefully_when_git_is_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Verify that capture git state degrades gracefully when git is unavailable.
+    """_capture_git_state degrades to the UNKNOWN_GIT_REVISION sentinel when git isn't installed.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        monkeypatch: Pytest monkeypatch fixture used to isolate external behavior.
+    Protects the graceful-degradation contract directly at the unit level, using
+    _FailingSubprocess to simulate a missing `git` executable (FileNotFoundError)
+    rather than depending on the test environment actually lacking Git.
     """
 
     monkeypatch.setattr(run_manifest, "subprocess", _FailingSubprocess)
@@ -325,14 +287,12 @@ def test_capture_git_state_degrades_gracefully_when_git_is_unavailable(
 def test_create_run_manifest_completes_when_git_is_unavailable(
     repository: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Verify that create run manifest completes when git is unavailable.
+    """create_run_manifest still succeeds end to end when Git is unavailable.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        repository: The repository value supplied by the caller or surrounding test fixture.
-        monkeypatch: Pytest monkeypatch fixture used to isolate external behavior.
+    Same simulated-missing-git setup as the _capture_git_state unit test above, but
+    exercised through the full create_run_manifest entry point (using the default
+    git_state_provider, not an injected fake) to confirm the degraded GitState
+    propagates into a complete, otherwise-valid manifest rather than aborting the whole call.
     """
 
     monkeypatch.setattr(run_manifest, "subprocess", _FailingSubprocess)
@@ -352,13 +312,11 @@ def test_create_run_manifest_completes_when_git_is_unavailable(
 
 
 def test_run_manifest_round_trips_degraded_git_state_as_json_null(repository: Path) -> None:
-    """Verify that run manifest round trips degraded git state as json null.
+    """A degraded GitState (UNKNOWN_GIT_REVISION, dirty=None) round-trips through JSON correctly.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        repository: The repository value supplied by the caller or surrounding test fixture.
+    Confirms `dirty: None` serializes as JSON `null` (not omitted or coerced to
+    false), and that read_run_manifest reconstructs the exact same degraded GitState
+    rather than misinterpreting null as some other sentinel.
     """
 
     manifest = create_run_manifest(
@@ -385,16 +343,17 @@ def test_run_manifest_round_trips_degraded_git_state_as_json_null(repository: Pa
 
 
 def _create_manifest(repository: Path) -> RunManifest:
-    """Create manifest according to the repository contract.
+    """Build a complete, valid RunManifest against the `repository` fixture's evidence.
 
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    Shared by every test that needs a working manifest without repeating the same
+    six-argument create_run_manifest call; a fixed clock, run ID, and Git state make
+    the result deterministic across tests.
 
     Args:
-        repository: The repository value supplied by the caller or surrounding test fixture.
+        repository: The fake repository root to build a manifest against.
 
     Returns:
-        The value produced by the documented operation.
+        A fully populated RunManifest.
     """
 
     return create_run_manifest(
@@ -411,13 +370,10 @@ def _create_manifest(repository: Path) -> RunManifest:
 
 
 def _environment() -> EnvironmentSnapshot:
-    """Compute and return environment for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """A fixed, deterministic EnvironmentSnapshot, injected in place of the real environment_provider.
 
     Returns:
-        The value produced by the documented operation.
+        A fixed EnvironmentSnapshot with one installed package (numpy).
     """
 
     return EnvironmentSnapshot(
