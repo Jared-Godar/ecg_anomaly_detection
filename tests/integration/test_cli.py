@@ -10,13 +10,10 @@ from ecg_anomaly_detection.cli import main
 
 
 def test_inventory_then_verify_commands(tmp_path: Path) -> None:
-    """Verify that inventory then verify commands.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """`ecg-data inventory` writes a manifest that a subsequent `ecg-data verify` accepts unchanged.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     config_path = tmp_path / "dataset.toml"
@@ -38,8 +35,7 @@ required_extensions = ["atr", "dat", "hea"]
     )
     data_dir = tmp_path / "raw"
     data_dir.mkdir()
-    # Iterate over `('atr', 'dat', 'hea')` one item at a time so ordering, validation, and failure
-    # attribution remain explicit.
+    # Write one distinct-content file per required extension, matching dataset.toml above.
     for extension in ("atr", "dat", "hea"):
         (data_dir / f"100.{extension}").write_bytes(extension.encode())
     manifest_path = tmp_path / "inventory.json"
@@ -75,14 +71,17 @@ required_extensions = ["atr", "dat", "hea"]
 def test_check_local_notebooks_cli_emits_json_without_execution(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Verify that check local notebooks cli emits json without execution.
+    """`ecg-data check-local-notebooks --json` reports a notebook as valid without ever running
+    its cells, even though the one cell present would raise if executed.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    check_notebooks's "never executes cells" guarantee is what this test
+    actually protects; if the CLI ever started executing notebooks, this
+    deliberately-raising cell would surface as a crash instead of a clean
+    JSON report.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        capsys: Pytest capture fixture used to inspect terminal output.
+        tmp_path: Pytest's per-test isolated temporary directory.
+        capsys: Used to capture and parse main's printed stdout as JSON.
     """
 
     path = tmp_path / "notebooks/local/example.ipynb"
