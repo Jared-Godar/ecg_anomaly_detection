@@ -11,13 +11,15 @@ from ecg_anomaly_detection.records import load_wfdb_record, validate_record
 
 
 def test_load_and_validate_synthetic_wfdb_record(tmp_path: Path) -> None:
-    """Verify that load and validate synthetic wfdb record.
+    """A synthetic record written with the real wfdb package round-trips through load_wfdb_record
+    and validate_record with matching shape, immutability, channel names, and symbol counts.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Writing through wfdb (rather than hand-building a SignalRecord) exercises
+    the actual on-disk WFDB format this pipeline must parse, not just the
+    in-memory data structures.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     data_dir = tmp_path / "raw"
@@ -37,13 +39,11 @@ def test_load_and_validate_synthetic_wfdb_record(tmp_path: Path) -> None:
 
 
 def test_validate_record_cli_writes_report(tmp_path: Path) -> None:
-    """Verify that validate record cli writes report.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """`ecg-data validate-record` run against a synthetic WFDB record writes a validation report
+    with the correct 16-sample count.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     data_dir = tmp_path / "raw"
@@ -75,13 +75,11 @@ def test_validate_record_cli_writes_report(tmp_path: Path) -> None:
 
 
 def test_map_annotations_cli_writes_audit_report(tmp_path: Path) -> None:
-    """Verify that map annotations cli writes audit report.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """`ecg-data map-annotations` run against a synthetic record writes an audit report with the
+    correct included-count and per-target tally.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     data_dir = tmp_path / "raw"
@@ -138,13 +136,11 @@ symbols = ["!"]
 
 
 def test_extract_windows_cli_writes_npz_and_report(tmp_path: Path) -> None:
-    """Verify that extract windows cli writes npz and report.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """`ecg-data extract-windows` run end-to-end against a synthetic record writes a window NPZ
+    shard and a matching report with the correct shape, record IDs, and emitted-window count.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     data_dir = tmp_path / "raw"
@@ -192,8 +188,7 @@ boundary_policy = "exclude"
     )
 
     assert exit_code == 0
-    # Scope `np.load(output_path, allow_pickle=False)` here so the expected failure and fixture
-    # cleanup stay scoped to this assertion.
+    # The window NPZ artifact was just written by the CLI invocation above.
     with np.load(output_path, allow_pickle=False) as artifact:
         assert artifact["windows"].shape == (3, 2)
         assert artifact["record_ids"].tolist() == ["100", "100", "100"]
@@ -201,13 +196,10 @@ boundary_policy = "exclude"
 
 
 def _write_synthetic_record(data_dir: Path) -> None:
-    """Write synthetic record according to the repository contract.
-
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    """Write a 16-sample, 2-channel synthetic WFDB record ("100") with 3 annotations via the real wfdb package.
 
     Args:
-        data_dir: The data dir value supplied by the caller or surrounding test fixture.
+        data_dir: Directory to write the record's .dat/.hea/.atr files into.
     """
 
     sample_axis = np.linspace(0.0, 1.0, 16, endpoint=False)
@@ -232,13 +224,10 @@ def _write_synthetic_record(data_dir: Path) -> None:
 
 
 def _synthetic_config() -> DatasetConfig:
-    """Compute and return synthetic config for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """A one-record DatasetConfig matching the record _write_synthetic_record produces.
 
     Returns:
-        The value produced by the documented operation.
+        A DatasetConfig for record "100" at 360 Hz with atr/dat/hea files required.
     """
 
     return DatasetConfig(
@@ -256,13 +245,10 @@ def _synthetic_config() -> DatasetConfig:
 
 
 def _dataset_config_content() -> str:
-    """Construct dataset config content for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """The TOML-file equivalent of _synthetic_config, for tests that exercise config-file loading.
 
     Returns:
-        The value produced by the documented operation.
+        A dataset config TOML document matching _synthetic_config's fields.
     """
 
     return """
@@ -281,13 +267,11 @@ required_extensions = ["atr", "dat", "hea"]
 
 
 def _mapping_config_content() -> str:
-    """Compute and return mapping config content for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """A binary annotation-mapping TOML document: "N" -> reference_normal, "V" -> selected_other, "!" excluded.
 
     Returns:
-        The value produced by the documented operation.
+        A mapping config TOML document matching the symbols
+        _write_synthetic_record's annotations use.
     """
 
     return """
