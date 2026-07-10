@@ -74,6 +74,10 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   under #133 still fails closed on `repository_commit_hash` in `record_benchmark_approval()`,
   so the graceful-degradation change cannot let an unverifiable-provenance run pass benchmark
   approval (#133, #135).
+- Changed `pyproject.toml`'s `Development Status` classifier from `3 - Alpha` to `4 - Beta`,
+  reflecting the pipeline's actual maturity now that the modernization has a tagged 1.0.0 release.
+  No dependency, version, or build-backend change; `uv build` and the CI package-build job remain
+  green (#137).
 
 ### Fixed
 
@@ -173,6 +177,12 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   entry points a consistent visual identity. `NOTICE.md` records their AI-generated-original
   provenance, distinct from the unresolved-provenance historical imagery covered by the MOD-008
   audit (#107).
+
+- Documented the random-projection normalization in `training.py`'s `_fit()` and
+  `docs/baseline-training.md`'s "Scope and boundary" section: dividing by
+  `sqrt(projection_components)` is the standard Johnson-Lindenstrauss scaling that keeps the
+  projection approximately distance-preserving, not an arbitrary constant. No change to the
+  normalization value, training behavior, or dependencies (#140).
 
 ### Security
 
