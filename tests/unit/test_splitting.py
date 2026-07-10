@@ -227,6 +227,64 @@ def test_quality_summary_handles_missing_class_and_insufficient_counts(
         enforce_split_quality(summary)
 
 
+def test_quality_summary_shard_count_and_ratios_with_multiple_source_artifacts(
+    split_config: SplitConfig,
+) -> None:
+    """shard_count and actual_ratios["shards"] must be correct when len(source_artifacts) > 1.
+
+    Regression test for #131: the old comprehension used record_id as a fallback shard path
+    instead of the real shard path, corrupting both shard_count and the shards ratio.
+
+    Setup: three shards, one per partition (disjoint), so actual_ratios["shards"] sums to 1.0.
+    split_config assigns: subject-a → train, subject-b → validation, subject-c → test.
+    Records:  100/101 → subject-a → shard_a (train)
+              102     → subject-b → shard_b (validation)
+              103     → subject-c → shard_c (test)
+    """
+    shard_a = "data/shard_a.npz"
+    shard_b = "data/shard_b.npz"
+    shard_c = "data/shard_c.npz"
+    metadata = WindowMetadata(
+        record_ids=("100", "100", "101", "101", "102", "102", "103", "103"),
+        target_values=np.asarray([0, 1, 0, 1, 1, 0, 0, 0], dtype=np.int64),
+        source_artifacts=(shard_a, shard_b, shard_c),
+        mapping_name="binary-map",
+        mapping_version="1.0.0",
+        window_config_name="six-second",
+        window_config_version="1.0.0",
+        record_shards={
+            "100": shard_a,
+            "101": shard_a,
+            "102": shard_b,
+            "103": shard_c,
+        },
+    )
+
+    manifest = create_split_manifest(split_config, metadata)
+    summary = create_split_quality_summary(split_config, manifest, metadata)
+
+    assert summary.status == "passed"
+
+    # Each partition's shard_count must equal the number of distinct shard paths in that partition.
+    # train (100, 101) → {shard_a}       → shard_count == 1
+    # validation (102) → {shard_b}       → shard_count == 1
+    # test (103)       → {shard_c}       → shard_count == 1
+    for partition_name, diag in summary.partitions.items():
+        record_ids = set(manifest.partitions[partition_name].record_ids)
+        expected_shards = {metadata.record_shards[r] for r in record_ids}
+        assert diag["shard_count"] == len(expected_shards), (
+            f"partition {partition_name}: expected shard_count={len(expected_shards)}, "
+            f"got {diag['shard_count']}"
+        )
+
+    # Shards are disjoint across partitions (3 unique total, 1 per partition),
+    # so actual_ratios["shards"] must sum to exactly 1.0.
+    shards_ratio_sum = sum(diag["actual_ratios"]["shards"] for diag in summary.partitions.values())
+    assert shards_ratio_sum == pytest.approx(1.0), (
+        f"actual_ratios['shards'] sum expected 1.0, got {shards_ratio_sum}"
+    )
+
+
 def _write_metadata_artifact(path: Path, record_ids: list[str], target_values: list[int]) -> None:
     np.savez_compressed(
         path,

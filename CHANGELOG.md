@@ -51,6 +51,8 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Fixed
 
+- Fixed `create_split_quality_summary()` computing incorrect `shard_count` and `actual_ratios["shards"]` when `len(metadata.source_artifacts) > 1`: replaced the broken set-comprehension fallback (which used `record_id` as a shard path) with a direct `record_shards` lookup, and moved the total-unique-shards denominator outside the partition loop (#131).
+
 ### Removed
 
 ### Governance
