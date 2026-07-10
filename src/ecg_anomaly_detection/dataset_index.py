@@ -110,29 +110,29 @@ def create_dataset_index(
 ) -> DatasetIndex:
     """Validate record shards and index them according to grouped split membership."""
     root = repository_root.resolve()
-    # Evaluate `not (root / 'pyproject.toml').is_file()` explicitly so invalid or alternate states
-    # follow the documented contract.
+    # A pyproject.toml at the root is the cheapest available signal that this is really
+    # the repository root and not an arbitrary directory, before any path-boundary checks
+    # below trust it as the containment root for shard and manifest paths.
     if not (root / "pyproject.toml").is_file():
         raise DatasetIndexError(f"repository root does not contain pyproject.toml: {root}")
     split_path = _resolve_file(root, split_manifest_path, ("artifacts",), "split manifest")
-    # Attempt this boundary operation here so ValueError can be translated or cleaned up under the
-    # repository contract.
+    # read_split_manifest already validates leakage-freedom and count consistency; only
+    # translate its ValueError into this module's own exception type so callers only need
+    # to catch DatasetIndexError for every failure mode in this stage.
     try:
         split_manifest = read_split_manifest(split_path)
     except ValueError as error:
         raise DatasetIndexError(f"invalid split manifest: {error}") from error
-    # Evaluate `not window_artifact_paths` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # An index built from zero shards would otherwise silently produce empty partitions.
     if not window_artifact_paths:
         raise DatasetIndexError("at least one window artifact is required")
 
     inspected = [_inspect_shard(root, path) for path in window_artifact_paths]
     by_record: dict[str, _InspectedShard] = {}
-    # Iterate over `inspected` one item at a time so ordering, validation, and failure attribution
-    # remain explicit.
+    # Index every inspected shard by its record ID, checking uniqueness as they're added.
     for shard in inspected:
-        # Evaluate `shard.index.record_id in by_record` explicitly so invalid or alternate states
-        # follow the documented contract.
+        # Each shard is expected to be exactly one record's windows; two shards claiming
+        # the same record would make partition assignment for that record ambiguous.
         if shard.index.record_id in by_record:
             raise DatasetIndexError(
                 f"record occurs in multiple model-ready shards: {shard.index.record_id}"
@@ -144,8 +144,9 @@ def create_dataset_index(
         for partition in split_manifest.partitions.values()
         for record_id in partition.record_ids
     }
-    # Evaluate `set(by_record) != expected_records` explicitly so invalid or alternate states follow
-    # the documented contract.
+    # The shard set on disk and the split manifest's record membership must agree
+    # exactly; a mismatch usually means shards were built from a different windowing
+    # run than the split, which would silently misassign records to partitions.
     if set(by_record) != expected_records:
         raise DatasetIndexError(
             "window shard records do not match split membership; "
@@ -157,13 +158,12 @@ def create_dataset_index(
         name: _build_partition_index(summary, by_record)
         for name, summary in split_manifest.partitions.items()
     }
-    # Iterate over `partitions.items()` one item at a time so ordering, validation, and failure
-    # attribution remain explicit.
+    # Cross-check every built partition against the manifest it was built from.
     for name, partition in partitions.items():
         expected = split_manifest.partitions[name]
-        # Evaluate `partition.subject_count != expected.subject_count or partition.subject_ids !=
-        # expected.subject_ids or partition.recor...` explicitly so invalid or alternate states
-        # follow the documented contract.
+        # Recompute every count from the assembled shards and compare against the
+        # manifest's own numbers -- this is a self-consistency check that the index
+        # faithfully reflects the split it claims to index, not a fresh business rule.
         if (
             partition.subject_count != expected.subject_count
             or partition.subject_ids != expected.subject_ids
@@ -196,34 +196,35 @@ def write_dataset_index(index: DatasetIndex, repository_root: Path, output_path:
     """Write a model-ready dataset index under the ignored processed data zone."""
     root = repository_root.resolve()
     candidate = output_path if output_path.is_absolute() else root / output_path
-    # Evaluate `candidate.is_symlink()` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # Reject a symlink before resolving it: resolving would silently follow the link and
+    # validate/write to wherever it points, defeating the repository-root containment
+    # check just below.
     if candidate.is_symlink():
         raise DatasetIndexError("dataset index output must not be a symbolic link")
     resolved = candidate.resolve()
-    # Attempt this boundary operation here so ValueError can be translated or cleaned up under the
-    # repository contract.
+    # relative_to raises ValueError when resolved escapes root (e.g. via `..` segments);
+    # translate that into this module's own exception so the failure mode is uniform.
     try:
         relative = resolved.relative_to(root)
     except ValueError as error:
         raise DatasetIndexError("dataset index output must stay within repository root") from error
-    # Evaluate `len(relative.parts) < 2 or relative.parts[:2] != ('data', 'processed')` explicitly
-    # so invalid or alternate states follow the documented contract.
+    # Pin the output location to data/processed/ specifically, matching this repo's
+    # documented directory contract for generated, gitignored pipeline artifacts.
     if len(relative.parts) < 2 or relative.parts[:2] != ("data", "processed"):
         raise DatasetIndexError("dataset index output must be written under data/processed/")
-    # Evaluate `resolved.suffix != '.json'` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # Enforce the extension so downstream tooling that globs for *.json indexes can rely
+    # on finding this file without a separate content sniff.
     if resolved.suffix != ".json":
         raise DatasetIndexError("dataset index output must use the .json extension")
-    # Evaluate `not resolved.parent.is_dir()` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # Fail before attempting the write rather than letting a missing parent directory
+    # surface as a generic OSError from the open() call below.
     if not resolved.parent.is_dir():
         raise DatasetIndexError(f"dataset index parent directory does not exist: {resolved.parent}")
-    # Attempt this boundary operation here so FileExistsError can be translated or cleaned up under
-    # the repository contract.
+    # Open with mode "x" (exclusive create) rather than "w" so an index is never silently
+    # overwritten -- each run_id's artifacts are meant to be immutable once written.
     try:
-        # Scope `resolved.open('x', encoding='utf-8')` here so resource cleanup occurs on both
-        # success and failure paths.
+        # The `with` block ensures the file handle closes even if to_json() or the write
+        # itself raises partway through.
         with resolved.open("x", encoding="utf-8") as output:
             output.write(index.to_json())
     except FileExistsError as error:
@@ -231,17 +232,19 @@ def write_dataset_index(index: DatasetIndex, repository_root: Path, output_path:
 
 
 def _inspect_shard(repository_root: Path, path: Path) -> _InspectedShard:
-    """Inspect one immutable shard and return its validated identity and counts.
+    """Load, validate, and summarize one window-artifact NPZ file as a candidate shard.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    This is the per-file half of dataset indexing: it trusts nothing about the artifact's
+    contents until every required field has been type- and shape-checked, since these
+    files may originate from an untrusted or externally shared pipeline run. Cross-shard
+    checks (record uniqueness, identity agreement) happen afterward in create_dataset_index.
 
     Args:
         repository_root: Repository root used to enforce path and trust boundaries.
-        path: Filesystem path identifying the input or output under review.
+        path: Path to the window-artifact NPZ file to inspect.
 
     Returns:
-        The value produced by the documented operation.
+        A validated _InspectedShard combining its index entry with identity metadata.
     """
 
     resolved = _resolve_file(
@@ -250,11 +253,12 @@ def _inspect_shard(repository_root: Path, path: Path) -> _InspectedShard:
         ("data", "interim"),
         "window artifact",
     )
-    # Attempt this boundary operation here so (BadZipFile, OSError, ValueError), DatasetIndexError
-    # can be translated or cleaned up under the repository contract.
+    # allow_pickle=False is a security boundary against arbitrary code execution from an
+    # untrusted NPZ file; collapse every load/parse failure mode into DatasetIndexError so
+    # callers don't need to know numpy's or the filesystem's own exception types.
     try:
-        # Scope `np.load(resolved, allow_pickle=False)` here so resource cleanup occurs on both
-        # success and failure paths.
+        # The `with` block ensures the lazy NpzFile handle closes even if a required field
+        # is missing or malformed partway through parsing.
         with np.load(resolved, allow_pickle=False) as artifact:
             required = {
                 "schema_version",
@@ -272,12 +276,12 @@ def _inspect_shard(repository_root: Path, path: Path) -> _InspectedShard:
                 "window_config_version",
             }
             missing = required - set(artifact.files)
-            # Evaluate `missing` explicitly so invalid or alternate states follow the documented
-            # contract.
+            # Check the whole required-field set up front so one missing field reports
+            # clearly, instead of a bare KeyError from whichever access happens first.
             if missing:
                 raise DatasetIndexError(f"window artifact {resolved} is missing: {sorted(missing)}")
-            # Evaluate `_integer_scalar(artifact['schema_version'], 'schema_version') != 1`
-            # explicitly so invalid or alternate states follow the documented contract.
+            # schema_version pins the NPZ layout produced by window extraction; a mismatch
+            # means this artifact predates or postdates what this indexer understands.
             if _integer_scalar(artifact["schema_version"], "schema_version") != 1:
                 raise DatasetIndexError("window artifact must use schema_version 1")
             windows = np.asarray(artifact["windows"])
@@ -291,9 +295,9 @@ def _inspect_shard(repository_root: Path, path: Path) -> _InspectedShard:
             channel_index = _nonnegative_integer_scalar(artifact["channel_index"], "channel_index")
             channel_name = _string_scalar(artifact["channel_name"], "channel_name")
             channel_selector = _optional_artifact_string_scalar(artifact, "channel_selector")
-            # Evaluate `channel_selector is not None and channel_selector not in {'channel_index',
-            # 'channel_name'}` explicitly so invalid or alternate states follow the documented
-            # contract.
+            # channel_selector records how the channel was chosen during extraction
+            # (by index or by name); any other value means the artifact wasn't produced
+            # by the documented window-extraction stage.
             if channel_selector is not None and channel_selector not in {
                 "channel_index",
                 "channel_name",
@@ -302,12 +306,12 @@ def _inspect_shard(repository_root: Path, path: Path) -> _InspectedShard:
             configured_channel_index = _optional_artifact_integer_scalar(
                 artifact, "configured_channel_index"
             )
-            # Evaluate `configured_channel_index == -1` explicitly so invalid or alternate states
-            # follow the documented contract.
+            # -1 is the writer's sentinel for "not configured by index" (NPZ has no native
+            # optional-int type); normalize it to None so downstream code has one absent
+            # representation instead of two.
             if configured_channel_index == -1:
                 configured_channel_index = None
-            # Evaluate `configured_channel_index is not None and configured_channel_index < 0`
-            # explicitly so invalid or alternate states follow the documented contract.
+            # A present, non-sentinel value must still be a valid channel index.
             if configured_channel_index is not None and configured_channel_index < 0:
                 raise DatasetIndexError(
                     "configured_channel_index must be nonnegative or -1 when absent"
@@ -315,8 +319,8 @@ def _inspect_shard(repository_root: Path, path: Path) -> _InspectedShard:
             configured_channel_name = _optional_artifact_string_scalar(
                 artifact, "configured_channel_name", allow_empty=True
             )
-            # Evaluate `configured_channel_name == ''` explicitly so invalid or alternate states
-            # follow the documented contract.
+            # Same normalization as configured_channel_index above, but using "" as the
+            # writer's sentinel since this field is a string rather than an int.
             if configured_channel_name == "":
                 configured_channel_name = None
             mapping_name = _string_scalar(artifact["mapping_name"], "mapping_name")
@@ -328,18 +332,19 @@ def _inspect_shard(repository_root: Path, path: Path) -> _InspectedShard:
                 artifact["window_config_version"], "window_config_version"
             )
     except DatasetIndexError:
+        # Re-raise our own field-level diagnostics untouched so they aren't swallowed by
+        # the broader numpy/OSError handler below.
         raise
     except (BadZipFile, OSError, ValueError) as error:
         raise DatasetIndexError(f"could not inspect window artifact {resolved}: {error}") from error
 
     row_count = len(record_ids)
-    # Evaluate `row_count == 0 or len(set(record_ids)) != 1` explicitly so invalid or alternate
-    # states follow the documented contract.
+    # A shard is defined as one record's windows; zero rows or more than one distinct
+    # record ID both violate that contract before any other field is trusted.
     if row_count == 0 or len(set(record_ids)) != 1:
         raise DatasetIndexError("each model-ready shard must contain one non-empty record")
-    # Evaluate `windows.ndim != 2 or windows.shape[0] != row_count or windows.shape[1] == 0 or
-    # (windows.dtype.kind != 'f') or (not np...` explicitly so invalid or alternate states follow
-    # the documented contract.
+    # The window matrix must be a finite, non-degenerate 2-D float array with one row per
+    # window; a non-finite value (NaN/inf) would silently corrupt any model trained on it.
     if (
         windows.ndim != 2
         or windows.shape[0] != row_count
@@ -348,12 +353,13 @@ def _inspect_shard(repository_root: Path, path: Path) -> _InspectedShard:
         or not np.isfinite(windows).all()
     ):
         raise DatasetIndexError("window matrix must be finite floating-point rows")
-    # Evaluate `not len(center_indices) == len(source_symbols) == len(target_values) == row_count`
-    # explicitly so invalid or alternate states follow the documented contract.
+    # These three lineage/label arrays are parallel to the windows matrix (one entry per
+    # row); an unequal length means the artifact was corrupted or half-written.
     if not (len(center_indices) == len(source_symbols) == len(target_values) == row_count):
         raise DatasetIndexError("window shard lineage arrays must have equal row counts")
-    # Evaluate `np.any(center_indices < 0) or np.any(np.diff(center_indices) < 0)` explicitly so
-    # invalid or alternate states follow the documented contract.
+    # Center indices are sample offsets into the source record and are expected to be
+    # monotonically non-decreasing, matching the order windows were extracted in --
+    # a negative or out-of-order index would indicate a corrupted or hand-edited artifact.
     if np.any(center_indices < 0) or np.any(np.diff(center_indices) < 0):
         raise DatasetIndexError("window center indices must be nonnegative and ordered")
     counts = Counter(int(value) for value in target_values)
@@ -382,57 +388,58 @@ def _inspect_shard(repository_root: Path, path: Path) -> _InspectedShard:
 def _optional_artifact_string_scalar(
     artifact: Any, name: str, *, allow_empty: bool = False
 ) -> str | None:
-    """Read optional artifact string scalar for the documented repository workflow.
+    """Read one optional scalar string field from an NPZ artifact, or None if absent.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    Some identity fields (channel_selector, configured_channel_name) were added after
+    the original window-extraction schema and may be missing from older artifacts;
+    treating absence as None (rather than requiring the field) keeps this indexer
+    compatible with both old and new artifacts.
 
     Args:
-        artifact: The artifact value supplied by the caller or surrounding test fixture.
-        name: The name value supplied by the caller or surrounding test fixture.
-        allow_empty: The allow empty value supplied by the caller or surrounding test fixture.
+        artifact: The open NpzFile to read from.
+        name: The field name to look up.
+        allow_empty: Whether an empty string is an acceptable present value.
 
     Returns:
-        The value produced by the documented operation.
+        The field's string value, or None if the field is absent from this artifact.
     """
 
-    # Evaluate `name not in artifact.files` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # Absence is a valid, expected state for these backward-compatibility fields.
     if name not in artifact.files:
         return None
     value = artifact[name]
-    # Evaluate `np.asarray(value).shape != ()` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # A present-but-non-scalar value means the field exists but wasn't written with the
+    # expected 0-D shape, which points at a schema mismatch rather than absence.
     if np.asarray(value).shape != ():
         raise DatasetIndexError(f"{name} must be a scalar string")
     scalar = value.item()
-    # Evaluate `not isinstance(scalar, str)` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # numpy's .item() can return a non-str Python object for some dtypes; confirm the
+    # unwrapped value is actually a string before returning it as one.
     if not isinstance(scalar, str):
         raise DatasetIndexError(f"{name} must be a scalar string")
-    # Evaluate `not allow_empty and (not scalar)` explicitly so invalid or alternate states follow
-    # the documented contract.
+    # allow_empty distinguishes fields where "" is a legitimate configured value
+    # (configured_channel_name, when selection was by index instead) from fields where
+    # emptiness would itself be invalid.
     if not allow_empty and not scalar:
         raise DatasetIndexError(f"{name} must be a non-empty scalar string")
     return scalar
 
 
 def _optional_artifact_integer_scalar(artifact: Any, name: str) -> int | None:
-    """Read optional artifact integer scalar for the documented repository workflow.
+    """Read one optional scalar integer field from an NPZ artifact, or None if absent.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    Mirrors _optional_artifact_string_scalar for integer-typed optional fields
+    (currently just configured_channel_index).
 
     Args:
-        artifact: The artifact value supplied by the caller or surrounding test fixture.
-        name: The name value supplied by the caller or surrounding test fixture.
+        artifact: The open NpzFile to read from.
+        name: The field name to look up.
 
     Returns:
-        The value produced by the documented operation.
+        The field's integer value, or None if the field is absent from this artifact.
     """
 
-    # Evaluate `name not in artifact.files` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # Absence is a valid, expected state for this backward-compatibility field.
     if name not in artifact.files:
         return None
     return _integer_scalar(artifact[name], name)
@@ -441,17 +448,20 @@ def _optional_artifact_integer_scalar(artifact: Any, name: str) -> int | None:
 def _validate_shard_identity(
     shards: Sequence[_InspectedShard], split_manifest: SplitManifest
 ) -> _InspectedShard:
-    """Validate shard identity according to the repository contract.
+    """Confirm every shard shares one geometry/configuration identity, matching the split.
 
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    A DatasetIndex reports one mapping/window-config/channel identity for the whole
+    dataset (see DatasetIndex's fields), which is only valid if every shard actually
+    agrees. This also cross-checks that identity against the split manifest's own
+    mapping/window-config fields, since a mismatch there would mean the shards and the
+    split were produced by different, incompatible upstream runs.
 
     Args:
-        shards: The shards value supplied by the caller or surrounding test fixture.
-        split_manifest: The split manifest value supplied by the caller or surrounding test fixture.
+        shards: Every inspected shard that will be indexed.
+        split_manifest: The split manifest these shards are being indexed against.
 
     Returns:
-        The value produced by the documented operation.
+        The first shard, used as the representative identity for the whole dataset.
     """
 
     first = shards[0]
@@ -464,9 +474,9 @@ def _validate_shard_identity(
         first.channel_name,
         first.window_samples,
     )
-    # Evaluate `any(((shard.mapping_name, shard.mapping_version, shard.window_config_name,
-    # shard.window_config_version, shard.sample_...` explicitly so invalid or alternate states
-    # follow the documented contract.
+    # Compare every other shard's identity tuple against the first shard's; a channel
+    # mismatch in particular (e.g. extraction fell back to a different lead for some
+    # records) would silently mix incompatible signal geometries into one dataset.
     if any(
         (
             shard.mapping_name,
@@ -481,9 +491,9 @@ def _validate_shard_identity(
         for shard in shards[1:]
     ):
         raise DatasetIndexError(_format_shard_identity_mismatch(shards))
-    # Evaluate `identity[:4] != (split_manifest.mapping_name, split_manifest.mapping_version,
-    # split_manifest.window_config_name, spli...` explicitly so invalid or alternate states follow
-    # the documented contract.
+    # The shards' agreed-upon mapping/window-config identity must also match what the
+    # split manifest itself declares, confirming the split and the shards trace back to
+    # the same annotation-mapping and window-extraction run.
     if identity[:4] != (
         split_manifest.mapping_name,
         split_manifest.mapping_version,
@@ -495,34 +505,37 @@ def _validate_shard_identity(
 
 
 def _format_shard_identity_mismatch(shards: Sequence[_InspectedShard]) -> str:
-    """Format shard identity mismatch according to the repository contract.
+    """Build a diagnostic message explaining which records have inconsistent channels.
 
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    Channel mismatches are the most common real-world cause of shard-identity failures
+    (some MIT-BIH records don't carry the same lead), so this renders a report naming the
+    specific affected records and any configured channel selection, rather than the bare
+    "identity mismatch" a generic comparison would produce -- letting a reviewer act on
+    it without re-deriving which records are the problem by hand.
 
     Args:
-        shards: The shards value supplied by the caller or surrounding test fixture.
+        shards: Every inspected shard whose identities disagreed.
 
     Returns:
-        The value produced by the documented operation.
+        A multi-line human-readable diagnostic for the identity mismatch.
     """
 
     channel_counts = Counter(shard.channel_name for shard in shards)
-    # Evaluate `len(channel_counts) <= 1` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # If every shard actually shares one channel name, the mismatch must be in some
+    # other identity field (mapping/window-config/sample-rate), which this
+    # channel-focused report can't usefully explain further.
     if len(channel_counts) <= 1:
         return "window shards do not share one geometry and configuration identity"
 
     lines = ["Window extraction produced inconsistent channel identities."]
     configured_selection = _format_configured_channel_selection(shards)
-    # Evaluate `configured_selection is not None` explicitly so invalid or alternate states follow
-    # the documented contract.
+    # Only append the configuration line when shards agree on one, since disagreement
+    # means there's no single configured value worth reporting.
     if configured_selection is not None:
         lines.append(configured_selection)
 
     lines.append("Observed channel identities:")
-    # Iterate over `sorted(channel_counts.items())` one item at a time so ordering, validation, and
-    # failure attribution remain explicit.
+    # List every distinct channel name observed and how many records used it.
     for channel_name, count in sorted(channel_counts.items()):
         record_word = "record" if count == 1 else "records"
         lines.append(f"  - {channel_name}: {count} {record_word}")
@@ -533,11 +546,12 @@ def _format_shard_identity_mismatch(shards: Sequence[_InspectedShard]) -> str:
         for shard in sorted(shards, key=lambda item: item.index.record_id)
         if shard.channel_name != first_channel
     ]
-    # Evaluate `affected` explicitly so invalid or alternate states follow the documented contract.
+    # Only list records whose channel differs from the first shard's, so the report
+    # focuses a reviewer on the minority case rather than repeating the majority.
     if affected:
         lines.append("Affected records:")
-        # Iterate over `affected` one item at a time so ordering, validation, and failure
-        # attribution remain explicit.
+        # Name each specific record and its channel so a reviewer can act without
+        # re-deriving the affected set themselves.
         for shard in affected:
             lines.append(f"  - {shard.index.record_id}: {shard.channel_name}")
 
@@ -550,16 +564,18 @@ def _format_shard_identity_mismatch(shards: Sequence[_InspectedShard]) -> str:
 
 
 def _format_configured_channel_selection(shards: Sequence[_InspectedShard]) -> str | None:
-    """Format configured channel selection according to the repository contract.
+    """Describe the shared channel-selection configuration, if every shard agrees on one.
 
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    Surfaces *how* extraction was told to pick a channel (by index or by name) as part of
+    the mismatch report in _format_shard_identity_mismatch, so a reviewer can tell whether
+    the configuration itself was ambiguous versus the source records genuinely differing.
 
     Args:
-        shards: The shards value supplied by the caller or surrounding test fixture.
+        shards: Every inspected shard to check for a shared selection configuration.
 
     Returns:
-        The value produced by the documented operation.
+        A one-line description of the shared configuration, or None if shards disagree
+        on their selection method/value (in which case there's nothing single to report).
     """
 
     selections = {
@@ -570,18 +586,16 @@ def _format_configured_channel_selection(shards: Sequence[_InspectedShard]) -> s
         )
         for shard in shards
     }
-    # Evaluate `len(selections) != 1` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # More than one distinct (selector, index, name) combination means the shards were
+    # extracted under different configurations -- no single summary line applies.
     if len(selections) != 1:
         return None
 
     selector, configured_index, configured_name = next(iter(selections))
-    # Evaluate `selector == 'channel_index' and configured_index is not None` explicitly so invalid
-    # or alternate states follow the documented contract.
+    # Only report a value for the selector method that was actually used.
     if selector == "channel_index" and configured_index is not None:
         return f"Configured channel selection: channel_index = {configured_index}"
-    # Evaluate `selector == 'channel_name' and configured_name is not None` explicitly so invalid or
-    # alternate states follow the documented contract.
+    # Same guard as above, for the by-name selector instead of by-index.
     if selector == "channel_name" and configured_name is not None:
         return f'Configured channel selection: channel_name = "{configured_name}"'
     return None
@@ -591,17 +605,18 @@ def _build_partition_index(
     summary: PartitionSummary,
     by_record: dict[str, _InspectedShard],
 ) -> PartitionIndex:
-    """Build partition index according to the repository contract.
+    """Assemble one partition's ShardIndex entries from the split's record membership.
 
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    This is where subject/record membership (from the split manifest) is joined against
+    each record's actual inspected shard, producing the lazily-loadable index entries
+    that training/evaluation later read instead of concatenating full window arrays.
 
     Args:
-        summary: The summary value supplied by the caller or surrounding test fixture.
-        by_record: The by record value supplied by the caller or surrounding test fixture.
+        summary: This partition's record/subject membership from the split manifest.
+        by_record: Every inspected shard, keyed by record ID.
 
     Returns:
-        The value produced by the documented operation.
+        The assembled PartitionIndex for this partition.
     """
 
     shards = tuple(
@@ -634,65 +649,70 @@ def _resolve_file(
     required_prefix: tuple[str, ...],
     description: str,
 ) -> Path:
-    """Resolve file according to the repository contract.
+    """Resolve a path and enforce it stays within a required subdirectory of the repo.
 
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    Shared by every stage in this module that reads a repository-relative input (split
+    manifests under artifacts/, window artifacts under data/interim/): resolving through
+    symlinks and checking containment prevents a maliciously or accidentally crafted path
+    from reading files outside the repository the pipeline is meant to operate on.
 
     Args:
         repository_root: Repository root used to enforce path and trust boundaries.
-        path: Filesystem path identifying the input or output under review.
-        required_prefix: The required prefix value supplied by the caller or surrounding test fixture.
-        description: The description value supplied by the caller or surrounding test fixture.
+        path: The candidate path, absolute or relative to repository_root.
+        required_prefix: The path segments the resolved file must be nested under
+            (e.g. ("data", "interim")).
+        description: Human-readable label for this file, used in error messages.
 
     Returns:
-        The value produced by the documented operation.
+        The resolved, validated absolute path.
     """
 
     candidate = path if path.is_absolute() else repository_root / path
-    # Evaluate `candidate.is_symlink()` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # Reject a symlink before resolving it, so a link that points outside the required
+    # prefix can't be validated against a resolved target it doesn't actually name.
     if candidate.is_symlink():
         raise DatasetIndexError(f"{description} must not be a symbolic link: {candidate}")
     resolved = candidate.resolve()
-    # Attempt this boundary operation here so ValueError can be translated or cleaned up under the
-    # repository contract.
+    # relative_to raises ValueError when resolved escapes repository_root (e.g. via `..`
+    # segments); translate that into this module's own exception type.
     try:
         relative = resolved.relative_to(repository_root)
     except ValueError as error:
         raise DatasetIndexError(f"{description} must stay within repository root") from error
-    # Evaluate `relative.parts[:len(required_prefix)] != required_prefix` explicitly so invalid or
-    # alternate states follow the documented contract.
+    # Confirm the path is nested under the expected subtree (artifacts/, data/interim/,
+    # etc.) so this loader can't be pointed at an arbitrary repository file.
     if relative.parts[: len(required_prefix)] != required_prefix:
         required = "/".join(required_prefix)
         raise DatasetIndexError(f"{description} must be stored under {required}/")
-    # Evaluate `not resolved.is_file()` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # A directory or special file at this path would fail np.load/read_text downstream
+    # with a less specific error; check it's a regular file up front.
     if not resolved.is_file():
         raise DatasetIndexError(f"{description} must be a regular file: {resolved}")
     return resolved
 
 
 def _indexed_file(repository_root: Path, path: Path) -> IndexedFile:
-    """Compute and return indexed file for the documented repository workflow.
+    """Hash and size one file, recording it as a repository-relative IndexedFile.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    The dataset index stores a digest and size for every shard/manifest file it
+    references rather than embedding their contents, so the index stays small while
+    still letting a consumer verify a shard on disk hasn't changed since indexing.
 
     Args:
         repository_root: Repository root used to enforce path and trust boundaries.
-        path: Filesystem path identifying the input or output under review.
+        path: The already-resolved, validated file path to hash.
 
     Returns:
-        The value produced by the documented operation.
+        The file's repository-relative path, size, and SHA-256 digest.
     """
 
     digest = hashlib.sha256()
     size_bytes = 0
-    # Scope `path.open('rb')` here so resource cleanup occurs on both success and failure paths.
+    # Read in fixed-size chunks rather than the whole file at once, since window
+    # artifacts can be large and this keeps peak memory bounded during hashing.
     with path.open("rb") as source:
-        # Continue while `(chunk := source.read(BUFFER_SIZE))` so the loop's termination rule
-        # remains visible to reviewers.
+        # The walrus operator lets both the read and the loop's termination condition
+        # (an empty final chunk) live in one line without a separate `break`.
         while chunk := source.read(BUFFER_SIZE):
             digest.update(chunk)
             size_bytes += len(chunk)
@@ -704,147 +724,132 @@ def _indexed_file(repository_root: Path, path: Path) -> IndexedFile:
 
 
 def _string_vector(value: np.ndarray[Any, Any], field: str) -> tuple[str, ...]:
-    """Compute and return string vector for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """Validate and convert one 1-D string field from a window NPZ artifact.
 
     Args:
-        value: Candidate value whose contract is being enforced.
-        field: The field value supplied by the caller or surrounding test fixture.
+        value: The raw array loaded from the NPZ artifact for this field.
+        field: The field's name, included in any error for traceability.
 
     Returns:
-        The value produced by the documented operation.
+        The field's values as a tuple of Python strings.
     """
 
     array = np.asarray(value)
-    # Evaluate `array.ndim != 1 or array.dtype.kind not in {'U', 'S'}` explicitly so invalid or
-    # alternate states follow the documented contract.
+    # dtype.kind 'U'/'S' cover numpy's Unicode and byte-string dtypes; a 1-D shape is
+    # required since this always represents one value per window row.
     if array.ndim != 1 or array.dtype.kind not in {"U", "S"}:
         raise DatasetIndexError(f"{field} must be a string vector")
     result = tuple(str(item) for item in array.tolist())
-    # Evaluate `any((not item for item in result))` explicitly so invalid or alternate states follow
-    # the documented contract.
+    # record_ids in particular must never contain an empty string, since it would be
+    # indistinguishable from a missing lineage entry downstream.
     if any(not item for item in result):
         raise DatasetIndexError(f"{field} contains an empty string")
     return result
 
 
 def _integer_vector(value: np.ndarray[Any, Any], field: str) -> np.ndarray[Any, Any]:
-    """Compute and return integer vector for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """Validate one 1-D integer field from a window NPZ artifact.
 
     Args:
-        value: Candidate value whose contract is being enforced.
-        field: The field value supplied by the caller or surrounding test fixture.
+        value: The raw array loaded from the NPZ artifact for this field.
+        field: The field's name, included in any error for traceability.
 
     Returns:
-        The value produced by the documented operation.
+        The field's values as a numpy array (dtype preserved, unlike _integer_vector
+        in splitting.py, since callers here need the original int width for arithmetic
+        like np.diff on center_sample_indices).
     """
 
     array = np.asarray(value)
-    # Evaluate `array.ndim != 1 or array.dtype.kind not in {'i', 'u'}` explicitly so invalid or
-    # alternate states follow the documented contract.
+    # dtype.kind 'i'/'u' cover numpy's signed and unsigned integer dtypes.
     if array.ndim != 1 or array.dtype.kind not in {"i", "u"}:
         raise DatasetIndexError(f"{field} must be an integer vector")
     return array
 
 
 def _string_scalar(value: np.ndarray[Any, Any], field: str) -> str:
-    """Compute and return string scalar for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """Validate and convert one 0-D (scalar) string field from a window NPZ artifact.
 
     Args:
-        value: Candidate value whose contract is being enforced.
-        field: The field value supplied by the caller or surrounding test fixture.
+        value: The raw array loaded from the NPZ artifact for this field.
+        field: The field's name, included in any error for traceability.
 
     Returns:
-        The value produced by the documented operation.
+        The field's value as a Python string.
     """
 
     array = np.asarray(value)
-    # Evaluate `array.ndim != 0 or array.dtype.kind not in {'U', 'S'}` explicitly so invalid or
-    # alternate states follow the documented contract.
+    # 0-D shape distinguishes a scalar identity field from a per-row string vector.
     if array.ndim != 0 or array.dtype.kind not in {"U", "S"}:
         raise DatasetIndexError(f"{field} must be a string scalar")
     result = str(array.item())
-    # Evaluate `not result` explicitly so invalid or alternate states follow the documented
-    # contract.
+    # An empty identity field (e.g. mapping_name="") would make the shard-identity
+    # agreement check in _validate_shard_identity meaningless.
     if not result:
         raise DatasetIndexError(f"{field} must not be empty")
     return result
 
 
 def _integer_scalar(value: np.ndarray[Any, Any], field: str) -> int:
-    """Compute and return integer scalar for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """Validate and convert one 0-D (scalar) integer field from a window NPZ artifact.
 
     Args:
-        value: Candidate value whose contract is being enforced.
-        field: The field value supplied by the caller or surrounding test fixture.
+        value: The raw array loaded from the NPZ artifact for this field.
+        field: The field's name, included in any error for traceability.
 
     Returns:
-        The value produced by the documented operation.
+        The field's value as a Python int.
     """
 
     array = np.asarray(value)
-    # Evaluate `array.ndim != 0 or array.dtype.kind not in {'i', 'u'}` explicitly so invalid or
-    # alternate states follow the documented contract.
+    # 0-D shape distinguishes a scalar identity field from a per-row integer vector.
     if array.ndim != 0 or array.dtype.kind not in {"i", "u"}:
         raise DatasetIndexError(f"{field} must be an integer scalar")
     return int(array.item())
 
 
 def _nonnegative_integer_scalar(value: np.ndarray[Any, Any], field: str) -> int:
-    """Read and validate nonnegative integer scalar for the documented repository workflow.
+    """Validate one scalar integer field from a window NPZ artifact as nonnegative.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    Used for channel_index specifically, where a negative value would mean the writer
+    encoded "no channel selected" using a sentinel this indexer doesn't recognize.
 
     Args:
-        value: Candidate value whose contract is being enforced.
-        field: The field value supplied by the caller or surrounding test fixture.
+        value: The raw array loaded from the NPZ artifact for this field.
+        field: The field's name, included in any error for traceability.
 
     Returns:
-        The value produced by the documented operation.
+        The field's value as a Python int.
     """
 
     result = _integer_scalar(value, field)
-    # Evaluate `result < 0` explicitly so invalid or alternate states follow the documented
-    # contract.
+    # channel_index is an array position and can never be negative.
     if result < 0:
         raise DatasetIndexError(f"{field} must be nonnegative")
     return result
 
 
 def _positive_float_scalar(value: np.ndarray[Any, Any], field: str) -> float:
-    """Read and validate positive float scalar for the documented repository workflow.
+    """Validate one scalar numeric field from a window NPZ artifact as finite and positive.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    Used for sample_rate_hz; accepts int or unsigned dtypes in addition to float since a
+    sample rate stored as a whole-number NPZ field is still a legitimate positive value.
 
     Args:
-        value: Candidate value whose contract is being enforced.
-        field: The field value supplied by the caller or surrounding test fixture.
+        value: The raw array loaded from the NPZ artifact for this field.
+        field: The field's name, included in any error for traceability.
 
     Returns:
-        The value produced by the documented operation.
+        The field's value as a Python float.
     """
 
     array = np.asarray(value)
-    # Evaluate `array.ndim != 0 or array.dtype.kind not in {'f', 'i', 'u'}` explicitly so invalid or
-    # alternate states follow the documented contract.
+    # dtype.kind 'f'/'i'/'u' cover float, signed-int, and unsigned-int dtypes.
     if array.ndim != 0 or array.dtype.kind not in {"f", "i", "u"}:
         raise DatasetIndexError(f"{field} must be a numeric scalar")
     result = float(array.item())
-    # Evaluate `not np.isfinite(result) or result <= 0` explicitly so invalid or alternate states
-    # follow the documented contract.
+    # A sample rate of zero, negative, NaN, or infinite would make every downstream
+    # time-based calculation (window durations, center-index-to-seconds) meaningless.
     if not np.isfinite(result) or result <= 0:
         raise DatasetIndexError(f"{field} must be finite and positive")
     return result
