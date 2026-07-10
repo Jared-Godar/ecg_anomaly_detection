@@ -32,8 +32,8 @@ failure handling, and research-use limitations.
 ## Scope and baseline
 
 The pre-audit baseline recorded during issue intake was 66 supported Python files, 15,081 lines, and
-771 definitions. The completed audit contains 68 files, 22,920 lines, 789 definitions, 910 audited
-control/resource blocks, and 2,011 standalone comment lines. The two additional files are the
+771 definitions. The completed audit contains 68 files, 22,275 lines, 789 definitions, 909 audited
+control/resource blocks, and 2,024 standalone comment lines. The two additional files are the
 checker itself and its tests.
 
 The audit covers every `.py` file below `src/`, `scripts/`, and `tests/`. The preserved
