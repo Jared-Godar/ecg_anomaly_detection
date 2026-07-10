@@ -24,13 +24,10 @@ from ecg_anomaly_detection.windows import (
 
 @pytest.fixture
 def mapping_config() -> AnnotationMappingConfig:
-    """Build or exercise the mapping config test fixture.
-
-    The helper keeps repeated test setup explicit without hiding the contract under
-    examination.
+    """A minimal closed-world mapping: N -> reference_normal, V -> selected_other, ! excluded.
 
     Returns:
-        The value produced by the documented operation.
+        A two-target AnnotationMappingConfig usable across this file's extraction tests.
     """
 
     return AnnotationMappingConfig(
@@ -48,13 +45,10 @@ def mapping_config() -> AnnotationMappingConfig:
 
 @pytest.fixture
 def window_config() -> WindowConfig:
-    """Build or exercise the window config test fixture.
-
-    The helper keeps repeated test setup explicit without hiding the contract under
-    examination.
+    """A small, deterministic window geometry: 2s pre/post, channel_index=0.
 
     Returns:
-        The value produced by the documented operation.
+        A WindowConfig sized to fit the short signal_record fixture below.
     """
 
     return WindowConfig(
@@ -72,13 +66,13 @@ def window_config() -> WindowConfig:
 
 @pytest.fixture
 def signal_record() -> SignalRecord:
-    """Build or exercise the signal record test fixture.
+    """A 12-sample, 2-channel synthetic signal at 2 Hz, with distinct per-channel values.
 
-    The helper keeps repeated test setup explicit without hiding the contract under
-    examination.
+    Each channel uses a different numeric range (0-11 vs 100-111) so tests can verify
+    which physical channel was actually selected, not just that some channel was.
 
     Returns:
-        The value produced by the documented operation.
+        A SignalRecord with channels named "MLII" and "V5", matching real WFDB naming.
     """
 
     samples = np.column_stack(
@@ -94,10 +88,12 @@ def signal_record() -> SignalRecord:
 
 
 def test_repository_window_config_preserves_historical_geometry() -> None:
-    """Verify that repository window config preserves historical geometry.
+    """The committed windowing-v1.toml config still matches the original 2022 window geometry.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Regression test guarding against an accidental edit to the repository's real
+    window config: a 3-second pre/post margin selected by channel name ("MLII") is
+    the historical geometry the 2022 archived notebook used, and this config is
+    expected to preserve it exactly.
     """
 
     paths = RepositoryPaths.discover(Path(__file__))
@@ -112,13 +108,11 @@ def test_repository_window_config_preserves_historical_geometry() -> None:
 
 
 def test_window_config_rejects_missing_channel_selector(tmp_path: Path) -> None:
-    """Verify that window config rejects missing channel selector.
+    """A window config naming neither channel_index nor channel_name is rejected.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    Protects the mutual-exclusivity enforcement in load_window_config: exactly one
+    channel selector is required, and omitting both must fail rather than defaulting
+    to an implicit channel.
     """
 
     config_path = tmp_path / "windowing.toml"
@@ -136,20 +130,17 @@ boundary_policy = "exclude"
         encoding="utf-8",
     )
 
-    # Scope `pytest.raises(WindowExtractionError, match='exactly one channel selector')` here so the
-    # expected failure and fixture cleanup stay scoped to this assertion.
+    # Neither channel_index nor channel_name is present in the TOML above.
     with pytest.raises(WindowExtractionError, match="exactly one channel selector"):
         load_window_config(config_path)
 
 
 def test_window_config_rejects_multiple_channel_selectors(tmp_path: Path) -> None:
-    """Verify that window config rejects multiple channel selectors.
+    """A window config naming both channel_index and channel_name is rejected.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    Same mutual-exclusivity enforcement as the missing-selector test above, exercised
+    from the opposite direction: both fields present is equally invalid as neither
+    being present, since there would be no single unambiguous channel to select.
     """
 
     config_path = tmp_path / "windowing.toml"
@@ -169,8 +160,7 @@ boundary_policy = "exclude"
         encoding="utf-8",
     )
 
-    # Scope `pytest.raises(WindowExtractionError, match='exactly one channel selector')` here so the
-    # expected failure and fixture cleanup stay scoped to this assertion.
+    # Both channel_index and channel_name are present in the TOML above.
     with pytest.raises(WindowExtractionError, match="exactly one channel selector"):
         load_window_config(config_path)
 
@@ -181,16 +171,14 @@ def test_extraction_preserves_lineage_and_reports_boundaries(
     window_config: WindowConfig,
     signal_record: SignalRecord,
 ) -> None:
-    """Verify that extraction preserves lineage and reports boundaries.
+    """End-to-end extraction preserves row-level lineage and reports every boundary exclusion.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
-        window_config: The window config value supplied by the caller or surrounding test fixture.
-        signal_record: The signal record value supplied by the caller or surrounding test fixture.
+    The most comprehensive test in this file: four annotations at samples 2, 4, 6, 10
+    are positioned so exactly one falls too close to the left edge (sample 2), one too
+    close to the right edge (sample 10), and the remaining two (4 and 6) are close
+    enough together that their extracted windows overlap -- exercising boundary
+    exclusion counts, overlap detection, and the full NPZ/JSON artifact write/read
+    round-trip in one test.
     """
 
     source = AnnotationSet(
@@ -222,8 +210,9 @@ def test_extraction_preserves_lineage_and_reports_boundaries(
     assert result.report.overlapping_adjacent_window_count == 1
     assert result.report.emitted_target_counts == {"reference_normal": 1, "selected_other": 1}
 
-    # Scope `np.load(artifact_path, allow_pickle=False)` here so the expected failure and fixture
-    # cleanup stay scoped to this assertion.
+    # Read the NPZ artifact back to confirm every lineage field round-trips correctly,
+    # including the writer's -1/"" sentinel-to-int/str encoding of the optional
+    # configured_channel_index/name fields.
     with np.load(artifact_path, allow_pickle=False) as artifact:
         assert artifact["windows"].shape == (2, 8)
         assert artifact["record_ids"].tolist() == ["100", "100"]
@@ -241,15 +230,12 @@ def test_extraction_returns_typed_empty_matrix_when_all_centers_hit_boundaries(
     window_config: WindowConfig,
     signal_record: SignalRecord,
 ) -> None:
-    """Verify that extraction returns typed empty matrix when all centers hit boundaries.
+    """Zero surviving windows still yields a correctly shaped (0, window_samples) array.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
-        window_config: The window config value supplied by the caller or surrounding test fixture.
-        signal_record: The signal record value supplied by the caller or surrounding test fixture.
+    Protects extract_windows' empty-array fallback (`np.empty((0, window_samples))`):
+    without it, zero accepted windows would make np.stack raise on an empty list
+    instead of returning a typed, correctly shaped empty result that downstream
+    concatenation can still handle.
     """
 
     source = AnnotationSet(
@@ -272,15 +258,11 @@ def test_extraction_rejects_out_of_range_channel(
     window_config: WindowConfig,
     signal_record: SignalRecord,
 ) -> None:
-    """Verify that extraction rejects out of range channel.
+    """A configured channel_index beyond the signal's actual channel count is rejected.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
-        window_config: The window config value supplied by the caller or surrounding test fixture.
-        signal_record: The signal record value supplied by the caller or surrounding test fixture.
+    Protects _resolve_channel's bounds check: signal_record only has 2 channels
+    (indices 0-1), so channel_index=2 must fail with a clear message rather than
+    letting a later numpy indexing operation raise a less specific IndexError.
     """
 
     invalid_config = WindowConfig(
@@ -300,8 +282,7 @@ def test_extraction_rejects_out_of_range_channel(
         symbols=("N",),
     )
 
-    # Scope `pytest.raises(WindowExtractionError, match='exceeds signal width')` here so the
-    # expected failure and fixture cleanup stay scoped to this assertion.
+    # channel_index=2 exceeds signal_record's actual 2-channel width.
     with pytest.raises(WindowExtractionError, match="exceeds signal width"):
         extract_windows(
             invalid_config,
@@ -316,15 +297,13 @@ def test_extraction_resolves_named_channel_when_record_order_differs(
     window_config: WindowConfig,
     signal_record: SignalRecord,
 ) -> None:
-    """Verify that extraction resolves named channel when record order differs.
+    """channel_name resolution finds the right physical channel even when column order differs.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
-        window_config: The window config value supplied by the caller or surrounding test fixture.
-        signal_record: The signal record value supplied by the caller or surrounding test fixture.
+    This is the core regression test for "channel identity resolved by name, not
+    position" (docs/window-extraction.md): reordered_signal swaps signal_record's two
+    columns so "MLII" is now at index 1 instead of 0. A position-based lookup would
+    silently extract the wrong channel's data; resolving by name must still find "MLII"
+    correctly regardless of its column position.
     """
 
     named_config = WindowConfig(
@@ -375,15 +354,12 @@ def test_extraction_rejects_missing_named_channel(
     window_config: WindowConfig,
     signal_record: SignalRecord,
 ) -> None:
-    """Verify that extraction rejects missing named channel.
+    """A configured channel_name absent from the record's own channels is rejected.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
-        window_config: The window config value supplied by the caller or surrounding test fixture.
-        signal_record: The signal record value supplied by the caller or surrounding test fixture.
+    Protects _resolve_channel's error path for channel-by-name lookup: missing_signal
+    has channels "V5"/"V2" but no "MLII", so the configured name must fail with a
+    message naming both the missing channel and what's actually available, rather
+    than a bare ValueError from list.index.
     """
 
     named_config = WindowConfig(
@@ -410,9 +386,7 @@ def test_extraction_rejects_missing_named_channel(
         symbols=("N",),
     )
 
-    # Scope `pytest.raises(WindowExtractionError, match='Configured channel_name = "MLII" was not
-    # available for record 100')` here so the expected failure and fixture cleanup stay scoped to
-    # this assertion.
+    # "MLII" is not among missing_signal's channel_names ("V5", "V2").
     with pytest.raises(
         WindowExtractionError,
         match='Configured channel_name = "MLII" was not available for record 100',
@@ -429,14 +403,12 @@ def test_extraction_rejects_fractional_sample_geometry(
     mapping_config: AnnotationMappingConfig,
     signal_record: SignalRecord,
 ) -> None:
-    """Verify that extraction rejects fractional sample geometry.
+    """A pre_seconds value that doesn't resolve to a whole sample count is rejected.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
-        signal_record: The signal record value supplied by the caller or surrounding test fixture.
+    Protects _seconds_to_samples' whole-sample-count requirement: at signal_record's
+    2 Hz sample rate, 0.75 seconds is 1.5 samples, which can't be a valid window
+    half-width -- this must fail at config-validation time rather than silently
+    rounding to an unintended window size.
     """
 
     invalid_config = WindowConfig(
@@ -456,8 +428,7 @@ def test_extraction_rejects_fractional_sample_geometry(
         symbols=("N",),
     )
 
-    # Scope `pytest.raises(WindowExtractionError, match='whole sample count')` here so the expected
-    # failure and fixture cleanup stay scoped to this assertion.
+    # 0.75s * 2Hz = 1.5 samples, not a whole number.
     with pytest.raises(WindowExtractionError, match="whole sample count"):
         extract_windows(
             invalid_config,
