@@ -19,13 +19,10 @@ RUN_ID = "12345678-1234-5678-1234-567812345678"
 
 
 def _policy_text() -> str:
-    """Compute and return policy text for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """Read the repository's real, committed configs/benchmark-policy-v1.toml as text.
 
     Returns:
-        The value produced by the documented operation.
+        The committed benchmark policy file's full text.
     """
 
     root = Path(__file__).parents[2]
@@ -33,13 +30,14 @@ def _policy_text() -> str:
 
 
 def _manifest_json() -> str:
-    """Construct manifest json for the documented repository workflow.
+    """A complete, minimal RunManifest for RUN_ID, serialized to JSON.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    Every RunManifest field is populated with a small but structurally valid
+    value, since record-benchmark-approval reads and cross-checks the whole
+    manifest (not just run_id) against the policy and approval file.
 
     Returns:
-        The value produced by the documented operation.
+        The manifest's JSON serialization.
     """
 
     manifest = RunManifest(
@@ -101,13 +99,10 @@ def _manifest_json() -> str:
 
 
 def _approval_text() -> str:
-    """Compute and return approval text for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """An approval TOML document whose candidate_run_id matches _manifest_json's RUN_ID.
 
     Returns:
-        The value produced by the documented operation.
+        The approval file's full text.
     """
 
     return (
@@ -125,13 +120,11 @@ def _approval_text() -> str:
 
 
 def test_record_benchmark_approval_command_records_approval_evidence(tmp_path: Path) -> None:
-    """Verify that record benchmark approval command records approval evidence.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """`ecg-data record-benchmark-approval` with a matching manifest and approval writes an
+    approval record carrying the run ID and the policy's own ID.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     (tmp_path / "artifacts").mkdir()
@@ -169,13 +162,15 @@ def test_record_benchmark_approval_command_records_approval_evidence(tmp_path: P
 def test_record_benchmark_approval_command_fails_closed_on_candidate_mismatch(
     tmp_path: Path,
 ) -> None:
-    """Verify that record benchmark approval command fails closed on candidate mismatch.
+    """An approval file whose candidate_run_id doesn't match the run manifest's run_id is
+    rejected, and no approval record is written.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    This is the direct enforcement point of "an approval can only ratify the
+    specific run it names" -- a mismatched ID would let one approval be
+    reused (accidentally or otherwise) to certify a different run.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     (tmp_path / "artifacts").mkdir()
