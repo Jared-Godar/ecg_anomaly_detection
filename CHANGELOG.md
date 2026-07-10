@@ -35,6 +35,17 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   restricted to `release-*` tags. Neither piece implements execution, opens the `test` partition,
   or changes `evaluation.py`'s `SUPPORTED_PARTITION`; both exist only so the execution command
   tracked by #73 has a validated, fail-closed place to plug into. Closes #126 (#130).
+- Added a validation-only centroid-distance margin threshold sweep: `configs/threshold-sweep-v1.toml`,
+  `evaluate_threshold_sweep_from_index()` and `load_threshold_sweep_config()` in `evaluation.py`,
+  and the standalone `ecg-data evaluate-threshold-sweep` CLI subcommand (not part of the
+  orchestrated `run-pipeline` sequence, following the `record-benchmark-approval` precedent). For
+  each configured threshold, reports covered-window count and macro-averaged precision/recall/F1
+  over only windows whose per-window nearest/second-nearest centroid distance gap is at or above
+  that threshold, against the `validation` partition only. The margin is a raw squared distance in
+  projected feature space, not a probability, and this introduces no ROC, AUC, or calibration
+  claim; the protected `test` partition is never opened. Persists a new `ThresholdSweepMetrics`
+  artifact (`threshold-sweep-metrics.json`) separate from the existing evaluator's
+  `ValidationMetrics` schema. See `docs/threshold-sweep-analysis.md`. Closes #84.
 
 ### Changed
 

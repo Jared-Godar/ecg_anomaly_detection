@@ -78,6 +78,51 @@ class EvaluationResult:
     record_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class ThresholdSweepConfig:
+    schema_version: int
+    name: str
+    version: str
+    partition: str
+    zero_division: float
+    thresholds: tuple[float, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ThresholdMetrics:
+    threshold: float
+    covered_window_count: int
+    precision: float
+    recall: float
+    f1: float
+
+
+@dataclass(frozen=True, slots=True)
+class ThresholdSweepMetrics:
+    schema_version: int
+    sweep_name: str
+    sweep_version: str
+    partition: str
+    zero_division: float
+    record_ids: tuple[str, ...]
+    record_count: int
+    window_count: int
+    thresholds: tuple[ThresholdMetrics, ...]
+    dataset_index: FileDigest
+    validation_shards: tuple[FileDigest, ...]
+    model: FileDigest
+
+    def to_json(self) -> str:
+        return json.dumps(asdict(self), indent=2, sort_keys=True, allow_nan=False) + "\n"
+
+
+@dataclass(frozen=True, slots=True)
+class ThresholdSweepResult:
+    metrics_path: Path
+    window_count: int
+    record_count: int
+
+
 def load_evaluation_config(path: Path) -> EvaluationConfig:
     try:
         with path.open("rb") as source:
@@ -104,6 +149,30 @@ def load_evaluation_config(path: Path) -> EvaluationConfig:
     return config
 
 
+def load_threshold_sweep_config(path: Path) -> ThresholdSweepConfig:
+    try:
+        with path.open("rb") as source:
+            document = tomllib.load(source)
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise EvaluationError(f"could not load threshold sweep config {path}: {error}") from error
+    values = document.get("threshold_sweep")
+    if document.get("schema_version") != 1 or not isinstance(values, dict):
+        raise EvaluationError(
+            "threshold sweep config must use schema_version = 1 and a [threshold_sweep] table"
+        )
+    config = ThresholdSweepConfig(
+        1,
+        _string(values, "name", table="threshold_sweep"),
+        _string(values, "version", table="threshold_sweep"),
+        _string(values, "partition", table="threshold_sweep"),
+        _zero_division(values.get("zero_division"), table="threshold_sweep"),
+        _thresholds(values.get("thresholds")),
+    )
+    if config.partition != SUPPORTED_PARTITION:
+        raise EvaluationError("threshold_sweep.partition must be 'validation'")
+    return config
+
+
 def evaluate_validation_from_index(
     repository_root: Path,
     dataset_index_path: Path,
@@ -115,6 +184,120 @@ def evaluate_validation_from_index(
     """Score only indexed validation shards and persist metrics after all checks pass."""
     root = repository_root.resolve()
     output = _output_path(root, metrics_path)
+    data = _load_validation_data(root, dataset_index_path, model_path, training_metadata_path)
+    predictions = _predict(data.model, data.features)
+    metrics = _build_metrics(
+        config,
+        data.model,
+        data.records,
+        data.labels,
+        predictions,
+        data.index_digest,
+        data.shard_digests,
+        data.model_digest,
+    )
+    _write_new(output, metrics.to_json())
+    return EvaluationResult(output, len(data.labels), len(data.records))
+
+
+def evaluate_threshold_sweep_from_index(
+    repository_root: Path,
+    dataset_index_path: Path,
+    model_path: Path,
+    training_metadata_path: Path,
+    config: ThresholdSweepConfig,
+    metrics_path: Path,
+) -> ThresholdSweepResult:
+    """Report coverage/precision/recall/F1 at each configured centroid-distance margin
+    threshold, over only indexed validation shards.
+
+    The margin is the raw squared-distance gap (in projected feature space) between a
+    window's nearest and second-nearest class centroid. It is not a probability, is not
+    calibrated, and does not support ROC/AUC analysis.
+    """
+    root = repository_root.resolve()
+    output = _output_path(root, metrics_path, "threshold-sweep-metrics.json")
+    data = _load_validation_data(root, dataset_index_path, model_path, training_metadata_path)
+    distances = _distances(data.model, data.features)
+    predictions = np.asarray(data.model.classes, dtype=np.int64)[np.argmin(distances, axis=1)]
+    margins = _margin(distances)
+    thresholds = tuple(
+        _threshold_metrics(
+            threshold, data.model.classes, margins, data.labels, predictions, config.zero_division
+        )
+        for threshold in config.thresholds
+    )
+    metrics = ThresholdSweepMetrics(
+        1,
+        config.name,
+        config.version,
+        config.partition,
+        config.zero_division,
+        tuple(data.records),
+        len(data.records),
+        len(data.labels),
+        thresholds,
+        data.index_digest,
+        tuple(data.shard_digests),
+        data.model_digest,
+    )
+    _write_new(output, metrics.to_json())
+    return ThresholdSweepResult(output, len(data.labels), len(data.records))
+
+
+def _threshold_metrics(
+    threshold: float,
+    classes: tuple[int, ...],
+    margins: np.ndarray[Any, Any],
+    labels: np.ndarray[Any, Any],
+    predictions: np.ndarray[Any, Any],
+    zero_division: float,
+) -> ThresholdMetrics:
+    """Macro-averaged precision/recall/F1, restricted to windows covered at this threshold."""
+    covered = margins >= threshold
+    covered_count = int(np.count_nonzero(covered))
+    covered_labels = labels[covered]
+    covered_predictions = predictions[covered]
+    precisions: list[float] = []
+    recalls: list[float] = []
+    f1s: list[float] = []
+    for value in classes:
+        true_positive = int(
+            np.count_nonzero((covered_labels == value) & (covered_predictions == value))
+        )
+        predicted = int(np.count_nonzero(covered_predictions == value))
+        support = int(np.count_nonzero(covered_labels == value))
+        precision = _divide(true_positive, predicted, zero_division)
+        recall = _divide(true_positive, support, zero_division)
+        precisions.append(precision)
+        recalls.append(recall)
+        f1s.append(_divide(2.0 * precision * recall, precision + recall, zero_division))
+    return ThresholdMetrics(
+        threshold,
+        covered_count,
+        float(np.mean(precisions)),
+        float(np.mean(recalls)),
+        float(np.mean(f1s)),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _ValidationData:
+    model: BaselineModel
+    records: list[str]
+    labels: np.ndarray[Any, Any]
+    features: np.ndarray[Any, Any]
+    index_digest: FileDigest
+    shard_digests: list[FileDigest]
+    model_digest: FileDigest
+
+
+def _load_validation_data(
+    root: Path,
+    dataset_index_path: Path,
+    model_path: Path,
+    training_metadata_path: Path,
+) -> _ValidationData:
     index_path = _input_path(root, dataset_index_path, ("data", "processed"), "dataset index")
     frozen_model_path = _input_path(root, model_path, ("artifacts",), "baseline model")
     metadata_path = _input_path(root, training_metadata_path, ("artifacts",), "training metadata")
@@ -156,19 +339,26 @@ def evaluate_validation_from_index(
     features = np.concatenate(matrices, axis=0)
     labels = np.concatenate(targets)
     _verify_partition_counts(validation, records, labels)
-    predictions = _predict(model, features)
-    metrics = _build_metrics(
-        config, model, records, labels, predictions, index_digest, shard_digests, model_digest
+    return _ValidationData(
+        model, records, labels, features, index_digest, shard_digests, model_digest
     )
-    _write_new(output, metrics.to_json())
-    return EvaluationResult(output, len(labels), len(records))
 
 
-def _predict(model: BaselineModel, features: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
+def _distances(model: BaselineModel, features: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
     projection = np.asarray(model.projection, dtype=np.float64)
     centroids = np.asarray(model.centroids, dtype=np.float64)
     projected = features @ projection
-    distances = np.sum((projected[:, None, :] - centroids[None, :, :]) ** 2, axis=2)
+    return np.sum((projected[:, None, :] - centroids[None, :, :]) ** 2, axis=2)
+
+
+def _margin(distances: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
+    """Nearest-to-second-nearest centroid distance gap; raw squared distance, not a probability."""
+    sorted_distances = np.sort(distances, axis=1)
+    return sorted_distances[:, 1] - sorted_distances[:, 0]
+
+
+def _predict(model: BaselineModel, features: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
+    distances = _distances(model, features)
     return np.asarray(model.classes, dtype=np.int64)[np.argmin(distances, axis=1)]
 
 
@@ -325,21 +515,36 @@ def _read_json(path: Path, description: str) -> dict[str, Any]:
     return value
 
 
-def _string(values: dict[str, Any], key: str) -> str:
+def _string(values: dict[str, Any], key: str, *, table: str = "evaluation") -> str:
     value = values.get(key)
     if not isinstance(value, str) or not value.strip():
-        raise EvaluationError(f"evaluation.{key} must be a non-empty string")
+        raise EvaluationError(f"{table}.{key} must be a non-empty string")
     return value.strip()
 
 
-def _zero_division(value: Any) -> float:
+def _zero_division(value: Any, *, table: str = "evaluation") -> float:
     if (
         isinstance(value, bool)
         or not isinstance(value, (int, float))
         or float(value) not in {0.0, 1.0}
     ):
-        raise EvaluationError("evaluation.zero_division must be 0.0 or 1.0")
+        raise EvaluationError(f"{table}.zero_division must be 0.0 or 1.0")
     return float(value)
+
+
+def _thresholds(value: Any) -> tuple[float, ...]:
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(isinstance(item, bool) or not isinstance(item, (int, float)) for item in value)
+    ):
+        raise EvaluationError("threshold_sweep.thresholds must be a non-empty numeric array")
+    thresholds = tuple(float(item) for item in value)
+    if any(not np.isfinite(item) for item in thresholds):
+        raise EvaluationError("threshold_sweep.thresholds must be finite")
+    if any(earlier >= later for earlier, later in zip(thresholds, thresholds[1:], strict=False)):
+        raise EvaluationError("threshold_sweep.thresholds must be strictly increasing")
+    return thresholds
 
 
 def _divide(numerator: float, denominator: float, zero_division: float) -> float:
@@ -360,7 +565,7 @@ def _input_path(root: Path, path: Path, prefix: tuple[str, ...], description: st
     return resolved
 
 
-def _output_path(root: Path, path: Path) -> Path:
+def _output_path(root: Path, path: Path, filename: str = "validation-metrics.json") -> Path:
     candidate = path if path.is_absolute() else root / path
     if candidate.is_symlink():
         raise EvaluationError("evaluation metrics output must not be a symbolic link")
@@ -373,10 +578,10 @@ def _output_path(root: Path, path: Path) -> Path:
         ) from error
     if relative.parts[:2] != ("artifacts", "runs") or relative.parts[-2:] != (
         "evaluation",
-        "validation-metrics.json",
+        filename,
     ):
         raise EvaluationError(
-            "evaluation metrics must be artifacts/runs/<run-id>/evaluation/validation-metrics.json"
+            f"evaluation metrics must be artifacts/runs/<run-id>/evaluation/{filename}"
         )
     if not resolved.parent.is_dir():
         raise EvaluationError(f"evaluation metrics output parent does not exist: {resolved.parent}")

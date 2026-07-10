@@ -24,7 +24,11 @@ from ecg_anomaly_detection.dataset_index import (
     create_dataset_index,
     write_dataset_index,
 )
-from ecg_anomaly_detection.evaluation import EvaluationError
+from ecg_anomaly_detection.evaluation import (
+    EvaluationError,
+    evaluate_threshold_sweep_from_index,
+    load_threshold_sweep_config,
+)
 from ecg_anomaly_detection.inventory import (
     InventoryError,
     create_inventory,
@@ -254,6 +258,20 @@ def build_parser() -> argparse.ArgumentParser:
     approval_parser.add_argument("--approval", type=Path, required=True)
     approval_parser.add_argument("--output", type=Path, required=True)
 
+    threshold_sweep_parser = subparsers.add_parser(
+        "evaluate-threshold-sweep",
+        help=(
+            "report coverage and precision/recall/F1 at configured centroid-distance margin "
+            "thresholds over only the indexed validation partition"
+        ),
+    )
+    threshold_sweep_parser.add_argument("--repository-root", type=Path, default=Path.cwd())
+    threshold_sweep_parser.add_argument("--dataset-index", type=Path, required=True)
+    threshold_sweep_parser.add_argument("--model", type=Path, required=True)
+    threshold_sweep_parser.add_argument("--training-metadata", type=Path, required=True)
+    threshold_sweep_parser.add_argument("--config", type=Path, required=True)
+    threshold_sweep_parser.add_argument("--output", type=Path, required=True)
+
     notebook_parser = subparsers.add_parser(
         "check-local-notebooks",
         help="validate and optionally normalize local notebooks without executing cells",
@@ -355,6 +373,21 @@ def main(arguments: Sequence[str] | None = None) -> int:
             print(
                 f"recorded benchmark approval for candidate {record.candidate_run_id} "
                 f"in {options.output}"
+            )
+            return 0
+        if options.command == "evaluate-threshold-sweep":
+            sweep_config = load_threshold_sweep_config(options.config)
+            result = evaluate_threshold_sweep_from_index(
+                options.repository_root,
+                options.dataset_index,
+                options.model,
+                options.training_metadata,
+                sweep_config,
+                options.output,
+            )
+            print(
+                f"swept {len(sweep_config.thresholds)} thresholds over "
+                f"{result.window_count} validation windows in {options.output}"
             )
             return 0
         if options.command == "index-dataset":
