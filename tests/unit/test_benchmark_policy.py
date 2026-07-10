@@ -26,8 +26,8 @@ def test_committed_benchmark_policy_parses_successfully() -> None:
     assert policy.protected_partition == "test"
     assert policy.test_evaluation_enabled is False
     assert policy.explicit_future_opt_in_required is True
-    assert REQUIRED_DISCLOSURES <= policy.required_disclosures
-    assert REQUIRED_PROHIBITED_CLAIMS <= policy.prohibited_claims
+    assert policy.required_disclosures >= REQUIRED_DISCLOSURES
+    assert policy.prohibited_claims >= REQUIRED_PROHIBITED_CLAIMS
 
 
 def test_policy_rejects_missing_required_disclosure(tmp_path: Path) -> None:

@@ -5,9 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 from zipfile import BadZipFile
 
 import numpy as np

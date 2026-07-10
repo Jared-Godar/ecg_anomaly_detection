@@ -7,9 +7,10 @@ stream attached is a silent no-op.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from time import perf_counter
-from typing import Callable, Iterator, TextIO
+from typing import TextIO
 
 
 def format_elapsed_seconds(seconds: float) -> str:

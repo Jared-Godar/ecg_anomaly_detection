@@ -9,10 +9,11 @@ import string
 import tempfile
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import quote, urlsplit
 
 from ecg_anomaly_detection.config import DatasetConfig, ExpectedSourceFile
@@ -259,7 +260,8 @@ def _fetch_https_file(
     max_file_size_bytes: int,
 ) -> TransferResult:
     _validate_requested_url(url)
-    request = urllib.request.Request(
+    # url's scheme is already validated by _validate_requested_url above.
+    request = urllib.request.Request(  # noqa: S310
         url,
         headers={
             "Accept": "application/octet-stream",

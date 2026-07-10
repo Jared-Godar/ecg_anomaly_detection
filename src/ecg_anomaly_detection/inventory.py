@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import string
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable
 
 from ecg_anomaly_detection.config import DatasetConfig
 

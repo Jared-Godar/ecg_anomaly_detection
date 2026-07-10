@@ -9,11 +9,12 @@ import platform
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Callable, Iterator, Sequence
+from typing import Any
 
 BUFFER_SIZE = 1024 * 1024
 STAGE_NAMES = (
@@ -315,7 +316,11 @@ def _to_json(document: Any) -> str:
 
 def _run_optional(command: tuple[str, ...], cwd: Path) -> str | None:
     try:
-        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=True)
+        # every call site below passes a fixed literal command tuple, not
+        # runtime/user-constructed input.
+        result = subprocess.run(  # noqa: S603
+            command, cwd=cwd, capture_output=True, text=True, check=True
+        )
     except (OSError, subprocess.CalledProcessError):
         return None
     return result.stdout.strip() or None
@@ -323,7 +328,11 @@ def _run_optional(command: tuple[str, ...], cwd: Path) -> str | None:
 
 def _run_optional_allow_empty(command: tuple[str, ...], cwd: Path) -> str | None:
     try:
-        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=True)
+        # every call site below passes a fixed literal command tuple, not
+        # runtime/user-constructed input.
+        result = subprocess.run(  # noqa: S603
+            command, cwd=cwd, capture_output=True, text=True, check=True
+        )
     except (OSError, subprocess.CalledProcessError):
         return None
     return result.stdout.strip()

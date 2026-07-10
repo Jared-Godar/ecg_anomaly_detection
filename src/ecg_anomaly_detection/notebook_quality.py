@@ -6,9 +6,10 @@ import json
 import re
 import warnings
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 
 import nbformat
 
