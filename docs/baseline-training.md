@@ -4,7 +4,11 @@
 
 The baseline stage fits one seeded random-projection nearest-centroid classifier. It consumes only
 the shards listed in the dataset index's `train` partition. Validation and test shard paths are not
-passed to the loader, opened, transformed, or used during fitting.
+passed to the loader, opened, transformed, or used during fitting. The projection is scaled by
+`1 / sqrt(projection_components)`, the standard Johnson-Lindenstrauss normalization that keeps it
+approximately distance-preserving; see the
+[Johnson-Lindenstrauss lemma](https://en.wikipedia.org/wiki/Johnson%E2%80%93Lindenstrauss_lemma) for
+the mathematical basis.
 
 This stage persists fitted parameters and training lineage. It intentionally does not calculate or
 report held-out metrics, confusion matrices, benchmark comparisons, or claims about performance.

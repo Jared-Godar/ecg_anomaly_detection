@@ -265,6 +265,7 @@ def _fit(
 ) -> BaselineModel:
     rng = np.random.default_rng(config.seed)
     projection = rng.standard_normal((features.shape[1], config.projection_components))
+    # Johnson-Lindenstrauss scaling: preserves pairwise distances under the random projection.
     projection /= np.sqrt(config.projection_components)
     projected = features @ projection
     classes = tuple(int(value) for value in np.unique(labels))
