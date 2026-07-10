@@ -12,11 +12,8 @@ from ecg_anomaly_detection.config import (
 
 
 def test_repository_paths_discover_project_root() -> None:
-    """Verify that repository paths discover project root.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """RepositoryPaths.discover walks up from this test file to find the repo root (has pyproject.toml)
+    and derives configs/, data/raw/, and artifacts/ relative to it."""
 
     paths = RepositoryPaths.discover(Path(__file__))
 
@@ -27,10 +24,11 @@ def test_repository_paths_discover_project_root() -> None:
 
 
 def test_mitdb_config_defines_complete_required_inventory() -> None:
-    """Verify that mitdb config defines complete required inventory.
+    """The real, committed configs/mitdb-v1.0.0.toml loads with the full expected MIT-BIH inventory.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Confirms the 48-record database resolves to exactly 144 expected files
+    (48 records x 3 extensions), and that the first record's known file size
+    and SHA-256 digest are captured for later integrity verification.
     """
 
     paths = RepositoryPaths.discover(Path(__file__))
@@ -51,13 +49,13 @@ def test_mitdb_config_defines_complete_required_inventory() -> None:
 
 
 def test_config_rejects_duplicate_inventory_values(tmp_path: Path) -> None:
-    """Verify that config rejects duplicate inventory values.
+    """A dataset config listing the same record ID twice ("100", "100") is rejected as non-unique.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    A duplicate record ID would make the expected-file inventory ambiguous
+    and could silently double-count a record's files.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     config_path = tmp_path / "invalid.toml"
@@ -78,20 +76,16 @@ required_extensions = ["dat"]
         encoding="utf-8",
     )
 
-    # Scope `pytest.raises(ConfigurationError, match='unique')` here so the expected failure and
-    # fixture cleanup stay scoped to this assertion.
+    # record_ids = ["100", "100"] above repeats the same ID twice.
     with pytest.raises(ConfigurationError, match="unique"):
         load_dataset_config(config_path)
 
 
 def test_config_rejects_insecure_download_url(tmp_path: Path) -> None:
-    """Verify that config rejects insecure download url.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """A dataset config with a plain http:// download_url is rejected; only HTTPS is accepted.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     config_path = tmp_path / "invalid-url.toml"
@@ -112,7 +106,6 @@ required_extensions = ["dat"]
         encoding="utf-8",
     )
 
-    # Scope `pytest.raises(ConfigurationError, match='HTTPS URL')` here so the expected failure and
-    # fixture cleanup stay scoped to this assertion.
+    # download_url above uses "http://", not "https://".
     with pytest.raises(ConfigurationError, match="HTTPS URL"):
         load_dataset_config(config_path)

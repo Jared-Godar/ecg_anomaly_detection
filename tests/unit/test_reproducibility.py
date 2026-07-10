@@ -20,13 +20,10 @@ from ecg_anomaly_detection.reproducibility import (
 
 
 def test_file_digest_and_artifact_evidence_are_stable(tmp_path: Path) -> None:
-    """Verify that file digest and artifact evidence are stable.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """sha256_file and collect_artifact_evidence agree on the same file's digest, size, and relative path.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     content = b"reproducible\n"
@@ -42,17 +39,19 @@ def test_file_digest_and_artifact_evidence_are_stable(tmp_path: Path) -> None:
 
 
 def test_runtime_summary_has_fixed_stages_and_deterministic_json() -> None:
-    """Verify that runtime summary has fixed stages and deterministic json.
+    """A timed stage's duration is computed from the fake clock's readings, unused stages read 0.0,
+    and to_json() is stable and newline-terminated across repeated calls.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    The four-reading fake clock is consumed in order: 0.0 at timer
+    construction (the overall start), 1.0 on stage entry, 1.25 on stage exit
+    (giving the "acquisition" stage a duration of 0.25), and 2.0 when
+    summary() records the overall end (giving total_runtime = 2.0 - 0.0).
     """
 
     readings = iter((0.0, 1.0, 1.25, 2.0))
     timer = RuntimeStageTimer(lambda: next(readings))
 
-    # Scope `timer.stage('acquisition')` here so the expected failure and fixture cleanup stay
-    # scoped to this assertion.
+    # The fake clock yields 1.0 on stage entry and 1.25 on stage exit here.
     with timer.stage("acquisition"):
         pass
     summary = timer.summary()
@@ -70,14 +69,13 @@ def test_runtime_summary_has_fixed_stages_and_deterministic_json() -> None:
 def test_environment_capture_uses_null_fallbacks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Verify that environment capture uses null fallbacks.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """When every optional external command is unavailable, environment fields fall back to None
+    rather than raising, while the always-known dependency-lock path is still recorded.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        monkeypatch: Pytest monkeypatch fixture used to isolate external behavior.
+        tmp_path: Pytest's per-test isolated temporary directory.
+        monkeypatch: Used to force _run_optional/_run_optional_allow_empty to
+            report "unavailable" (None) for every command.
     """
 
     (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
@@ -97,28 +95,28 @@ def test_environment_capture_uses_null_fallbacks(
 def test_git_metadata_preserves_clean_status_when_other_values_are_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Verify that git metadata preserves clean status when other values are unavailable.
+    """An empty `git status --porcelain` output ("" = clean) is still correctly read as dirty=False,
+    even when commit and branch lookups both report unavailable.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    An empty string is a valid, meaningful "clean" result distinct from
+    "unavailable" (None); this guards against collapsing the two cases into
+    the same null fallback.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        monkeypatch: Pytest monkeypatch fixture used to isolate external behavior.
+        tmp_path: Pytest's per-test isolated temporary directory.
+        monkeypatch: Used to substitute a fake git-command runner.
     """
 
     def fake_run(command: tuple[str, ...], _: Path) -> str | None:
-        """Build or exercise the fake run test fixture.
-
-        The helper keeps repeated test setup explicit without hiding the contract under
-        examination.
+        """Return "" for a git status command, None (unavailable) for anything else.
 
         Args:
-            command: The command value supplied by the caller or surrounding test fixture.
-            _: The operation value supplied by the caller or surrounding test fixture.
+            command: The git subcommand tuple being invoked; only command[1]
+                ("status" vs. anything else) is inspected.
+            _: The working directory argument (unused by this fake).
 
         Returns:
-            The value produced by the documented operation.
+            "" for a status command, otherwise None.
         """
 
         return "" if command[1] == "status" else None
@@ -136,24 +134,20 @@ def test_git_metadata_preserves_clean_status_when_other_values_are_unavailable(
 def test_resource_capture_uses_null_fallbacks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Verify that resource capture uses null fallbacks.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """When disk usage raises OSError and CPU/memory probes report unavailable, every resource
+    field falls back to None rather than propagating the exception.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        monkeypatch: Pytest monkeypatch fixture used to isolate external behavior.
+        tmp_path: Pytest's per-test isolated temporary directory.
+        monkeypatch: Used to force shutil.disk_usage, os.cpu_count, and the
+            CPU/memory capture helpers to all report unavailable.
     """
 
     def unavailable_disk(_: Path) -> None:
-        """Build or exercise the unavailable disk test fixture.
-
-        The helper keeps repeated test setup explicit without hiding the contract under
-        examination.
+        """Simulate a disk-usage probe that fails, e.g. on an unsupported filesystem.
 
         Args:
-            _: The operation value supplied by the caller or surrounding test fixture.
+            _: The path disk usage would have been checked for (unused).
         """
 
         raise OSError("unavailable")

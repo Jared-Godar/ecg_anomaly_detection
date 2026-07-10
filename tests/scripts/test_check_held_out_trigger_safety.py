@@ -13,19 +13,22 @@ from pathlib import Path
 import pytest
 import yaml
 
-# Centralize _SCRIPT_PATH so every caller shares the same documented invariant.
+# Locate the script relative to this test file, not the current working
+# directory, so the test suite works regardless of where pytest is invoked from.
 _SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "check_held_out_trigger_safety.py"
-# Centralize _SPEC so every caller shares the same documented invariant.
+# Load the script as a module by file path, since it's not installed as part of the
+# package (see this file's module docstring for why).
 _SPEC = importlib.util.spec_from_file_location("check_held_out_trigger_safety", _SCRIPT_PATH)
 assert _SPEC is not None and _SPEC.loader is not None
-# Construct chts once so the module exposes one stable shared definition.
+# The module object every test in this file calls into (e.g. chts.check_workflow_trigger_safety).
 chts = importlib.util.module_from_spec(_SPEC)
-# Construct this module object once so the module exposes one stable shared definition.
+# Register the loaded module in sys.modules before executing it, matching the
+# standard importlib.util pattern.
 sys.modules[_SPEC.name] = chts
 _SPEC.loader.exec_module(chts)
 
 
-# Centralize SAFE_HELD_OUT_YAML so every caller shares the same documented invariant.
+# A held-out-named workflow with only safe triggers (manual dispatch, release tags).
 SAFE_HELD_OUT_YAML = """
 name: Held-out execution
 on:
@@ -39,7 +42,8 @@ jobs:
       - run: echo noop
 """
 
-# Centralize UNSAFE_PULL_REQUEST_YAML so every caller shares the same documented invariant.
+# A held-out-named workflow with a pull_request trigger, which could run on
+# any contributor's PR without human approval.
 UNSAFE_PULL_REQUEST_YAML = """
 name: Held-out execution
 on:
@@ -52,7 +56,7 @@ jobs:
       - run: echo noop
 """
 
-# Centralize UNSAFE_BARE_PUSH_YAML so every caller shares the same documented invariant.
+# A held-out-named workflow with an unrestricted `push:` trigger (no branch or tag filter).
 UNSAFE_BARE_PUSH_YAML = """
 name: Benchmark execution
 on:
@@ -64,7 +68,8 @@ jobs:
       - run: echo noop
 """
 
-# Centralize UNSAFE_PUSH_BRANCHES_YAML so every caller shares the same documented invariant.
+# A held-out-named workflow whose push trigger is filtered by tag, but which also
+# allows pushes to "main" -- release tags alone are not enough to make this safe.
 UNSAFE_PUSH_BRANCHES_YAML = """
 name: held-out-run
 on:
@@ -78,7 +83,8 @@ jobs:
       - run: echo noop
 """
 
-# Centralize UNRELATED_WORKFLOW_WITH_UNSAFE_TRIGGERS_YAML so every caller shares the same documented invariant.
+# A workflow with the same unsafe triggers as the fixtures above, but whose name and
+# filename don't match held-out/benchmark-execution naming at all.
 UNRELATED_WORKFLOW_WITH_UNSAFE_TRIGGERS_YAML = """
 name: Quality gates
 on:
@@ -97,31 +103,19 @@ jobs:
 
 
 def test_matches_held_out_naming_by_filename() -> None:
-    """Verify that matches held out naming by filename.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """A workflow file named "held-out-execution.yml" matches by filename alone, regardless of its declared name."""
 
     assert chts.matches_held_out_naming(Path("held-out-execution.yml"), "Quality gates")
 
 
 def test_matches_held_out_naming_by_declared_name() -> None:
-    """Verify that matches held out naming by declared name.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """A workflow whose declared `name:` contains "Benchmark Execution" matches even with an unrelated filename."""
 
     assert chts.matches_held_out_naming(Path("run-model.yml"), "Benchmark Execution")
 
 
 def test_matches_held_out_naming_false_for_unrelated_workflow() -> None:
-    """Verify that matches held out naming false for unrelated workflow.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """A workflow matching neither the filename nor the name pattern is not treated as held-out-related."""
 
     assert not chts.matches_held_out_naming(Path("quality.yml"), "Quality gates")
 
@@ -130,21 +124,18 @@ def test_matches_held_out_naming_false_for_unrelated_workflow() -> None:
 
 
 def test_safe_held_out_workflow_is_not_flagged() -> None:
-    """Verify that safe held out workflow is not flagged.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """A held-out workflow triggered only by workflow_dispatch and tagged pushes passes with no result."""
 
     document = yaml.safe_load(SAFE_HELD_OUT_YAML)
     assert chts.check_workflow_trigger_safety(document, Path("held-out-execution.yml")) is None
 
 
 def test_pull_request_trigger_is_flagged() -> None:
-    """Verify that pull request trigger is flagged.
+    """A held-out workflow with a pull_request trigger is flagged, naming "pull_request" in its reasons.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    A pull_request trigger would let any contributor's PR run the held-out
+    workflow without a separate human approval step, defeating the point of
+    the governance gate.
     """
 
     document = yaml.safe_load(UNSAFE_PULL_REQUEST_YAML)
@@ -154,11 +145,7 @@ def test_pull_request_trigger_is_flagged() -> None:
 
 
 def test_bare_push_trigger_is_flagged() -> None:
-    """Verify that bare push trigger is flagged.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """A held-out workflow with an unfiltered `push:` trigger is flagged, its reason naming the missing tag filter."""
 
     document = yaml.safe_load(UNSAFE_BARE_PUSH_YAML)
     result = chts.check_workflow_trigger_safety(document, Path("benchmark-execution.yml"))
@@ -167,10 +154,11 @@ def test_bare_push_trigger_is_flagged() -> None:
 
 
 def test_push_with_branches_is_flagged_even_with_release_tags() -> None:
-    """Verify that push with branches is flagged even with release tags.
+    """A push trigger filtered by release tags is still flagged if it also allows pushes to a branch.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Any ordinary branch push (e.g. to "main") must not be able to trigger
+    held-out execution, even if the same trigger also happens to restrict by
+    tag.
     """
 
     document = yaml.safe_load(UNSAFE_PUSH_BRANCHES_YAML)
@@ -179,10 +167,11 @@ def test_push_with_branches_is_flagged_even_with_release_tags() -> None:
 
 
 def test_unrelated_workflow_with_unsafe_triggers_is_not_flagged() -> None:
-    """Verify that unrelated workflow with unsafe triggers is not flagged.
+    """A workflow with the same unsafe triggers is not flagged at all when it isn't held-out-named.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    This guard only governs held-out/benchmark-execution workflows; an
+    ordinary CI workflow with a pull_request trigger is expected and out of
+    scope.
     """
 
     document = yaml.safe_load(UNRELATED_WORKFLOW_WITH_UNSAFE_TRIGGERS_YAML)
@@ -190,11 +179,11 @@ def test_unrelated_workflow_with_unsafe_triggers_is_not_flagged() -> None:
 
 
 def test_on_key_parsed_as_yaml_boolean_true_is_still_handled() -> None:
-    # PyYAML follows YAML 1.1 and parses the unquoted key `on:` as boolean True.
-    """Verify that on key parsed as yaml boolean true is still handled.
+    """A safe workflow is still recognized correctly even though PyYAML parses its unquoted `on:` key as boolean True.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    PyYAML follows YAML 1.1, under which the unquoted key `on` is parsed as
+    the boolean True rather than the string "on"; the safety check must
+    handle both possible key forms.
     """
 
     document = yaml.safe_load(SAFE_HELD_OUT_YAML)
@@ -206,13 +195,11 @@ def test_on_key_parsed_as_yaml_boolean_true_is_still_handled() -> None:
 
 
 def test_find_unsafe_workflows_flags_only_held_out_named_unsafe_files(tmp_path: Path) -> None:
-    """Verify that find unsafe workflows flags only held out named unsafe files.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """Of three workflow files (unsafe-and-named, unsafe-but-unrelated, safe-and-named), only the
+    first is reported by find_unsafe_workflows.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     workflows_dir = tmp_path / "workflows"
@@ -232,17 +219,13 @@ def test_find_unsafe_workflows_flags_only_held_out_named_unsafe_files(tmp_path: 
 
 
 def test_find_unsafe_workflows_raises_on_missing_directory(tmp_path: Path) -> None:
-    """Verify that find unsafe workflows raises on missing directory.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """Pointing find_unsafe_workflows at a directory that doesn't exist raises a specific, actionable error.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
-    # Scope `pytest.raises(chts.HeldOutTriggerSafetyError, match='does not exist')` here so the
-    # expected failure and fixture cleanup stay scoped to this assertion.
+    # tmp_path / "missing" was never created.
     with pytest.raises(chts.HeldOutTriggerSafetyError, match="does not exist"):
         chts.find_unsafe_workflows(tmp_path / "missing")
 
@@ -250,14 +233,11 @@ def test_find_unsafe_workflows_raises_on_missing_directory(tmp_path: Path) -> No
 def test_main_returns_zero_when_no_unsafe_workflows(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Verify that main returns zero when no unsafe workflows.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """With only a safe held-out workflow present, main exits 0 and prints a "No unsafe" confirmation.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        capsys: Pytest capture fixture used to inspect terminal output.
+        tmp_path: Pytest's per-test isolated temporary directory.
+        capsys: Used to inspect main's printed stdout.
     """
 
     workflows_dir = tmp_path / "workflows"
@@ -273,14 +253,11 @@ def test_main_returns_zero_when_no_unsafe_workflows(
 def test_main_returns_one_when_an_unsafe_workflow_is_found(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Verify that main returns one when an unsafe workflow is found.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """With one unsafe held-out workflow present, main exits 1 and prints the violation to stderr.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        capsys: Pytest capture fixture used to inspect terminal output.
+        tmp_path: Pytest's per-test isolated temporary directory.
+        capsys: Used to inspect main's printed stderr.
     """
 
     workflows_dir = tmp_path / "workflows"
@@ -294,12 +271,12 @@ def test_main_returns_one_when_an_unsafe_workflow_is_found(
 
 
 def test_main_against_the_real_workflows_directory_currently_passes() -> None:
-    # No held-out/benchmark-execution workflow exists yet, so this should not fail --
-    # it guards against one being added later with an unsafe trigger.
-    """Verify that main against the real workflows directory currently passes.
+    """Running main with no arguments against this repository's actual .github/workflows/ currently passes.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    No held-out/benchmark-execution workflow exists in this repository yet,
+    so this assertion is trivially true today -- its purpose is to guard
+    against one being added later with an unsafe trigger, since it would
+    fail this test immediately.
     """
 
     assert chts.main([]) == 0

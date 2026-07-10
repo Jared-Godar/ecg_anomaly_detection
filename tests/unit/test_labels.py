@@ -19,13 +19,11 @@ from ecg_anomaly_detection.records import AnnotationSet
 
 @pytest.fixture
 def mapping_config() -> AnnotationMappingConfig:
-    """Build or exercise the mapping config test fixture.
-
-    The helper keeps repeated test setup explicit without hiding the contract under
-    examination.
+    """A two-target binary mapping: "N" -> reference_normal, "V"/"A" -> selected_other, "!"/"Q" excluded.
 
     Returns:
-        The value produced by the documented operation.
+        An AnnotationMappingConfig small enough to exercise inclusion,
+        multi-symbol grouping, and exclusion in a single fixture set.
     """
 
     return AnnotationMappingConfig(
@@ -42,10 +40,12 @@ def mapping_config() -> AnnotationMappingConfig:
 
 
 def test_repository_mapping_preserves_historical_symbol_policy() -> None:
-    """Verify that repository mapping preserves historical symbol policy.
+    """The real, committed configs/annotation-map-v1.toml loads with its historical symbol counts intact.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Confirms the "historical-binary" mapping still classifies "N" alone as
+    the reference-normal target, groups 13 symbols into the other target,
+    and excludes 24 non-beat symbols -- these counts are a direct check that
+    the modernized mapping reproduces the archived 2022 policy exactly.
     """
 
     paths = RepositoryPaths.discover(Path(__file__))
@@ -62,14 +62,17 @@ def test_mapping_preserves_source_identity_and_reports_exclusions(
     tmp_path: Path,
     mapping_config: AnnotationMappingConfig,
 ) -> None:
-    """Verify that mapping preserves source identity and reports exclusions.
+    """Mapping four annotations (one excluded) preserves record/index/symbol lineage and yields
+    a correct, immutable, machine-readable audit report.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Confirms excluded annotations ("!" here) are dropped from the output
+    arrays but still counted in the report, that the surviving arrays are
+    read-only (guarding against accidental in-place mutation downstream),
+    and that the written report file round-trips the mapping's name.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
+        tmp_path: Pytest's per-test isolated temporary directory.
+        mapping_config: The two-target binary mapping fixture.
     """
 
     annotations = AnnotationSet(
@@ -99,13 +102,12 @@ def test_mapping_preserves_source_identity_and_reports_exclusions(
 def test_mapping_rejects_unknown_source_symbol(
     mapping_config: AnnotationMappingConfig,
 ) -> None:
-    """Verify that mapping rejects unknown source symbol.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """A symbol ("Z") that appears in neither a target nor the excluded set is rejected under
+    the "error" unknown_symbol_policy, naming the offending symbol.
 
     Args:
-        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
+        mapping_config: The two-target binary mapping fixture, whose
+            unknown_symbol_policy is "error".
     """
 
     annotations = AnnotationSet(
@@ -114,20 +116,20 @@ def test_mapping_rejects_unknown_source_symbol(
         symbols=("Z",),
     )
 
-    # Scope `pytest.raises(AnnotationMappingError, match='unmapped annotation symbols: Z')` here so
-    # the expected failure and fixture cleanup stay scoped to this assertion.
+    # "Z" is not covered by mapping_config's targets or excluded_symbols.
     with pytest.raises(AnnotationMappingError, match="unmapped annotation symbols: Z"):
         map_annotations(mapping_config, annotations)
 
 
 def test_mapping_config_rejects_overlapping_symbols(tmp_path: Path) -> None:
-    """Verify that mapping config rejects overlapping symbols.
+    """A config assigning symbol "N" to both a target and the excluded set is rejected as ambiguous.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Every symbol must have exactly one fate (a specific target, or
+    exclusion); a symbol in both would make the mapping's classification of
+    it ambiguous.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     config_path = tmp_path / "overlap.toml"
@@ -148,7 +150,6 @@ symbols = ["N"]
         encoding="utf-8",
     )
 
-    # Scope `pytest.raises(AnnotationMappingError, match='exactly one')` here so the expected
-    # failure and fixture cleanup stay scoped to this assertion.
+    # "N" above is listed both as a target symbol and an excluded symbol.
     with pytest.raises(AnnotationMappingError, match="exactly one"):
         load_annotation_mapping(config_path)

@@ -16,19 +16,17 @@ from ecg_anomaly_detection.notebook_quality import (
 
 
 def _write_notebook(path: Path, *, with_output: bool = False) -> None:
-    """Write notebook according to the repository contract.
-
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    """Write a minimal one-cell notebook (`value = 1`) to path, optionally with a saved output.
 
     Args:
-        path: Filesystem path identifying the input or output under review.
-        with_output: The with output value supplied by the caller or surrounding test fixture.
+        path: Where to write the notebook; parent directories are created as needed.
+        with_output: If True, attach an execution_count and a stdout stream
+            output to the cell, so tests can exercise output-related checks.
     """
 
     path.parent.mkdir(parents=True, exist_ok=True)
     cell = nbformat.v4.new_code_cell("value = 1")
-    # Exercise the `with_output` branch so this regression documents every expected outcome.
+    # Only attach execution state when the caller wants output-related checks exercised.
     if with_output:
         cell.execution_count = 3
         cell.outputs = [nbformat.v4.new_output("stream", name="stdout", text="one\n")]
@@ -37,13 +35,15 @@ def _write_notebook(path: Path, *, with_output: bool = False) -> None:
 
 
 def test_valid_notebook_reports_static_hygiene_without_execution(tmp_path: Path) -> None:
-    """Verify that valid notebook reports static hygiene without execution.
+    """A notebook with a saved output and execution count is reported with matching cell/output
+    counts and the three hygiene issue codes that flag committed execution state.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    check_notebooks never executes cells (see this module's docstring
+    guarantee); this test confirms it can still detect and report saved
+    outputs, execution counts, and untrusted-cell metadata statically.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     path = tmp_path / "notebooks/local/example.ipynb"
@@ -67,13 +67,10 @@ def test_valid_notebook_reports_static_hygiene_without_execution(tmp_path: Path)
 
 
 def test_malformed_notebook_fails_validation(tmp_path: Path) -> None:
-    """Verify that malformed notebook fails validation.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """A file that isn't valid notebook JSON at all fails validation with an "invalid-notebook" issue.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     path = tmp_path / "notebooks/local/broken.ipynb"
@@ -87,13 +84,14 @@ def test_malformed_notebook_fails_validation(tmp_path: Path) -> None:
 
 
 def test_formatting_is_deterministic(tmp_path: Path) -> None:
-    """Verify that formatting is deterministic.
+    """Reformatting a compacted (no-whitespace) notebook changes it once; reformatting again is a no-op.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Confirms format_notebooks is idempotent: the second call's
+    changed_count is 0 and produces byte-identical output to the first
+    call's result.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     path = tmp_path / "notebooks/local/unformatted.ipynb"
@@ -111,13 +109,10 @@ def test_formatting_is_deterministic(tmp_path: Path) -> None:
 
 
 def test_output_stripping_is_deterministic(tmp_path: Path) -> None:
-    """Verify that output stripping is deterministic.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """Stripping outputs from a notebook with saved output changes it once; stripping again is a no-op.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     path = tmp_path / "notebooks/local/outputs.ipynb"
@@ -134,13 +129,11 @@ def test_output_stripping_is_deterministic(tmp_path: Path) -> None:
 
 
 def test_discovery_excludes_narrative_by_default(tmp_path: Path) -> None:
-    """Verify that discovery excludes narrative by default.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """discover_local_notebooks finds only notebooks/local/ by default, and includes narrative-*
+    notebooks only when explicitly asked.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     local = tmp_path / "notebooks/local/local.ipynb"
@@ -153,32 +146,30 @@ def test_discovery_excludes_narrative_by_default(tmp_path: Path) -> None:
 
 
 def test_repository_boundary_rejects_non_notebook_path(tmp_path: Path) -> None:
-    """Verify that repository boundary rejects non notebook path.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """A path outside the notebooks/ directory is rejected before check_notebooks attempts to read it.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     path = tmp_path / "outside.json"
     path.write_text("{}", encoding="utf-8")
 
-    # Scope `pytest.raises(NotebookQualityError, match='under notebooks')` here so the expected
-    # failure and fixture cleanup stay scoped to this assertion.
+    # path is outside notebooks/, so it must be rejected regardless of its content.
     with pytest.raises(NotebookQualityError, match="under notebooks"):
         check_notebooks(tmp_path, [path])
 
 
 def test_machine_local_path_and_stale_kernel_are_reported(tmp_path: Path) -> None:
-    """Verify that machine local path and stale kernel are reported.
+    """A cell referencing an absolute /Users/... path and stale kernelspec metadata are both flagged.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Both are portability hazards specific to the ignored notebooks/local/
+    sandbox: a hard-coded personal path won't resolve on another machine,
+    and stale kernel metadata can silently point a notebook at an
+    environment that no longer matches this project's dependencies.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     path = tmp_path / "notebooks/local/paths.ipynb"

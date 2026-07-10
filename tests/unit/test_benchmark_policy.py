@@ -14,13 +14,13 @@ from ecg_anomaly_detection.benchmark_policy import (
 
 
 def _policy_text() -> str:
-    """Compute and return policy text for the documented repository workflow.
+    """Read the repository's real, committed configs/benchmark-policy-v1.toml as text.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    Tests mutate this text (via string replacement) to construct otherwise-valid
+    policies with exactly one field violating the benchmark governance invariants.
 
     Returns:
-        The value produced by the documented operation.
+        The committed benchmark policy file's full text.
     """
 
     root = Path(__file__).parents[2]
@@ -28,10 +28,11 @@ def _policy_text() -> str:
 
 
 def test_committed_benchmark_policy_parses_successfully() -> None:
-    """Verify that committed benchmark policy parses successfully.
+    """The actual committed configs/benchmark-policy-v1.toml parses and disables test evaluation.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Confirms the loaded policy's required-disclosure and prohibited-claim
+    sets are supersets of the code's own REQUIRED_DISCLOSURES/
+    REQUIRED_PROHIBITED_CLAIMS constants, not just that parsing succeeds.
     """
 
     root = Path(__file__).parents[2]
@@ -46,13 +47,14 @@ def test_committed_benchmark_policy_parses_successfully() -> None:
 
 
 def test_policy_rejects_missing_required_disclosure(tmp_path: Path) -> None:
-    """Verify that policy rejects missing required disclosure.
+    """A policy missing the "runtime_summary" disclosure entry is rejected at load time.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Every disclosure in REQUIRED_DISCLOSURES is a floor the on-disk policy
+    must meet; a policy that drops one silently would weaken governance
+    without anyone editing the code.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     path = tmp_path / "policy.toml"
@@ -61,20 +63,20 @@ def test_policy_rejects_missing_required_disclosure(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    # Scope `pytest.raises(BenchmarkPolicyError, match='runtime_summary')` here so the expected
-    # failure and fixture cleanup stay scoped to this assertion.
+    # The "runtime_summary" disclosure line was stripped out above.
     with pytest.raises(BenchmarkPolicyError, match="runtime_summary"):
         load_benchmark_policy(path)
 
 
 def test_policy_enforces_test_evaluation_disabled_by_default(tmp_path: Path) -> None:
-    """Verify that policy enforces test evaluation disabled by default.
+    """A policy that flips test_evaluation_enabled to true is rejected outright.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    This is the primary governance gate mirroring held_out_config's
+    execution_enabled check: no on-disk policy is permitted to enable
+    test-partition evaluation.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     path = tmp_path / "policy.toml"
@@ -83,20 +85,20 @@ def test_policy_enforces_test_evaluation_disabled_by_default(tmp_path: Path) -> 
         encoding="utf-8",
     )
 
-    # Scope `pytest.raises(BenchmarkPolicyError, match='must be false')` here so the expected
-    # failure and fixture cleanup stay scoped to this assertion.
+    # test_evaluation_enabled was rewritten to true above, which is never permitted.
     with pytest.raises(BenchmarkPolicyError, match="must be false"):
         load_benchmark_policy(path)
 
 
 def test_policy_rejects_missing_prohibited_claim_category(tmp_path: Path) -> None:
-    """Verify that policy rejects missing prohibited claim category.
+    """A policy missing the "clinical_validity_established" prohibited-claim category is rejected.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    This category is the direct enforcement point of the "never described as
+    diagnostic, clinical, or treatment-related" framing rule this repository
+    is bound to; dropping it from the policy would remove that guardrail.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     path = tmp_path / "policy.toml"
@@ -105,8 +107,7 @@ def test_policy_rejects_missing_prohibited_claim_category(tmp_path: Path) -> Non
         encoding="utf-8",
     )
 
-    # Scope `pytest.raises(BenchmarkPolicyError, match='clinical_validity_established')` here so the
-    # expected failure and fixture cleanup stay scoped to this assertion.
+    # The "clinical_validity_established" prohibited-claim line was stripped out above.
     with pytest.raises(BenchmarkPolicyError, match="clinical_validity_established"):
         load_benchmark_policy(path)
 
@@ -114,14 +115,15 @@ def test_policy_rejects_missing_prohibited_claim_category(tmp_path: Path) -> Non
 def test_policy_loader_reads_only_the_supplied_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Verify that policy loader reads only the supplied config.
+    """load_benchmark_policy opens exactly the path it was given, not some other discovered file.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Wraps Path.open to record every path opened during the call, so a
+    regression that fell back to a default/cached policy location instead
+    of the caller's explicit path would be caught.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        monkeypatch: Pytest monkeypatch fixture used to isolate external behavior.
+        tmp_path: Pytest's per-test isolated temporary directory.
+        monkeypatch: Used to substitute a tracking wrapper for Path.open.
     """
 
     path = tmp_path / "policy.toml"
@@ -130,18 +132,15 @@ def test_policy_loader_reads_only_the_supplied_config(
     original_open = Path.open
 
     def tracked_open(candidate: Path, *args: Any, **kwargs: Any) -> Any:
-        """Build or exercise the tracked open test fixture.
-
-        The helper keeps repeated test setup explicit without hiding the contract under
-        examination.
+        """Record candidate in opened, then delegate to the real Path.open.
 
         Args:
-            candidate: The candidate value supplied by the caller or surrounding test fixture.
-            args: The args value supplied by the caller or surrounding test fixture.
-            kwargs: The kwargs value supplied by the caller or surrounding test fixture.
+            candidate: The path being opened.
+            args: Positional arguments to forward to the real Path.open.
+            kwargs: Keyword arguments to forward to the real Path.open.
 
         Returns:
-            The value produced by the documented operation.
+            Whatever the real Path.open returns for this call.
         """
 
         opened.append(candidate)
