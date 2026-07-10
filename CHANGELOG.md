@@ -67,6 +67,7 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 ### Fixed
 
 - Fixed `create_split_quality_summary()` computing incorrect `shard_count` and `actual_ratios["shards"]` when `len(metadata.source_artifacts) > 1`: replaced the broken set-comprehension fallback (which used `record_id` as a shard path) with a direct `record_shards` lookup, and moved the total-unique-shards denominator outside the partition loop (#131).
+- Fixed `_install_without_overwrite()` in `acquisition.py` raising a confusing generic `AcquisitionError` when `os.link()` hits `EXDEV` (staging and destination on different filesystems, e.g. Docker volumes or network mounts). It now falls back to copying the source into a temporary file alongside the destination (guaranteed same filesystem) and hard-linking from there, preserving the atomic no-overwrite guarantee that a plain copy-and-replace would have lost (#132).
 
 ### Removed
 

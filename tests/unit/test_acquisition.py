@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
+import os
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
@@ -287,6 +289,76 @@ def test_redirect_handler_rejects_before_following() -> None:
             {},
             "https://other.example/100.dat",
         )
+
+
+def test_install_without_overwrite_hard_links_same_filesystem(tmp_path: Path) -> None:
+    source = tmp_path / "source.dat"
+    source.write_bytes(b"same-filesystem payload")
+    destination = tmp_path / "destination.dat"
+
+    acquisition._install_without_overwrite(source, destination)
+
+    assert destination.read_bytes() == b"same-filesystem payload"
+    assert destination.stat().st_ino == source.stat().st_ino
+
+
+def test_install_without_overwrite_falls_back_across_filesystems(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.dat"
+    source.write_bytes(b"cross-filesystem payload")
+    source.chmod(0o400)
+    destination = tmp_path / "destination.dat"
+
+    real_link = os.link
+    calls: list[tuple[Path, Path]] = []
+
+    def flaky_link(src: str | Path, dst: str | Path) -> None:
+        calls.append((Path(src), Path(dst)))
+        if len(calls) == 1:
+            raise OSError(errno.EXDEV, "Invalid cross-device link")
+        real_link(src, dst)
+
+    monkeypatch.setattr(acquisition.os, "link", flaky_link)
+
+    acquisition._install_without_overwrite(source, destination)
+
+    assert destination.read_bytes() == b"cross-filesystem payload"
+    assert destination.stat().st_mode == source.stat().st_mode
+    assert len(calls) == 2
+    assert calls[0] == (source, destination)
+    fallback_source, fallback_destination = calls[1]
+    assert fallback_destination == destination
+    assert fallback_source != source
+    assert fallback_source.parent == destination.parent
+    assert set(tmp_path.iterdir()) == {source, destination}
+
+
+def test_install_without_overwrite_refuses_overwrite_after_cross_filesystem_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.dat"
+    source.write_bytes(b"new payload")
+    destination = tmp_path / "destination.dat"
+    destination.write_bytes(b"already acquired")
+
+    real_link = os.link
+    calls = 0
+
+    def flaky_link(src: str | Path, dst: str | Path) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError(errno.EXDEV, "Invalid cross-device link")
+        real_link(src, dst)
+
+    monkeypatch.setattr(acquisition.os, "link", flaky_link)
+
+    with pytest.raises(AcquisitionError, match="refusing to overwrite"):
+        acquisition._install_without_overwrite(source, destination)
+
+    assert destination.read_bytes() == b"already acquired"
+    assert set(tmp_path.iterdir()) == {source, destination}
 
 
 def _payloads(config: DatasetConfig) -> dict[str, bytes]:
