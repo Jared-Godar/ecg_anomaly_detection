@@ -36,7 +36,11 @@ manifests, and output paths outside the repository are rejected.
 Schema version 1 records:
 
 - a UUID run identifier and timezone-aware UTC creation time;
-- the full Git commit and whether tracked or non-ignored untracked changes were present;
+- the full Git commit and whether tracked or non-ignored untracked changes were present, or the
+  sentinel `revision = "unknown"` with `dirty = null` when Git state could not be captured (Git
+  unavailable, or a non-zero exit code) -- `"unknown"` is not a 40-character hex string, so it is
+  provably distinguishable from a real commit hash and still fails a benchmark-approval lineage
+  check that requires `repository_commit_hash`;
 - Python implementation, version, platform, machine architecture, and installed package versions;
 - the repository-relative `uv.lock` path and digest;
 - dataset identity plus every inventoried source filename, byte size, and checksum;

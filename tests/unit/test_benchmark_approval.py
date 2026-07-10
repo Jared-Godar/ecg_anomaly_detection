@@ -11,6 +11,7 @@ from ecg_anomaly_detection.benchmark_approval import (
     record_benchmark_approval,
 )
 from ecg_anomaly_detection.run_manifest import (
+    UNKNOWN_GIT_REVISION,
     DatasetEvidence,
     EnvironmentSnapshot,
     FileEvidence,
@@ -269,6 +270,52 @@ def test_record_benchmark_approval_fails_closed_on_missing_lineage_reference(
     output_path = repository / "artifacts" / "benchmark_approval.json"
 
     with pytest.raises(BenchmarkApprovalError, match=missing_reference):
+        record_benchmark_approval(
+            repository, policy_path, manifest_path, approval_path, output_path
+        )
+
+
+def test_record_benchmark_approval_fails_closed_on_degraded_git_state(repository: Path) -> None:
+    """The `#133` graceful-degradation sentinel must not pass the `#135` lineage gate.
+
+    A manifest whose Git state degraded (unavailable/non-zero exit, not a raised error) records
+    `git.revision = UNKNOWN_GIT_REVISION` rather than a 40-char hash. This proves that path still
+    fails closed on `repository_commit_hash` instead of letting an unverifiable-provenance run
+    pass benchmark approval -- the reason #133 and #135 were bundled into one PR.
+    """
+    policy_path = _write(repository / "policy.toml", _policy_text())
+    manifest_path = _write(
+        repository / "run-manifest.json",
+        _manifest(git_revision=UNKNOWN_GIT_REVISION).to_json(),
+    )
+    approval_path = _write(repository / "approval.toml", _approval_text())
+    output_path = repository / "artifacts" / "benchmark_approval.json"
+
+    with pytest.raises(BenchmarkApprovalError, match="repository_commit_hash"):
+        record_benchmark_approval(
+            repository, policy_path, manifest_path, approval_path, output_path
+        )
+
+
+def test_record_benchmark_approval_fails_closed_on_unknown_lineage_reference(
+    repository: Path,
+) -> None:
+    """`_missing_lineage_references`'s else-branch fails closed on a reference beyond the known 7.
+
+    `future_requirement` is deliberately not added to `ALL_REFERENCES`, which tracks only the
+    known 7 -- this proves the fail-closed catch-all, not a newly recognized reference.
+    """
+    policy_text = _policy_text().replace(
+        '  "run_manifest_reference",\n]',
+        '  "run_manifest_reference",\n  "future_requirement",\n]',
+    )
+    assert "future_requirement" in policy_text
+    policy_path = _write(repository / "policy.toml", policy_text)
+    manifest_path = _write(repository / "run-manifest.json", _manifest().to_json())
+    approval_path = _write(repository / "approval.toml", _approval_text())
+    output_path = repository / "artifacts" / "benchmark_approval.json"
+
+    with pytest.raises(BenchmarkApprovalError, match="future_requirement"):
         record_benchmark_approval(
             repository, policy_path, manifest_path, approval_path, output_path
         )

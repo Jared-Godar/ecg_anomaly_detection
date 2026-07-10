@@ -19,6 +19,12 @@ from ecg_anomaly_detection.inventory import InventoryError, InventoryManifest, r
 from ecg_anomaly_detection.splitting import SplitError, read_split_manifest
 
 BUFFER_SIZE = 1024 * 1024
+UNKNOWN_GIT_REVISION = "unknown"
+"""Sentinel `GitState.revision` recorded when Git state cannot be captured.
+
+Not a valid commit hash (it is not 40 hex characters), so it is provably distinguishable from a
+real revision and fails `benchmark_approval._valid_commit_hash()` by construction.
+"""
 
 
 class RunManifestError(ValueError):
@@ -36,10 +42,15 @@ class FileEvidence:
 
 @dataclass(frozen=True, slots=True)
 class GitState:
-    """Source revision used for a run."""
+    """Source revision used for a run.
+
+    `revision` is `UNKNOWN_GIT_REVISION` and `dirty` is `None` when Git state could not be
+    captured (Git unavailable, or a non-zero exit code) -- distinct from the case where Git
+    succeeds but returns a malformed revision, which still raises `RunManifestError`.
+    """
 
     revision: str
-    dirty: bool
+    dirty: bool | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -366,8 +377,8 @@ def _capture_git_state(repository_root: Path) -> GitState:
             text=True,
             check=True,
         ).stdout
-    except (OSError, subprocess.CalledProcessError) as error:
-        raise RunManifestError(f"could not capture Git state: {error}") from error
+    except (OSError, subprocess.CalledProcessError):
+        return GitState(revision=UNKNOWN_GIT_REVISION, dirty=None)
     if len(revision) != 40 or any(character not in string.hexdigits for character in revision):
         raise RunManifestError("Git revision must be a full 40-character commit hash")
     return GitState(revision=revision.lower(), dirty=bool(status.strip()))
