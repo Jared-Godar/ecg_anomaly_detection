@@ -11,6 +11,16 @@ from ecg_anomaly_detection.cli import main
 
 
 def _write_shard(path: Path, record_id: str) -> None:
+    """Write shard according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        path: Filesystem path identifying the input or output under review.
+        record_id: The record id value supplied by the caller or surrounding test fixture.
+    """
+
     windows = np.asarray([[1.0, 2.0, 3.0, 4.0], [4.0, 3.0, 2.0, 1.0]])
     np.savez_compressed(
         path,
@@ -38,6 +48,17 @@ def _write_shard(path: Path, record_id: str) -> None:
 def _write_split_manifest(
     path: Path, record_ids: tuple[str, ...], source_artifacts: tuple[str, ...]
 ) -> None:
+    """Write split manifest according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        path: Filesystem path identifying the input or output under review.
+        record_ids: The record ids value supplied by the caller or surrounding test fixture.
+        source_artifacts: The source artifacts value supplied by the caller or surrounding test fixture.
+    """
+
     payload = {
         "schema_version": 2,
         "split_name": "grouped",
@@ -69,12 +90,23 @@ def _write_split_manifest(
 
 
 def test_index_dataset_accepts_a_directory_of_shards(tmp_path: Path) -> None:
+    """Verify that index dataset accepts a directory of shards.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     interim = tmp_path / "data" / "interim" / "runs" / "test" / "windows"
     interim.mkdir(parents=True)
     artifacts = tmp_path / "artifacts" / "runs" / "test"
     artifacts.mkdir(parents=True)
     record_ids = ("100", "101", "102")
+    # Iterate over `record_ids` one item at a time so ordering, validation, and failure attribution
+    # remain explicit.
     for record_id in record_ids:
         _write_shard(interim / f"{record_id}.npz", record_id)
     split_path = artifacts / "split.json"
@@ -107,6 +139,15 @@ def test_index_dataset_accepts_a_directory_of_shards(tmp_path: Path) -> None:
 
 
 def test_index_dataset_reports_a_nonexistent_input_path(tmp_path: Path) -> None:
+    """Verify that index dataset reports a nonexistent input path.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     artifacts = tmp_path / "artifacts" / "runs" / "test"
     artifacts.mkdir(parents=True)

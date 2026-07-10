@@ -24,6 +24,15 @@ from ecg_anomaly_detection.windows import (
 
 @pytest.fixture
 def mapping_config() -> AnnotationMappingConfig:
+    """Build or exercise the mapping config test fixture.
+
+    The helper keeps repeated test setup explicit without hiding the contract under
+    examination.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return AnnotationMappingConfig(
         schema_version=1,
         name="test-mapping",
@@ -39,6 +48,15 @@ def mapping_config() -> AnnotationMappingConfig:
 
 @pytest.fixture
 def window_config() -> WindowConfig:
+    """Build or exercise the window config test fixture.
+
+    The helper keeps repeated test setup explicit without hiding the contract under
+    examination.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return WindowConfig(
         schema_version=1,
         name="test-window",
@@ -54,6 +72,15 @@ def window_config() -> WindowConfig:
 
 @pytest.fixture
 def signal_record() -> SignalRecord:
+    """Build or exercise the signal record test fixture.
+
+    The helper keeps repeated test setup explicit without hiding the contract under
+    examination.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     samples = np.column_stack(
         (np.arange(12, dtype=np.float64), np.arange(100, 112, dtype=np.float64))
     )
@@ -67,6 +94,12 @@ def signal_record() -> SignalRecord:
 
 
 def test_repository_window_config_preserves_historical_geometry() -> None:
+    """Verify that repository window config preserves historical geometry.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+    """
+
     paths = RepositoryPaths.discover(Path(__file__))
     config = load_window_config(paths.configs / "windowing-v1.toml")
 
@@ -79,6 +112,15 @@ def test_repository_window_config_preserves_historical_geometry() -> None:
 
 
 def test_window_config_rejects_missing_channel_selector(tmp_path: Path) -> None:
+    """Verify that window config rejects missing channel selector.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config_path = tmp_path / "windowing.toml"
     config_path.write_text(
         """
@@ -94,11 +136,22 @@ boundary_policy = "exclude"
         encoding="utf-8",
     )
 
+    # Scope `pytest.raises(WindowExtractionError, match='exactly one channel selector')` here so the
+    # expected failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(WindowExtractionError, match="exactly one channel selector"):
         load_window_config(config_path)
 
 
 def test_window_config_rejects_multiple_channel_selectors(tmp_path: Path) -> None:
+    """Verify that window config rejects multiple channel selectors.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config_path = tmp_path / "windowing.toml"
     config_path.write_text(
         """
@@ -116,6 +169,8 @@ boundary_policy = "exclude"
         encoding="utf-8",
     )
 
+    # Scope `pytest.raises(WindowExtractionError, match='exactly one channel selector')` here so the
+    # expected failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(WindowExtractionError, match="exactly one channel selector"):
         load_window_config(config_path)
 
@@ -126,6 +181,18 @@ def test_extraction_preserves_lineage_and_reports_boundaries(
     window_config: WindowConfig,
     signal_record: SignalRecord,
 ) -> None:
+    """Verify that extraction preserves lineage and reports boundaries.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
+        window_config: The window config value supplied by the caller or surrounding test fixture.
+        signal_record: The signal record value supplied by the caller or surrounding test fixture.
+    """
+
     source = AnnotationSet(
         record_id="100",
         sample_indices=np.array([2, 4, 6, 10], dtype=np.int64),
@@ -155,6 +222,8 @@ def test_extraction_preserves_lineage_and_reports_boundaries(
     assert result.report.overlapping_adjacent_window_count == 1
     assert result.report.emitted_target_counts == {"reference_normal": 1, "selected_other": 1}
 
+    # Scope `np.load(artifact_path, allow_pickle=False)` here so the expected failure and fixture
+    # cleanup stay scoped to this assertion.
     with np.load(artifact_path, allow_pickle=False) as artifact:
         assert artifact["windows"].shape == (2, 8)
         assert artifact["record_ids"].tolist() == ["100", "100"]
@@ -172,6 +241,17 @@ def test_extraction_returns_typed_empty_matrix_when_all_centers_hit_boundaries(
     window_config: WindowConfig,
     signal_record: SignalRecord,
 ) -> None:
+    """Verify that extraction returns typed empty matrix when all centers hit boundaries.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
+        window_config: The window config value supplied by the caller or surrounding test fixture.
+        signal_record: The signal record value supplied by the caller or surrounding test fixture.
+    """
+
     source = AnnotationSet(
         record_id="100",
         sample_indices=np.array([1, 11], dtype=np.int64),
@@ -192,6 +272,17 @@ def test_extraction_rejects_out_of_range_channel(
     window_config: WindowConfig,
     signal_record: SignalRecord,
 ) -> None:
+    """Verify that extraction rejects out of range channel.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
+        window_config: The window config value supplied by the caller or surrounding test fixture.
+        signal_record: The signal record value supplied by the caller or surrounding test fixture.
+    """
+
     invalid_config = WindowConfig(
         schema_version=window_config.schema_version,
         name=window_config.name,
@@ -209,6 +300,8 @@ def test_extraction_rejects_out_of_range_channel(
         symbols=("N",),
     )
 
+    # Scope `pytest.raises(WindowExtractionError, match='exceeds signal width')` here so the
+    # expected failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(WindowExtractionError, match="exceeds signal width"):
         extract_windows(
             invalid_config,
@@ -223,6 +316,17 @@ def test_extraction_resolves_named_channel_when_record_order_differs(
     window_config: WindowConfig,
     signal_record: SignalRecord,
 ) -> None:
+    """Verify that extraction resolves named channel when record order differs.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
+        window_config: The window config value supplied by the caller or surrounding test fixture.
+        signal_record: The signal record value supplied by the caller or surrounding test fixture.
+    """
+
     named_config = WindowConfig(
         schema_version=window_config.schema_version,
         name=window_config.name,
@@ -271,6 +375,17 @@ def test_extraction_rejects_missing_named_channel(
     window_config: WindowConfig,
     signal_record: SignalRecord,
 ) -> None:
+    """Verify that extraction rejects missing named channel.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
+        window_config: The window config value supplied by the caller or surrounding test fixture.
+        signal_record: The signal record value supplied by the caller or surrounding test fixture.
+    """
+
     named_config = WindowConfig(
         schema_version=window_config.schema_version,
         name=window_config.name,
@@ -295,6 +410,9 @@ def test_extraction_rejects_missing_named_channel(
         symbols=("N",),
     )
 
+    # Scope `pytest.raises(WindowExtractionError, match='Configured channel_name = "MLII" was not
+    # available for record 100')` here so the expected failure and fixture cleanup stay scoped to
+    # this assertion.
     with pytest.raises(
         WindowExtractionError,
         match='Configured channel_name = "MLII" was not available for record 100',
@@ -311,6 +429,16 @@ def test_extraction_rejects_fractional_sample_geometry(
     mapping_config: AnnotationMappingConfig,
     signal_record: SignalRecord,
 ) -> None:
+    """Verify that extraction rejects fractional sample geometry.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        mapping_config: The mapping config value supplied by the caller or surrounding test fixture.
+        signal_record: The signal record value supplied by the caller or surrounding test fixture.
+    """
+
     invalid_config = WindowConfig(
         schema_version=1,
         name="fractional",
@@ -328,6 +456,8 @@ def test_extraction_rejects_fractional_sample_geometry(
         symbols=("N",),
     )
 
+    # Scope `pytest.raises(WindowExtractionError, match='whole sample count')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(WindowExtractionError, match="whole sample count"):
         extract_windows(
             invalid_config,

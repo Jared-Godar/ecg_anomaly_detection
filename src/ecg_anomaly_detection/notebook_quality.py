@@ -13,8 +13,11 @@ from typing import Any, Literal
 
 import nbformat
 
+# Centralize NARRATIVE_NOTEBOOK so every caller shares the same documented invariant.
 NARRATIVE_NOTEBOOK = Path("notebooks/narrative-walkthrough.ipynb")
+# Centralize LOCAL_NOTEBOOK_DIRECTORY so every caller shares the same documented invariant.
 LOCAL_NOTEBOOK_DIRECTORY = Path("notebooks/local")
+# Centralize LOCAL_PATH_PATTERN so every caller shares the same documented invariant.
 LOCAL_PATH_PATTERN = re.compile(
     r"(?:^|[\s\"'(=])(?:/Users/[^\s\"')]+|/home/[^\s\"')]+|[A-Za-z]:\\[^\s\"')]+)"
 )
@@ -97,8 +100,12 @@ def discover_local_notebooks(
         if local_directory.is_dir()
         else []
     )
+    # Evaluate `include_narrative` explicitly so invalid or alternate states follow the documented
+    # contract.
     if include_narrative:
         narrative = root / NARRATIVE_NOTEBOOK
+        # Evaluate `narrative.is_file()` explicitly so invalid or alternate states follow the
+        # documented contract.
         if narrative.is_file():
             notebooks.append(narrative)
     return tuple(notebooks)
@@ -126,11 +133,28 @@ def check_notebooks(
 
 
 def _resolve_notebook_path(repository_root: Path, path: Path) -> Path:
+    """Resolve notebook path according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        repository_root: Repository root used to enforce path and trust boundaries.
+        path: Filesystem path identifying the input or output under review.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     resolved = path.resolve() if path.is_absolute() else (repository_root / path).resolve()
+    # Attempt this boundary operation here so ValueError can be translated or cleaned up under the
+    # repository contract.
     try:
         relative = resolved.relative_to(repository_root)
     except ValueError as error:
         raise NotebookQualityError(f"notebook is outside the repository: {path}") from error
+    # Evaluate `resolved.suffix != '.ipynb' or relative.parts[:1] != ('notebooks',)` explicitly so
+    # invalid or alternate states follow the documented contract.
     if resolved.suffix != ".ipynb" or relative.parts[:1] != ("notebooks",):
         raise NotebookQualityError(f"notebook must be an .ipynb file under notebooks/: {path}")
     return resolved
@@ -143,8 +167,27 @@ def _check_notebook(
     format_notebook: bool,
     strip_outputs: bool,
 ) -> NotebookReport:
+    """Check notebook according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        repository_root: Repository root used to enforce path and trust boundaries.
+        path: Filesystem path identifying the input or output under review.
+        format_notebook: The format notebook value supplied by the caller or surrounding test fixture.
+        strip_outputs: The strip outputs value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     relative_path = path.relative_to(repository_root).as_posix()
+    # Attempt this boundary operation here so Exception can be translated or cleaned up under the
+    # repository contract.
     try:
+        # Scope `warnings.catch_warnings(record=True)` here so resource cleanup occurs on both
+        # success and failure paths.
         with warnings.catch_warnings(record=True) as validation_warnings:
             warnings.simplefilter("always")
             notebook = nbformat.read(path, as_version=nbformat.NO_CONVERT)
@@ -168,7 +211,11 @@ def _check_notebook(
     warning_counts = Counter(
         (warning.category.__name__, str(warning.message)) for warning in validation_warnings
     )
+    # Iterate over `warning_counts.items()` one item at a time so ordering, validation, and failure
+    # attribution remain explicit.
     for (category, message), count in warning_counts.items():
+        # Evaluate `category == 'MissingIDFieldWarning'` explicitly so invalid or alternate states
+        # follow the documented contract.
         if category == "MissingIDFieldWarning":
             issues.append(
                 NotebookIssue(
@@ -195,10 +242,13 @@ def _check_notebook(
         for output in outputs
     )
 
+    # Evaluate `outputs` explicitly so invalid or alternate states follow the documented contract.
     if outputs:
         issues.append(
             NotebookIssue("saved-outputs", "warning", f"contains {len(outputs)} saved outputs")
         )
+    # Evaluate `execution_count_count` explicitly so invalid or alternate states follow the
+    # documented contract.
     if execution_count_count:
         issues.append(
             NotebookIssue(
@@ -207,6 +257,8 @@ def _check_notebook(
                 f"contains {execution_count_count} saved execution counts",
             )
         )
+    # Evaluate `untrusted_cell_count` explicitly so invalid or alternate states follow the
+    # documented contract.
     if untrusted_cell_count:
         issues.append(
             NotebookIssue(
@@ -217,6 +269,8 @@ def _check_notebook(
         )
 
     kernel_name = str(notebook.metadata.get("kernelspec", {}).get("name", ""))
+    # Evaluate `kernel_name and kernel_name not in {'python3', 'ecg-anomaly-detection'}` explicitly
+    # so invalid or alternate states follow the documented contract.
     if kernel_name and kernel_name not in {"python3", "ecg-anomaly-detection"}:
         issues.append(
             NotebookIssue(
@@ -226,8 +280,12 @@ def _check_notebook(
             )
         )
 
+    # Iterate over `enumerate(notebook.cells)` one item at a time so ordering, validation, and
+    # failure attribution remain explicit.
     for index, cell in enumerate(notebook.cells):
         source = str(cell.get("source", ""))
+        # Evaluate `LOCAL_PATH_PATTERN.search(source)` explicitly so invalid or alternate states
+        # follow the documented contract.
         if LOCAL_PATH_PATTERN.search(source):
             issues.append(
                 NotebookIssue(
@@ -239,12 +297,17 @@ def _check_notebook(
             )
 
     original = path.read_text(encoding="utf-8")
+    # Evaluate `strip_outputs` explicitly so invalid or alternate states follow the documented
+    # contract.
     if strip_outputs:
+        # Iterate over `code_cells` one item at a time so ordering, validation, and failure
+        # attribution remain explicit.
         for cell in code_cells:
             cell["outputs"] = []
             cell["execution_count"] = None
     serialized = nbformat.writes(notebook, version=nbformat.NO_CONVERT) + "\n"
     changed = (format_notebook or strip_outputs) and serialized != original
+    # Evaluate `changed` explicitly so invalid or alternate states follow the documented contract.
     if changed:
         path.write_text(serialized, encoding="utf-8")
 

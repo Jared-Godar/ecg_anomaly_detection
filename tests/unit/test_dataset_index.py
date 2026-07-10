@@ -19,6 +19,18 @@ from ecg_anomaly_detection.splitting import (
 
 @pytest.fixture
 def indexed_repository(tmp_path: Path) -> tuple[Path, Path, list[Path]]:
+    """Build or exercise the indexed repository test fixture.
+
+    The helper keeps repeated test setup explicit without hiding the contract under
+    examination.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     interim = tmp_path / "data" / "interim" / "runs" / "test" / "windows"
     processed = tmp_path / "data" / "processed" / "runs" / "test"
@@ -27,6 +39,8 @@ def indexed_repository(tmp_path: Path) -> tuple[Path, Path, list[Path]]:
     processed.mkdir(parents=True)
     artifacts.mkdir(parents=True)
     shard_paths = []
+    # Iterate over `('100', '101', '102')` one item at a time so ordering, validation, and failure
+    # attribution remain explicit.
     for record_id in ("100", "101", "102"):
         path = interim / f"{record_id}.npz"
         _write_shard(path, record_id)
@@ -70,6 +84,15 @@ def indexed_repository(tmp_path: Path) -> tuple[Path, Path, list[Path]]:
 def test_dataset_index_preserves_grouped_shards_without_copying_arrays(
     indexed_repository: tuple[Path, Path, list[Path]],
 ) -> None:
+    """Verify that dataset index preserves grouped shards without copying arrays.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        indexed_repository: The indexed repository value supplied by the caller or surrounding test fixture.
+    """
+
     repository, split_path, shard_paths = indexed_repository
     index = create_dataset_index(repository, split_path, shard_paths)
     output = repository / "data" / "processed" / "runs" / "test" / "dataset-index.json"
@@ -91,9 +114,20 @@ def test_dataset_index_preserves_grouped_shards_without_copying_arrays(
 def test_dataset_index_rejects_nonfinite_window_shard(
     indexed_repository: tuple[Path, Path, list[Path]],
 ) -> None:
+    """Verify that dataset index rejects nonfinite window shard.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        indexed_repository: The indexed repository value supplied by the caller or surrounding test fixture.
+    """
+
     repository, split_path, shard_paths = indexed_repository
     _write_shard(shard_paths[1], "101", nonfinite=True)
 
+    # Scope `pytest.raises(DatasetIndexError, match='finite floating-point')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(DatasetIndexError, match="finite floating-point"):
         create_dataset_index(repository, split_path, shard_paths)
 
@@ -101,9 +135,20 @@ def test_dataset_index_rejects_nonfinite_window_shard(
 def test_dataset_index_rejects_unordered_window_centers(
     indexed_repository: tuple[Path, Path, list[Path]],
 ) -> None:
+    """Verify that dataset index rejects unordered window centers.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        indexed_repository: The indexed repository value supplied by the caller or surrounding test fixture.
+    """
+
     repository, split_path, shard_paths = indexed_repository
     _write_shard(shard_paths[1], "101", centers=(20, 10))
 
+    # Scope `pytest.raises(DatasetIndexError, match='nonnegative and ordered')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(DatasetIndexError, match="nonnegative and ordered"):
         create_dataset_index(repository, split_path, shard_paths)
 
@@ -111,9 +156,20 @@ def test_dataset_index_rejects_unordered_window_centers(
 def test_dataset_index_rejects_mixed_channel_identity(
     indexed_repository: tuple[Path, Path, list[Path]],
 ) -> None:
+    """Verify that dataset index rejects mixed channel identity.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        indexed_repository: The indexed repository value supplied by the caller or surrounding test fixture.
+    """
+
     repository, split_path, shard_paths = indexed_repository
     _write_shard(shard_paths[2], "102", channel_index=0, channel_name="V5")
 
+    # Scope `pytest.raises(DatasetIndexError)` here so the expected failure and fixture cleanup stay
+    # scoped to this assertion.
     with pytest.raises(DatasetIndexError) as error:
         create_dataset_index(repository, split_path, shard_paths)
 
@@ -129,9 +185,20 @@ def test_dataset_index_rejects_mixed_channel_identity(
 def test_dataset_index_output_must_stay_in_processed_zone(
     indexed_repository: tuple[Path, Path, list[Path]],
 ) -> None:
+    """Verify that dataset index output must stay in processed zone.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        indexed_repository: The indexed repository value supplied by the caller or surrounding test fixture.
+    """
+
     repository, split_path, shard_paths = indexed_repository
     index = create_dataset_index(repository, split_path, shard_paths)
 
+    # Scope `pytest.raises(DatasetIndexError, match='under data/processed')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(DatasetIndexError, match="under data/processed"):
         write_dataset_index(index, repository, Path("artifacts/index.json"))
 
@@ -145,7 +212,22 @@ def _write_shard(
     channel_index: int = 0,
     channel_name: str = "MLII",
 ) -> None:
+    """Write shard according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        path: Filesystem path identifying the input or output under review.
+        record_id: The record id value supplied by the caller or surrounding test fixture.
+        nonfinite: The nonfinite value supplied by the caller or surrounding test fixture.
+        centers: The centers value supplied by the caller or surrounding test fixture.
+        channel_index: The channel index value supplied by the caller or surrounding test fixture.
+        channel_name: The channel name value supplied by the caller or surrounding test fixture.
+    """
+
     windows = np.asarray([[1.0, 2.0, 3.0, 4.0], [4.0, 3.0, 2.0, 1.0]])
+    # Exercise the `nonfinite` branch so this regression documents every expected outcome.
     if nonfinite:
         windows[0, 0] = np.nan
     np.savez_compressed(

@@ -10,6 +10,15 @@ from ecg_anomaly_detection.cli import main
 
 
 def test_inventory_then_verify_commands(tmp_path: Path) -> None:
+    """Verify that inventory then verify commands.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config_path = tmp_path / "dataset.toml"
     config_path.write_text(
         """
@@ -29,6 +38,8 @@ required_extensions = ["atr", "dat", "hea"]
     )
     data_dir = tmp_path / "raw"
     data_dir.mkdir()
+    # Iterate over `('atr', 'dat', 'hea')` one item at a time so ordering, validation, and failure
+    # attribution remain explicit.
     for extension in ("atr", "dat", "hea"):
         (data_dir / f"100.{extension}").write_bytes(extension.encode())
     manifest_path = tmp_path / "inventory.json"
@@ -64,6 +75,16 @@ required_extensions = ["atr", "dat", "hea"]
 def test_check_local_notebooks_cli_emits_json_without_execution(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """Verify that check local notebooks cli emits json without execution.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        capsys: Pytest capture fixture used to inspect terminal output.
+    """
+
     path = tmp_path / "notebooks/local/example.ipynb"
     path.parent.mkdir(parents=True)
     notebook = nbformat.v4.new_notebook(

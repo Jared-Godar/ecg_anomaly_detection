@@ -26,6 +26,12 @@ class StageHandle:
     __slots__ = ("_detail",)
 
     def __init__(self) -> None:
+        """Initialize this object with the validated state required by its contract.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+        """
+
         self._detail: str | None = None
 
     def detail(self, text: str) -> None:
@@ -34,6 +40,15 @@ class StageHandle:
 
     @property
     def current_detail(self) -> str | None:
+        """Format current detail for the documented repository workflow.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         return self._detail
 
 
@@ -45,6 +60,16 @@ class ProgressReporter:
         stream: TextIO | None = None,
         monotonic: Callable[[], float] = perf_counter,
     ) -> None:
+        """Initialize this object with the validated state required by its contract.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Args:
+            stream: The stream value supplied by the caller or surrounding test fixture.
+            monotonic: The monotonic value supplied by the caller or surrounding test fixture.
+        """
+
         self._stream = stream
         self._monotonic = monotonic
 
@@ -67,6 +92,8 @@ class ProgressReporter:
         started_at = self._monotonic()
         handle = StageHandle()
         failed = False
+        # Attempt this boundary operation here so BaseException can be translated or cleaned up
+        # under the repository contract.
         try:
             yield handle
         except BaseException:
@@ -79,6 +106,17 @@ class ProgressReporter:
             self._write(f"{prefix}: {status} {elapsed}{completion_suffix}")
 
     def _write(self, line: str) -> None:
+        """Write and flush one progress line when an output stream is configured.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Args:
+            line: The line value supplied by the caller or surrounding test fixture.
+        """
+
+        # Evaluate `self._stream is None` explicitly so invalid or alternate states follow the
+        # documented contract.
         if self._stream is None:
             return
         print(line, file=self._stream)

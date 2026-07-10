@@ -14,11 +14,26 @@ from ecg_anomaly_detection.benchmark_policy import (
 
 
 def _policy_text() -> str:
+    """Compute and return policy text for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     root = Path(__file__).parents[2]
     return (root / "configs" / "benchmark-policy-v1.toml").read_text(encoding="utf-8")
 
 
 def test_committed_benchmark_policy_parses_successfully() -> None:
+    """Verify that committed benchmark policy parses successfully.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+    """
+
     root = Path(__file__).parents[2]
     policy = load_benchmark_policy(root / "configs" / "benchmark-policy-v1.toml")
 
@@ -31,34 +46,67 @@ def test_committed_benchmark_policy_parses_successfully() -> None:
 
 
 def test_policy_rejects_missing_required_disclosure(tmp_path: Path) -> None:
+    """Verify that policy rejects missing required disclosure.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     path = tmp_path / "policy.toml"
     path.write_text(
         _policy_text().replace('  "runtime_summary",\n', ""),
         encoding="utf-8",
     )
 
+    # Scope `pytest.raises(BenchmarkPolicyError, match='runtime_summary')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(BenchmarkPolicyError, match="runtime_summary"):
         load_benchmark_policy(path)
 
 
 def test_policy_enforces_test_evaluation_disabled_by_default(tmp_path: Path) -> None:
+    """Verify that policy enforces test evaluation disabled by default.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     path = tmp_path / "policy.toml"
     path.write_text(
         _policy_text().replace("test_evaluation_enabled = false", "test_evaluation_enabled = true"),
         encoding="utf-8",
     )
 
+    # Scope `pytest.raises(BenchmarkPolicyError, match='must be false')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(BenchmarkPolicyError, match="must be false"):
         load_benchmark_policy(path)
 
 
 def test_policy_rejects_missing_prohibited_claim_category(tmp_path: Path) -> None:
+    """Verify that policy rejects missing prohibited claim category.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     path = tmp_path / "policy.toml"
     path.write_text(
         _policy_text().replace('  "clinical_validity_established",\n', ""),
         encoding="utf-8",
     )
 
+    # Scope `pytest.raises(BenchmarkPolicyError, match='clinical_validity_established')` here so the
+    # expected failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(BenchmarkPolicyError, match="clinical_validity_established"):
         load_benchmark_policy(path)
 
@@ -66,12 +114,36 @@ def test_policy_rejects_missing_prohibited_claim_category(tmp_path: Path) -> Non
 def test_policy_loader_reads_only_the_supplied_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify that policy loader reads only the supplied config.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        monkeypatch: Pytest monkeypatch fixture used to isolate external behavior.
+    """
+
     path = tmp_path / "policy.toml"
     path.write_text(_policy_text(), encoding="utf-8")
     opened: list[Path] = []
     original_open = Path.open
 
     def tracked_open(candidate: Path, *args: Any, **kwargs: Any) -> Any:
+        """Build or exercise the tracked open test fixture.
+
+        The helper keeps repeated test setup explicit without hiding the contract under
+        examination.
+
+        Args:
+            candidate: The candidate value supplied by the caller or surrounding test fixture.
+            args: The args value supplied by the caller or surrounding test fixture.
+            kwargs: The kwargs value supplied by the caller or surrounding test fixture.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         opened.append(candidate)
         return original_open(candidate, *args, **kwargs)
 

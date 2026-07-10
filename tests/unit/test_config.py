@@ -12,6 +12,12 @@ from ecg_anomaly_detection.config import (
 
 
 def test_repository_paths_discover_project_root() -> None:
+    """Verify that repository paths discover project root.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+    """
+
     paths = RepositoryPaths.discover(Path(__file__))
 
     assert (paths.root / "pyproject.toml").is_file()
@@ -21,6 +27,12 @@ def test_repository_paths_discover_project_root() -> None:
 
 
 def test_mitdb_config_defines_complete_required_inventory() -> None:
+    """Verify that mitdb config defines complete required inventory.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+    """
+
     paths = RepositoryPaths.discover(Path(__file__))
     config = load_dataset_config(paths.configs / "mitdb-v1.0.0.toml")
 
@@ -39,6 +51,15 @@ def test_mitdb_config_defines_complete_required_inventory() -> None:
 
 
 def test_config_rejects_duplicate_inventory_values(tmp_path: Path) -> None:
+    """Verify that config rejects duplicate inventory values.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config_path = tmp_path / "invalid.toml"
     config_path.write_text(
         """
@@ -57,11 +78,22 @@ required_extensions = ["dat"]
         encoding="utf-8",
     )
 
+    # Scope `pytest.raises(ConfigurationError, match='unique')` here so the expected failure and
+    # fixture cleanup stay scoped to this assertion.
     with pytest.raises(ConfigurationError, match="unique"):
         load_dataset_config(config_path)
 
 
 def test_config_rejects_insecure_download_url(tmp_path: Path) -> None:
+    """Verify that config rejects insecure download url.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config_path = tmp_path / "invalid-url.toml"
     config_path.write_text(
         """
@@ -80,5 +112,7 @@ required_extensions = ["dat"]
         encoding="utf-8",
     )
 
+    # Scope `pytest.raises(ConfigurationError, match='HTTPS URL')` here so the expected failure and
+    # fixture cleanup stay scoped to this assertion.
     with pytest.raises(ConfigurationError, match="HTTPS URL"):
         load_dataset_config(config_path)

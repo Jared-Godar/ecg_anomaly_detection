@@ -96,12 +96,17 @@ class WindowExtractionResult:
 
 def load_window_config(path: Path) -> WindowConfig:
     """Load and validate versioned window configuration from TOML."""
+    # Attempt this boundary operation here so (OSError, tomllib.TOMLDecodeError) can be translated
+    # or cleaned up under the repository contract.
     try:
+        # Scope `path.open('rb')` here so resource cleanup occurs on both success and failure paths.
         with path.open("rb") as config_file:
             document = tomllib.load(config_file)
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise WindowExtractionError(f"could not load window config {path}: {error}") from error
 
+    # Evaluate `document.get('schema_version') != 1 or not isinstance(document.get('window'), dict)`
+    # explicitly so invalid or alternate states follow the documented contract.
     if document.get("schema_version") != 1 or not isinstance(document.get("window"), dict):
         raise WindowExtractionError(
             "window config must use schema_version = 1 and a [window] table"
@@ -109,6 +114,8 @@ def load_window_config(path: Path) -> WindowConfig:
     window = document["window"]
     has_channel_index = "channel_index" in window
     has_channel_name = "channel_name" in window
+    # Evaluate `has_channel_index == has_channel_name` explicitly so invalid or alternate states
+    # follow the documented contract.
     if has_channel_index == has_channel_name:
         raise WindowExtractionError(
             "window config must provide exactly one channel selector: channel_name or channel_index"
@@ -124,6 +131,8 @@ def load_window_config(path: Path) -> WindowConfig:
         exclude_record_ids=_optional_unique_strings(window, "exclude_record_ids"),
         boundary_policy=_required_string(window, "boundary_policy"),
     )
+    # Evaluate `config.boundary_policy != 'exclude'` explicitly so invalid or alternate states
+    # follow the documented contract.
     if config.boundary_policy != "exclude":
         raise WindowExtractionError("boundary_policy must be 'exclude'")
     return config
@@ -137,19 +146,32 @@ def extract_windows(
 ) -> WindowExtractionResult:
     """Extract complete windows and explicitly report boundary exclusions."""
     mapped = mapping_result.annotations
+    # Evaluate `signal.record_id != mapped.record_id or signal.record_id !=
+    # mapping_result.report.record_id` explicitly so invalid or alternate states follow the
+    # documented contract.
     if signal.record_id != mapped.record_id or signal.record_id != mapping_result.report.record_id:
         raise WindowExtractionError("signal and mapped annotation record IDs do not match")
+    # Evaluate `mapping_result.report.mapping_name != mapping_config.name or
+    # mapping_result.report.mapping_version != mapping_config....` explicitly so invalid or
+    # alternate states follow the documented contract.
     if (
         mapping_result.report.mapping_name != mapping_config.name
         or mapping_result.report.mapping_version != mapping_config.version
     ):
         raise WindowExtractionError("mapping result identity does not match mapping configuration")
+    # Evaluate `len(mapped.sample_indices) != len(mapped.source_symbols) or
+    # len(mapped.sample_indices) != len(mapped.target_values)` explicitly so invalid or alternate
+    # states follow the documented contract.
     if len(mapped.sample_indices) != len(mapped.source_symbols) or len(
         mapped.sample_indices
     ) != len(mapped.target_values):
         raise WindowExtractionError("mapped annotation arrays must have equal lengths")
+    # Evaluate `mapped.sample_indices.size and np.any(np.diff(mapped.sample_indices) < 0)`
+    # explicitly so invalid or alternate states follow the documented contract.
     if mapped.sample_indices.size and np.any(np.diff(mapped.sample_indices) < 0):
         raise WindowExtractionError("mapped annotation sample indices must be ordered")
+    # Evaluate `signal.signals.ndim != 2` explicitly so invalid or alternate states follow the
+    # documented contract.
     if signal.signals.ndim != 2:
         raise WindowExtractionError("signals must use a samples-by-channels array")
     channel_selector, resolved_channel_index, resolved_channel_name = _resolve_channel(
@@ -168,6 +190,9 @@ def extract_windows(
     left_exclusions = 0
     right_exclusions = 0
 
+    # Iterate over `zip(mapped.sample_indices, mapped.source_symbols, mapped.target_values,
+    # strict=True)` one item at a time so ordering, validation, and failure attribution remain
+    # explicit.
     for center, symbol, target in zip(
         mapped.sample_indices,
         mapped.source_symbols,
@@ -176,9 +201,13 @@ def extract_windows(
     ):
         left = int(center) - pre_samples
         right = int(center) + post_samples
+        # Evaluate `left < 0` explicitly so invalid or alternate states follow the documented
+        # contract.
         if left < 0:
             left_exclusions += 1
             continue
+        # Evaluate `right > signal.signals.shape[0]` explicitly so invalid or alternate states
+        # follow the documented contract.
         if right > signal.signals.shape[0]:
             right_exclusions += 1
             continue
@@ -186,6 +215,8 @@ def extract_windows(
             signal.signals[left:right, resolved_channel_index],
             dtype=np.float64,
         ).copy()
+        # Evaluate `window.shape != (window_samples,)` explicitly so invalid or alternate states
+        # follow the documented contract.
         if window.shape != (window_samples,):
             raise WindowExtractionError("extracted window shape violated the configured contract")
         accepted_windows.append(window)
@@ -195,6 +226,8 @@ def extract_windows(
         target_values.append(int(target))
         accepted_intervals.append((left, right))
 
+    # Evaluate `accepted_windows` explicitly so invalid or alternate states follow the documented
+    # contract.
     if accepted_windows:
         window_array = np.stack(accepted_windows)
     else:
@@ -207,6 +240,8 @@ def extract_windows(
 
     target_name_by_value = {rule.value: rule.name for rule in mapping_config.targets}
     unknown_target_values = sorted(set(target_values) - set(target_name_by_value))
+    # Evaluate `unknown_target_values` explicitly so invalid or alternate states follow the
+    # documented contract.
     if unknown_target_values:
         raise WindowExtractionError(f"unconfigured target values: {unknown_target_values}")
     emitted_target_counts = Counter(target_name_by_value[value] for value in target_values)
@@ -302,8 +337,24 @@ def write_window_report(report: WindowExtractionReport, output_path: Path) -> No
 
 
 def _seconds_to_samples(seconds: float, sample_rate_hz: float, field: str) -> int:
+    """Convert seconds to samples for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        seconds: The seconds value supplied by the caller or surrounding test fixture.
+        sample_rate_hz: The sample rate hz value supplied by the caller or surrounding test fixture.
+        field: The field value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     exact_samples = seconds * sample_rate_hz
     rounded_samples = round(exact_samples)
+    # Evaluate `not np.isclose(exact_samples, rounded_samples) or rounded_samples <= 0` explicitly
+    # so invalid or alternate states follow the documented contract.
     if not np.isclose(exact_samples, rounded_samples) or rounded_samples <= 0:
         raise WindowExtractionError(
             f"{field} must resolve to a positive whole sample count; got {exact_samples}"
@@ -312,8 +363,23 @@ def _seconds_to_samples(seconds: float, sample_rate_hz: float, field: str) -> in
 
 
 def _validate_output_path(output_path: Path, suffix: str, description: str) -> None:
+    """Validate output path according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        output_path: The output path value supplied by the caller or surrounding test fixture.
+        suffix: The suffix value supplied by the caller or surrounding test fixture.
+        description: The description value supplied by the caller or surrounding test fixture.
+    """
+
+    # Evaluate `output_path.suffix != suffix` explicitly so invalid or alternate states follow the
+    # documented contract.
     if output_path.suffix != suffix:
         raise WindowExtractionError(f"{description} must use the {suffix} extension")
+    # Evaluate `not output_path.parent.is_dir()` explicitly so invalid or alternate states follow
+    # the documented contract.
     if not output_path.parent.is_dir():
         raise WindowExtractionError(
             f"{description} parent directory does not exist: {output_path.parent}"
@@ -321,7 +387,24 @@ def _validate_output_path(output_path: Path, suffix: str, description: str) -> N
 
 
 def _resolve_channel(config: WindowConfig, signal: SignalRecord) -> tuple[str, int, str]:
+    """Resolve channel according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        config: Validated configuration controlling the documented operation.
+        signal: The signal value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Evaluate `config.channel_name is not None` explicitly so invalid or alternate states follow
+    # the documented contract.
     if config.channel_name is not None:
+        # Attempt this boundary operation here so ValueError can be translated or cleaned up under
+        # the repository contract.
         try:
             channel_index = signal.channel_names.index(config.channel_name)
         except ValueError as error:
@@ -331,10 +414,14 @@ def _resolve_channel(config: WindowConfig, signal: SignalRecord) -> tuple[str, i
             ) from error
         return "channel_name", channel_index, signal.channel_names[channel_index]
 
+    # Evaluate `config.channel_index is None` explicitly so invalid or alternate states follow the
+    # documented contract.
     if config.channel_index is None:
         raise WindowExtractionError(
             "window config must provide exactly one channel selector: channel_name or channel_index"
         )
+    # Evaluate `config.channel_index >= signal.signals.shape[1]` explicitly so invalid or alternate
+    # states follow the documented contract.
     if config.channel_index >= signal.signals.shape[1]:
         raise WindowExtractionError(
             f"channel index {config.channel_index} exceeds signal width {signal.signals.shape[1]}"
@@ -343,52 +430,152 @@ def _resolve_channel(config: WindowConfig, signal: SignalRecord) -> tuple[str, i
 
 
 def _optional_string(values: dict[str, Any], key: str) -> str | None:
+    """Read optional string for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+        key: The key value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Evaluate `key not in values` explicitly so invalid or alternate states follow the documented
+    # contract.
     if key not in values:
         return None
     value = values[key]
+    # Evaluate `not isinstance(value, str) or not value.strip()` explicitly so invalid or alternate
+    # states follow the documented contract.
     if not isinstance(value, str) or not value.strip():
         raise WindowExtractionError(f"window.{key} must be a non-empty string")
     return value.strip()
 
 
 def _optional_nonnegative_int(values: dict[str, Any], key: str) -> int | None:
+    """Read optional nonnegative int for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+        key: The key value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Evaluate `key not in values` explicitly so invalid or alternate states follow the documented
+    # contract.
     if key not in values:
         return None
     return _required_nonnegative_int(values, key)
 
 
 def _optional_unique_strings(values: dict[str, Any], key: str) -> tuple[str, ...]:
+    """Read optional unique strings for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+        key: The key value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Evaluate `key not in values` explicitly so invalid or alternate states follow the documented
+    # contract.
     if key not in values:
         return ()
     raw_values = values[key]
+    # Evaluate `not isinstance(raw_values, list)` explicitly so invalid or alternate states follow
+    # the documented contract.
     if not isinstance(raw_values, list):
         raise WindowExtractionError(f"window.{key} must be a list of non-empty strings")
     parsed: list[str] = []
+    # Iterate over `raw_values` one item at a time so ordering, validation, and failure attribution
+    # remain explicit.
     for value in raw_values:
+        # Evaluate `not isinstance(value, str) or not value.strip()` explicitly so invalid or
+        # alternate states follow the documented contract.
         if not isinstance(value, str) or not value.strip():
             raise WindowExtractionError(f"window.{key} must be a list of non-empty strings")
         parsed.append(value.strip())
+    # Evaluate `len(set(parsed)) != len(parsed)` explicitly so invalid or alternate states follow
+    # the documented contract.
     if len(set(parsed)) != len(parsed):
         raise WindowExtractionError(f"window.{key} must not contain duplicates")
     return tuple(parsed)
 
 
 def _required_string(values: dict[str, Any], key: str) -> str:
+    """Compute and return required string for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+        key: The key value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     value = values.get(key)
+    # Evaluate `not isinstance(value, str) or not value.strip()` explicitly so invalid or alternate
+    # states follow the documented contract.
     if not isinstance(value, str) or not value.strip():
         raise WindowExtractionError(f"window.{key} must be a non-empty string")
     return value.strip()
 
 
 def _required_positive_number(values: dict[str, Any], key: str) -> float:
+    """Compute and return required positive number for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+        key: The key value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     value = values.get(key)
+    # Evaluate `not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0`
+    # explicitly so invalid or alternate states follow the documented contract.
     if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
         raise WindowExtractionError(f"window.{key} must be a positive number")
     return float(value)
 
 
 def _required_nonnegative_int(values: dict[str, Any], key: str) -> int:
+    """Compute and return required nonnegative int for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+        key: The key value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     value = values.get(key)
+    # Evaluate `not isinstance(value, int) or isinstance(value, bool) or value < 0` explicitly so
+    # invalid or alternate states follow the documented contract.
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise WindowExtractionError(f"window.{key} must be a nonnegative integer")
     return value

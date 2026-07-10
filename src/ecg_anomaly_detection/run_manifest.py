@@ -19,7 +19,9 @@ from typing import Any
 from ecg_anomaly_detection.inventory import InventoryError, InventoryManifest, read_manifest
 from ecg_anomaly_detection.splitting import SplitError, read_split_manifest
 
+# Centralize BUFFER_SIZE so every caller shares the same documented invariant.
 BUFFER_SIZE = 1024 * 1024
+# Centralize UNKNOWN_GIT_REVISION so every caller shares the same documented invariant.
 UNKNOWN_GIT_REVISION = "unknown"
 """Sentinel `GitState.revision` recorded when Git state cannot be captured.
 
@@ -146,8 +148,12 @@ def create_run_manifest(
 ) -> RunManifest:
     """Create an auditable manifest without embedding source or artifact contents."""
     root = repository_root.resolve()
+    # Evaluate `not (root / 'pyproject.toml').is_file()` explicitly so invalid or alternate states
+    # follow the documented contract.
     if not (root / "pyproject.toml").is_file():
         raise RunManifestError(f"repository root does not contain pyproject.toml: {root}")
+    # Evaluate `not config_paths` explicitly so invalid or alternate states follow the documented
+    # contract.
     if not config_paths:
         raise RunManifestError("at least one configuration file is required")
 
@@ -160,11 +166,17 @@ def create_run_manifest(
     )
     resolved_paths = [_resolve_evidence_path(root, path) for path in all_paths]
     lock_path = _resolve_evidence_path(root, root / "uv.lock")
+    # Evaluate `len(set(resolved_paths)) != len(resolved_paths)` explicitly so invalid or alternate
+    # states follow the documented contract.
     if len(set(resolved_paths)) != len(resolved_paths):
         raise RunManifestError("run inputs and artifacts must not contain duplicate paths")
+    # Evaluate `lock_path in resolved_paths` explicitly so invalid or alternate states follow the
+    # documented contract.
     if lock_path in resolved_paths:
         raise RunManifestError("uv.lock is captured automatically and must not be repeated")
 
+    # Attempt this boundary operation here so InventoryError can be translated or cleaned up under
+    # the repository contract.
     try:
         inventory = read_manifest(resolved_paths[0])
     except InventoryError as error:
@@ -177,9 +189,13 @@ def create_run_manifest(
     evidence_end = config_end + len(evidence_paths)
 
     now = (clock or (lambda: datetime.now(UTC)))()
+    # Evaluate `now.tzinfo is None` explicitly so invalid or alternate states follow the documented
+    # contract.
     if now.tzinfo is None:
         raise RunManifestError("run manifest clock must return a timezone-aware datetime")
     run_id = (run_id_factory or (lambda: str(uuid.uuid4())))()
+    # Attempt this boundary operation here so (AttributeError, TypeError, ValueError) can be
+    # translated or cleaned up under the repository contract.
     try:
         uuid.UUID(run_id)
     except (AttributeError, TypeError, ValueError) as error:
@@ -208,18 +224,28 @@ def write_run_manifest(manifest: RunManifest, repository_root: Path, output_path
     """Write an ignored JSON run manifest within the repository boundary."""
     root = repository_root.resolve()
     output_candidate = output_path if output_path.is_absolute() else root / output_path
+    # Evaluate `output_candidate.is_symlink()` explicitly so invalid or alternate states follow the
+    # documented contract.
     if output_candidate.is_symlink():
         raise RunManifestError("run manifest output must not be a symbolic link")
     resolved_output = output_candidate.resolve()
     _require_within_root(root, resolved_output, "run manifest output")
+    # Attempt this boundary operation here so ValueError can be translated or cleaned up under the
+    # repository contract.
     try:
         relative_output = resolved_output.relative_to(root)
     except ValueError as error:  # pragma: no cover - guarded by _require_within_root
         raise RunManifestError("run manifest output must stay within repository root") from error
+    # Evaluate `not relative_output.parts or relative_output.parts[0] != 'artifacts'` explicitly so
+    # invalid or alternate states follow the documented contract.
     if not relative_output.parts or relative_output.parts[0] != "artifacts":
         raise RunManifestError("run manifest output must be written under artifacts/")
+    # Evaluate `resolved_output.suffix != '.json'` explicitly so invalid or alternate states follow
+    # the documented contract.
     if resolved_output.suffix != ".json":
         raise RunManifestError("run manifest output must use the .json extension")
+    # Evaluate `not resolved_output.parent.is_dir()` explicitly so invalid or alternate states
+    # follow the documented contract.
     if not resolved_output.parent.is_dir():
         raise RunManifestError(
             f"run manifest parent directory does not exist: {resolved_output.parent}"
@@ -229,12 +255,18 @@ def write_run_manifest(manifest: RunManifest, repository_root: Path, output_path
 
 def read_run_manifest(path: Path) -> RunManifest:
     """Load a previously written run manifest without recomputing any evidence."""
+    # Attempt this boundary operation here so (OSError, UnicodeError, json.JSONDecodeError) can be
+    # translated or cleaned up under the repository contract.
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise RunManifestError(f"could not read run manifest {path}: {error}") from error
+    # Evaluate `not isinstance(document, dict)` explicitly so invalid or alternate states follow the
+    # documented contract.
     if not isinstance(document, dict):
         raise RunManifestError(f"run manifest must be a JSON object: {path}")
+    # Attempt this boundary operation here so (KeyError, TypeError, ValueError) can be translated or
+    # cleaned up under the repository contract.
     try:
         return _manifest_from_document(document)
     except (KeyError, TypeError, ValueError) as error:
@@ -242,6 +274,18 @@ def read_run_manifest(path: Path) -> RunManifest:
 
 
 def _manifest_from_document(document: dict[str, Any]) -> RunManifest:
+    """Construct manifest from document for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        document: Parsed document whose schema and values are being checked.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     git = document["git"]
     environment = document["environment"]
     dataset = document["dataset"]
@@ -309,12 +353,37 @@ def _manifest_from_document(document: dict[str, Any]) -> RunManifest:
 
 
 def _file_evidence_from_document(value: dict[str, Any]) -> FileEvidence:
+    """Construct file evidence from document for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        value: Candidate value whose contract is being enforced.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return FileEvidence(path=value["path"], size_bytes=value["size_bytes"], sha256=value["sha256"])
 
 
 def _dataset_evidence(
     inventory: InventoryManifest, inventory_file: FileEvidence
 ) -> DatasetEvidence:
+    """Construct dataset evidence for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        inventory: The inventory value supplied by the caller or surrounding test fixture.
+        inventory_file: The inventory file value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return DatasetEvidence(
         dataset_slug=inventory.dataset_slug,
         dataset_version=inventory.dataset_version,
@@ -330,6 +399,21 @@ def _dataset_evidence(
 
 
 def _read_split_evidence(path: Path, split_file: FileEvidence) -> SplitEvidence:
+    """Read split evidence according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        path: Filesystem path identifying the input or output under review.
+        split_file: The split file value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Attempt this boundary operation here so SplitError can be translated or cleaned up under the
+    # repository contract.
     try:
         manifest = read_split_manifest(path)
     except SplitError as error:
@@ -363,6 +447,20 @@ def _read_split_evidence(path: Path, split_file: FileEvidence) -> SplitEvidence:
 
 
 def _capture_git_state(repository_root: Path) -> GitState:
+    """Capture git state according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        repository_root: Repository root used to enforce path and trust boundaries.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Attempt this boundary operation here so (OSError, subprocess.CalledProcessError) can be
+    # translated or cleaned up under the repository contract.
     try:
         # both command lists below are fixed literals, not runtime/user-constructed input.
         revision = subprocess.run(
@@ -381,15 +479,29 @@ def _capture_git_state(repository_root: Path) -> GitState:
         ).stdout
     except (OSError, subprocess.CalledProcessError):
         return GitState(revision=UNKNOWN_GIT_REVISION, dirty=None)
+    # Evaluate `len(revision) != 40 or any((character not in string.hexdigits for character in
+    # revision))` explicitly so invalid or alternate states follow the documented contract.
     if len(revision) != 40 or any(character not in string.hexdigits for character in revision):
         raise RunManifestError("Git revision must be a full 40-character commit hash")
     return GitState(revision=revision.lower(), dirty=bool(status.strip()))
 
 
 def _capture_environment() -> EnvironmentSnapshot:
+    """Capture environment according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     packages: dict[str, str] = {}
+    # Iterate over `metadata.distributions()` one item at a time so ordering, validation, and
+    # failure attribution remain explicit.
     for distribution in metadata.distributions():
         name = distribution.metadata.get("Name")
+        # Evaluate `name` explicitly so invalid or alternate states follow the documented contract.
         if name:
             packages[name.lower()] = distribution.version
     return EnvironmentSnapshot(
@@ -402,20 +514,53 @@ def _capture_environment() -> EnvironmentSnapshot:
 
 
 def _resolve_evidence_path(repository_root: Path, path: Path) -> Path:
+    """Resolve evidence path according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        repository_root: Repository root used to enforce path and trust boundaries.
+        path: Filesystem path identifying the input or output under review.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     candidate = path if path.is_absolute() else repository_root / path
+    # Evaluate `candidate.is_symlink()` explicitly so invalid or alternate states follow the
+    # documented contract.
     if candidate.is_symlink():
         raise RunManifestError(f"run evidence must not be a symbolic link: {candidate}")
     resolved = candidate.resolve()
     _require_within_root(repository_root, resolved, "run evidence")
+    # Evaluate `not resolved.is_file()` explicitly so invalid or alternate states follow the
+    # documented contract.
     if not resolved.is_file():
         raise RunManifestError(f"run evidence must be a regular file: {resolved}")
     return resolved
 
 
 def _file_evidence(repository_root: Path, path: Path) -> FileEvidence:
+    """Construct file evidence for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        repository_root: Repository root used to enforce path and trust boundaries.
+        path: Filesystem path identifying the input or output under review.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     digest = hashlib.sha256()
     size_bytes = 0
+    # Scope `path.open('rb')` here so resource cleanup occurs on both success and failure paths.
     with path.open("rb") as source:
+        # Continue while `(chunk := source.read(BUFFER_SIZE))` so the loop's termination rule
+        # remains visible to reviewers.
         while chunk := source.read(BUFFER_SIZE):
             digest.update(chunk)
             size_bytes += len(chunk)
@@ -427,6 +572,19 @@ def _file_evidence(repository_root: Path, path: Path) -> FileEvidence:
 
 
 def _require_within_root(repository_root: Path, path: Path, description: str) -> None:
+    """Require an evidence path to resolve inside the repository root.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        repository_root: Repository root used to enforce path and trust boundaries.
+        path: Filesystem path identifying the input or output under review.
+        description: The description value supplied by the caller or surrounding test fixture.
+    """
+
+    # Attempt this boundary operation here so ValueError can be translated or cleaned up under the
+    # repository contract.
     try:
         path.relative_to(repository_root)
     except ValueError as error:

@@ -16,7 +16,9 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+# Centralize BUFFER_SIZE so every caller shares the same documented invariant.
 BUFFER_SIZE = 1024 * 1024
+# Centralize STAGE_NAMES so every caller shares the same documented invariant.
 STAGE_NAMES = (
     "acquisition",
     "validation",
@@ -66,6 +68,15 @@ class EnvironmentSummary:
     git: GitMetadata
 
     def to_json(self) -> str:
+        """Serialize this structured record as deterministic JSON.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         return _to_json(self)
 
 
@@ -79,6 +90,15 @@ class RuntimeSummary:
     total_runtime: float
 
     def to_json(self) -> str:
+        """Serialize this structured record as deterministic JSON.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         return _to_json(self)
 
 
@@ -95,6 +115,15 @@ class ResourceSummary:
     disk_free_bytes: int | None
 
     def to_json(self) -> str:
+        """Serialize this structured record as deterministic JSON.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         return _to_json(self)
 
 
@@ -120,6 +149,15 @@ class EvidenceManifest:
     artifact_files: tuple[ArtifactEvidence, ...]
 
     def to_json(self) -> str:
+        """Serialize this structured record as deterministic JSON.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         return _to_json(self)
 
 
@@ -127,25 +165,63 @@ class RuntimeStageTimer:
     """Accumulate monotonic time by a fixed set of pipeline stages."""
 
     def __init__(self, timer: Callable[[], float] = perf_counter) -> None:
+        """Initialize this object with the validated state required by its contract.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Args:
+            timer: The timer value supplied by the caller or surrounding test fixture.
+        """
+
         self._timer = timer
         self._started_at = timer()
         self._durations = dict.fromkeys(STAGE_NAMES, 0.0)
 
     @contextmanager
     def stage(self, name: str) -> Iterator[None]:
+        """Compute and return stage for the documented repository workflow.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Args:
+            name: The name value supplied by the caller or surrounding test fixture.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
+        # Evaluate `name not in self._durations` explicitly so invalid or alternate states follow
+        # the documented contract.
         if name not in self._durations:
             raise ReproducibilityEvidenceError(f"unsupported runtime stage: {name}")
         started_at = self._timer()
+        # Attempt this boundary operation here so the declared boundary failures can be translated
+        # or cleaned up under the repository contract.
         try:
             yield
         finally:
             elapsed = self._timer() - started_at
+            # Evaluate `elapsed < 0` explicitly so invalid or alternate states follow the documented
+            # contract.
             if elapsed < 0:
                 raise ReproducibilityEvidenceError("monotonic timer moved backwards")
             self._durations[name] += elapsed
 
     def summary(self) -> RuntimeSummary:
+        """Compute and return summary for the documented repository workflow.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         total = self._timer() - self._started_at
+        # Evaluate `total < 0` explicitly so invalid or alternate states follow the documented
+        # contract.
         if total < 0:
             raise ReproducibilityEvidenceError("monotonic timer moved backwards")
         return RuntimeSummary(
@@ -158,10 +234,15 @@ class RuntimeStageTimer:
 
 def sha256_file(path: Path) -> str:
     """Return the SHA-256 digest of a regular file."""
+    # Evaluate `path.is_symlink() or not path.is_file()` explicitly so invalid or alternate states
+    # follow the documented contract.
     if path.is_symlink() or not path.is_file():
         raise ReproducibilityEvidenceError(f"evidence path must be a regular file: {path}")
     digest = hashlib.sha256()
+    # Scope `path.open('rb')` here so resource cleanup occurs on both success and failure paths.
     with path.open("rb") as source:
+        # Continue while `(chunk := source.read(BUFFER_SIZE))` so the loop's termination rule
+        # remains visible to reviewers.
         while chunk := source.read(BUFFER_SIZE):
             digest.update(chunk)
     return digest.hexdigest()
@@ -174,20 +255,30 @@ def collect_artifact_evidence(
     root = repository_root.resolve()
     evidence: list[ArtifactEvidence] = []
     seen: set[Path] = set()
+    # Iterate over `paths` one item at a time so ordering, validation, and failure attribution
+    # remain explicit.
     for path in paths:
         candidate = path if path.is_absolute() else root / path
+        # Evaluate `candidate.is_symlink()` explicitly so invalid or alternate states follow the
+        # documented contract.
         if candidate.is_symlink():
             raise ReproducibilityEvidenceError(f"evidence path must not be a symlink: {candidate}")
         resolved = candidate.resolve()
+        # Attempt this boundary operation here so ValueError can be translated or cleaned up under
+        # the repository contract.
         try:
             relative = resolved.relative_to(root)
         except ValueError as error:
             raise ReproducibilityEvidenceError(
                 f"evidence path must stay within repository root: {resolved}"
             ) from error
+        # Evaluate `resolved in seen` explicitly so invalid or alternate states follow the
+        # documented contract.
         if resolved in seen:
             raise ReproducibilityEvidenceError(f"duplicate evidence path: {relative.as_posix()}")
         seen.add(resolved)
+        # Evaluate `not resolved.is_file()` explicitly so invalid or alternate states follow the
+        # documented contract.
         if not resolved.is_file():
             raise ReproducibilityEvidenceError(f"evidence path must be a regular file: {resolved}")
         evidence.append(
@@ -238,6 +329,8 @@ def capture_resource_summary(repository_root: Path) -> ResourceSummary:
     disk_total: int | None = None
     disk_used: int | None = None
     disk_free: int | None = None
+    # Attempt this boundary operation here so OSError can be translated or cleaned up under the
+    # repository contract.
     try:
         usage = shutil.disk_usage(repository_root)
         disk_total, disk_used, disk_free = usage.total, usage.used, usage.free
@@ -292,17 +385,25 @@ def write_evidence(
     """Write one JSON evidence document under the ignored artifacts directory."""
     root = repository_root.resolve()
     candidate = output_path if output_path.is_absolute() else root / output_path
+    # Evaluate `candidate.is_symlink()` explicitly so invalid or alternate states follow the
+    # documented contract.
     if candidate.is_symlink():
         raise ReproducibilityEvidenceError("evidence output must not be a symbolic link")
     resolved = candidate.resolve()
+    # Attempt this boundary operation here so ValueError can be translated or cleaned up under the
+    # repository contract.
     try:
         relative = resolved.relative_to(root)
     except ValueError as error:
         raise ReproducibilityEvidenceError(
             "evidence output must stay within repository root"
         ) from error
+    # Evaluate `not relative.parts or relative.parts[0] != 'artifacts'` explicitly so invalid or
+    # alternate states follow the documented contract.
     if not relative.parts or relative.parts[0] != "artifacts":
         raise ReproducibilityEvidenceError("evidence output must be written under artifacts/")
+    # Evaluate `resolved.suffix != '.json' or not resolved.parent.is_dir()` explicitly so invalid or
+    # alternate states follow the documented contract.
     if resolved.suffix != ".json" or not resolved.parent.is_dir():
         raise ReproducibilityEvidenceError(
             "evidence output must be a JSON file with an existing parent directory"
@@ -311,10 +412,37 @@ def write_evidence(
 
 
 def _to_json(document: Any) -> str:
+    """Compute and return to json for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        document: Parsed document whose schema and values are being checked.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return json.dumps(asdict(document), indent=2, sort_keys=True) + "\n"
 
 
 def _run_optional(command: tuple[str, ...], cwd: Path) -> str | None:
+    """Compute and return run optional for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        command: The command value supplied by the caller or surrounding test fixture.
+        cwd: The cwd value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Attempt this boundary operation here so (OSError, subprocess.CalledProcessError) can be
+    # translated or cleaned up under the repository contract.
     try:
         # every call site below passes a fixed literal command tuple, not
         # runtime/user-constructed input.
@@ -327,6 +455,21 @@ def _run_optional(command: tuple[str, ...], cwd: Path) -> str | None:
 
 
 def _run_optional_allow_empty(command: tuple[str, ...], cwd: Path) -> str | None:
+    """Compute and return run optional allow empty for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        command: The command value supplied by the caller or surrounding test fixture.
+        cwd: The cwd value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Attempt this boundary operation here so (OSError, subprocess.CalledProcessError) can be
+    # translated or cleaned up under the repository contract.
     try:
         # every call site below passes a fixed literal command tuple, not
         # runtime/user-constructed input.
@@ -339,11 +482,30 @@ def _run_optional_allow_empty(command: tuple[str, ...], cwd: Path) -> str | None
 
 
 def _capture_cpu_model() -> str | None:
+    """Capture cpu model according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Evaluate `sys.platform == 'darwin'` explicitly so invalid or alternate states follow the
+    # documented contract.
     if sys.platform == "darwin":
         return _run_optional(("sysctl", "-n", "machdep.cpu.brand_string"), Path.cwd())
+    # Evaluate `sys.platform.startswith('linux')` explicitly so invalid or alternate states follow
+    # the documented contract.
     if sys.platform.startswith("linux"):
+        # Attempt this boundary operation here so OSError can be translated or cleaned up under the
+        # repository contract.
         try:
+            # Iterate over `Path('/proc/cpuinfo').read_text(encoding='utf-8').splitlines()` one item
+            # at a time so ordering, validation, and failure attribution remain explicit.
             for line in Path("/proc/cpuinfo").read_text(encoding="utf-8").splitlines():
+                # Evaluate `line.lower().startswith('model name')` explicitly so invalid or
+                # alternate states follow the documented contract.
                 if line.lower().startswith("model name"):
                     return line.partition(":")[2].strip() or None
         except OSError:
@@ -352,15 +514,36 @@ def _capture_cpu_model() -> str | None:
 
 
 def _capture_memory_total() -> int | None:
+    """Capture memory total according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Evaluate `sys.platform == 'darwin'` explicitly so invalid or alternate states follow the
+    # documented contract.
     if sys.platform == "darwin":
         value = _run_optional(("sysctl", "-n", "hw.memsize"), Path.cwd())
+        # Attempt this boundary operation here so ValueError can be translated or cleaned up under
+        # the repository contract.
         try:
             return int(value) if value else None
         except ValueError:
             return None
+    # Evaluate `sys.platform.startswith('linux')` explicitly so invalid or alternate states follow
+    # the documented contract.
     if sys.platform.startswith("linux"):
+        # Attempt this boundary operation here so (OSError, ValueError, IndexError) can be
+        # translated or cleaned up under the repository contract.
         try:
+            # Iterate over `Path('/proc/meminfo').read_text(encoding='utf-8').splitlines()` one item
+            # at a time so ordering, validation, and failure attribution remain explicit.
             for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
+                # Evaluate `line.startswith('MemTotal:')` explicitly so invalid or alternate states
+                # follow the documented contract.
                 if line.startswith("MemTotal:"):
                     return int(line.split()[1]) * 1024
         except (OSError, ValueError, IndexError):

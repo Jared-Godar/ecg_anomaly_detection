@@ -20,6 +20,15 @@ from ecg_anomaly_detection.reproducibility import (
 
 
 def test_file_digest_and_artifact_evidence_are_stable(tmp_path: Path) -> None:
+    """Verify that file digest and artifact evidence are stable.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     content = b"reproducible\n"
     artifact = tmp_path / "artifact.json"
     artifact.write_bytes(content)
@@ -33,9 +42,17 @@ def test_file_digest_and_artifact_evidence_are_stable(tmp_path: Path) -> None:
 
 
 def test_runtime_summary_has_fixed_stages_and_deterministic_json() -> None:
+    """Verify that runtime summary has fixed stages and deterministic json.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+    """
+
     readings = iter((0.0, 1.0, 1.25, 2.0))
     timer = RuntimeStageTimer(lambda: next(readings))
 
+    # Scope `timer.stage('acquisition')` here so the expected failure and fixture cleanup stay
+    # scoped to this assertion.
     with timer.stage("acquisition"):
         pass
     summary = timer.summary()
@@ -53,6 +70,16 @@ def test_runtime_summary_has_fixed_stages_and_deterministic_json() -> None:
 def test_environment_capture_uses_null_fallbacks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify that environment capture uses null fallbacks.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        monkeypatch: Pytest monkeypatch fixture used to isolate external behavior.
+    """
+
     (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     monkeypatch.setattr(reproducibility, "_run_optional", lambda *_: None)
     monkeypatch.setattr(reproducibility, "_run_optional_allow_empty", lambda *_: None)
@@ -70,7 +97,30 @@ def test_environment_capture_uses_null_fallbacks(
 def test_git_metadata_preserves_clean_status_when_other_values_are_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify that git metadata preserves clean status when other values are unavailable.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        monkeypatch: Pytest monkeypatch fixture used to isolate external behavior.
+    """
+
     def fake_run(command: tuple[str, ...], _: Path) -> str | None:
+        """Build or exercise the fake run test fixture.
+
+        The helper keeps repeated test setup explicit without hiding the contract under
+        examination.
+
+        Args:
+            command: The command value supplied by the caller or surrounding test fixture.
+            _: The operation value supplied by the caller or surrounding test fixture.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         return "" if command[1] == "status" else None
 
     monkeypatch.setattr(reproducibility, "_run_optional", fake_run)
@@ -86,7 +136,26 @@ def test_git_metadata_preserves_clean_status_when_other_values_are_unavailable(
 def test_resource_capture_uses_null_fallbacks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify that resource capture uses null fallbacks.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        monkeypatch: Pytest monkeypatch fixture used to isolate external behavior.
+    """
+
     def unavailable_disk(_: Path) -> None:
+        """Build or exercise the unavailable disk test fixture.
+
+        The helper keeps repeated test setup explicit without hiding the contract under
+        examination.
+
+        Args:
+            _: The operation value supplied by the caller or surrounding test fixture.
+        """
+
         raise OSError("unavailable")
 
     monkeypatch.setattr(reproducibility.shutil, "disk_usage", unavailable_disk)

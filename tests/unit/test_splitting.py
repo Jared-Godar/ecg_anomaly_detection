@@ -26,6 +26,15 @@ from ecg_anomaly_detection.splitting import (
 
 @pytest.fixture
 def split_config() -> SplitConfig:
+    """Build or exercise the split config test fixture.
+
+    The helper keeps repeated test setup explicit without hiding the contract under
+    examination.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return SplitConfig(
         schema_version=2,
         name="test-subject-split",
@@ -46,6 +55,15 @@ def split_config() -> SplitConfig:
 
 @pytest.fixture
 def metadata() -> WindowMetadata:
+    """Build or exercise the metadata test fixture.
+
+    The helper keeps repeated test setup explicit without hiding the contract under
+    examination.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     targets = np.asarray([0, 1, 0, 1, 1, 0, 0, 0], dtype=np.int64)
     targets.setflags(write=False)
     return WindowMetadata(
@@ -60,6 +78,12 @@ def metadata() -> WindowMetadata:
 
 
 def test_repository_split_config_is_versioned_and_subject_grouped() -> None:
+    """Verify that repository split config is versioned and subject grouped.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+    """
+
     paths = RepositoryPaths.discover(Path(__file__))
     config = load_split_config(paths.configs / "splitting-v2.toml")
 
@@ -73,6 +97,17 @@ def test_repository_split_config_is_versioned_and_subject_grouped() -> None:
 def test_split_is_deterministic_complete_and_subject_disjoint(
     split_config: SplitConfig, metadata: WindowMetadata, tmp_path: Path
 ) -> None:
+    """Verify that split is deterministic complete and subject disjoint.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        split_config: The split config value supplied by the caller or surrounding test fixture.
+        metadata: The metadata value supplied by the caller or surrounding test fixture.
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     first = create_split_manifest(split_config, metadata)
     second = create_split_manifest(split_config, metadata)
     output_path = tmp_path / "split.json"
@@ -107,6 +142,15 @@ def test_split_is_deterministic_complete_and_subject_disjoint(
 
 
 def test_three_subjects_produce_three_nonempty_partitions(split_config: SplitConfig) -> None:
+    """Verify that three subjects produce three nonempty partitions.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        split_config: The split config value supplied by the caller or surrounding test fixture.
+    """
+
     metadata = WindowMetadata(
         record_ids=("100", "101", "102", "103"),
         target_values=np.asarray([0, 0, 0, 1], dtype=np.int64),
@@ -123,6 +167,15 @@ def test_three_subjects_produce_three_nonempty_partitions(split_config: SplitCon
 
 
 def test_split_rejects_too_few_subjects(split_config: SplitConfig) -> None:
+    """Verify that split rejects too few subjects.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        split_config: The split config value supplied by the caller or surrounding test fixture.
+    """
+
     metadata = WindowMetadata(
         record_ids=("100", "101", "102"),
         target_values=np.asarray([0, 0, 1], dtype=np.int64),
@@ -133,6 +186,8 @@ def test_split_rejects_too_few_subjects(split_config: SplitConfig) -> None:
         window_config_version="1",
     )
 
+    # Scope `pytest.raises(SplitError, match='at least 3 subjects')` here so the expected failure
+    # and fixture cleanup stay scoped to this assertion.
     with pytest.raises(SplitError, match="at least 3 subjects"):
         create_split_manifest(
             replace(
@@ -148,11 +203,22 @@ def test_split_rejects_too_few_subjects(split_config: SplitConfig) -> None:
 
 
 def test_window_metadata_loader_rejects_record_reuse_across_artifacts(tmp_path: Path) -> None:
+    """Verify that window metadata loader rejects record reuse across artifacts.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     first = tmp_path / "first.npz"
     second = tmp_path / "second.npz"
     _write_metadata_artifact(first, ["100"], [0])
     _write_metadata_artifact(second, ["100"], [1])
 
+    # Scope `pytest.raises(SplitError, match='multiple window artifacts')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(SplitError, match="multiple window artifacts"):
         load_window_metadata([first, second])
 
@@ -160,6 +226,16 @@ def test_window_metadata_loader_rejects_record_reuse_across_artifacts(tmp_path: 
 def test_manifest_reader_rejects_subject_crossing_partitions(
     split_config: SplitConfig, metadata: WindowMetadata
 ) -> None:
+    """Verify that manifest reader rejects subject crossing partitions.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        split_config: The split config value supplied by the caller or surrounding test fixture.
+        metadata: The metadata value supplied by the caller or surrounding test fixture.
+    """
+
     document = json.loads(create_split_manifest(split_config, metadata).to_json())
     leaked_subject = document["partitions"]["train"]["subject_ids"][0]
     validation = document["partitions"]["validation"]
@@ -170,6 +246,8 @@ def test_manifest_reader_rejects_subject_crossing_partitions(
     }
     assert displaced_subject != leaked_subject
 
+    # Scope `pytest.raises(SplitError, match='subject leakage')` here so the expected failure and
+    # fixture cleanup stay scoped to this assertion.
     with pytest.raises(SplitError, match="subject leakage"):
         SplitManifest.from_json(json.dumps(document))
 
@@ -177,6 +255,16 @@ def test_manifest_reader_rejects_subject_crossing_partitions(
 def test_quality_summary_reports_deterministic_distributions_and_disjointness(
     split_config: SplitConfig, metadata: WindowMetadata
 ) -> None:
+    """Verify that quality summary reports deterministic distributions and disjointness.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        split_config: The split config value supplied by the caller or surrounding test fixture.
+        metadata: The metadata value supplied by the caller or surrounding test fixture.
+    """
+
     manifest = create_split_manifest(split_config, metadata)
 
     first = create_split_quality_summary(split_config, manifest, metadata)
@@ -202,6 +290,18 @@ def test_quality_summary_handles_missing_class_and_insufficient_counts(
     severity: str,
     expected_status: str,
 ) -> None:
+    """Verify that quality summary handles missing class and insufficient counts.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        split_config: The split config value supplied by the caller or surrounding test fixture.
+        metadata: The metadata value supplied by the caller or surrounding test fixture.
+        severity: The severity value supplied by the caller or surrounding test fixture.
+        expected_status: The expected status value supplied by the caller or surrounding test fixture.
+    """
+
     config = replace(
         split_config,
         quality=SplitQualityConfig(
@@ -220,7 +320,11 @@ def test_quality_summary_handles_missing_class_and_insufficient_counts(
         "minimum_subjects",
         "required_class_coverage",
     }
+    # Exercise the `severity == 'failure'` branch so this regression documents every expected
+    # outcome.
     if severity == "failure":
+        # Scope `pytest.raises(SplitError, match='quality checks failed')` here so the expected
+        # failure and fixture cleanup stay scoped to this assertion.
         with pytest.raises(SplitError, match="quality checks failed"):
             enforce_split_quality(summary)
     else:
@@ -286,6 +390,17 @@ def test_quality_summary_shard_count_and_ratios_with_multiple_source_artifacts(
 
 
 def _write_metadata_artifact(path: Path, record_ids: list[str], target_values: list[int]) -> None:
+    """Write metadata artifact according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        path: Filesystem path identifying the input or output under review.
+        record_ids: The record ids value supplied by the caller or surrounding test fixture.
+        target_values: The target values value supplied by the caller or surrounding test fixture.
+    """
+
     np.savez_compressed(
         path,
         schema_version=np.asarray(1, dtype=np.int64),

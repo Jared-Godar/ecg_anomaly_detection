@@ -8,6 +8,15 @@ from ecg_anomaly_detection.cli import main
 
 
 def test_create_run_manifest_command_records_local_evidence(tmp_path: Path) -> None:
+    """Verify that create run manifest command records local evidence.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     (tmp_path / "artifacts").mkdir()

@@ -105,10 +105,15 @@ class SplitManifest:
     @classmethod
     def from_json(cls, content: str) -> SplitManifest:
         """Parse and validate a serialized grouped split manifest."""
+        # Attempt this boundary operation here so (KeyError, TypeError, json.JSONDecodeError) can be
+        # translated or cleaned up under the repository contract.
         try:
             document = json.loads(content)
             schema_version = document["schema_version"]
             partitions_document = document["partitions"]
+            # Evaluate `not isinstance(partitions_document, dict) or set(partitions_document) !=
+            # {'train', 'validation', 'test'}` explicitly so invalid or alternate states follow the
+            # documented contract.
             if not isinstance(partitions_document, dict) or set(partitions_document) != {
                 "train",
                 "validation",
@@ -120,6 +125,9 @@ class SplitManifest:
                 for name in ("train", "validation", "test")
             }
             source_artifacts_value = document["source_artifacts"]
+            # Evaluate `not isinstance(source_artifacts_value, list) or not source_artifacts_value
+            # or (not all((isinstance(item, str) and ite...` explicitly so invalid or alternate
+            # states follow the documented contract.
             if (
                 not isinstance(source_artifacts_value, list)
                 or not source_artifacts_value
@@ -185,7 +193,10 @@ class SplitQualitySummary:
 
 def load_split_config(path: Path) -> SplitConfig:
     """Load and validate a versioned split configuration."""
+    # Attempt this boundary operation here so (OSError, tomllib.TOMLDecodeError) can be translated
+    # or cleaned up under the repository contract.
     try:
+        # Scope `path.open('rb')` here so resource cleanup occurs on both success and failure paths.
         with path.open("rb") as config_file:
             document = tomllib.load(config_file)
     except (OSError, tomllib.TOMLDecodeError) as error:
@@ -193,9 +204,13 @@ def load_split_config(path: Path) -> SplitConfig:
 
     split = document.get("split")
     schema_version = document.get("schema_version")
+    # Evaluate `schema_version not in {1, 2} or not isinstance(split, dict)` explicitly so invalid
+    # or alternate states follow the documented contract.
     if schema_version not in {1, 2} or not isinstance(split, dict):
         raise SplitError("split config must use schema_version 1 or 2 and a [split] table")
     ratios = split.get("ratios")
+    # Evaluate `not isinstance(ratios, dict)` explicitly so invalid or alternate states follow the
+    # documented contract.
     if not isinstance(ratios, dict):
         raise SplitError("split config must contain a [split.ratios] table")
 
@@ -212,9 +227,13 @@ def load_split_config(path: Path) -> SplitConfig:
         quality=_quality_config(split),
     )
     expected_strategy = "seeded-subject-shuffle" if schema_version == 2 else "seeded-record-shuffle"
+    # Evaluate `config.strategy != expected_strategy` explicitly so invalid or alternate states
+    # follow the documented contract.
     if config.strategy != expected_strategy:
         raise SplitError(f"split.strategy must be '{expected_strategy}'")
     ratio_sum = config.train_ratio + config.validation_ratio + config.test_ratio
+    # Evaluate `not np.isclose(ratio_sum, 1.0)` explicitly so invalid or alternate states follow the
+    # documented contract.
     if not np.isclose(ratio_sum, 1.0):
         raise SplitError(f"split ratios must sum to 1.0; got {ratio_sum}")
     return config
@@ -222,6 +241,8 @@ def load_split_config(path: Path) -> SplitConfig:
 
 def load_window_metadata(artifact_paths: Sequence[Path]) -> WindowMetadata:
     """Load lineage fields from non-pickle NPZ window artifacts."""
+    # Evaluate `not artifact_paths` explicitly so invalid or alternate states follow the documented
+    # contract.
     if not artifact_paths:
         raise SplitError("at least one window artifact is required")
 
@@ -231,8 +252,14 @@ def load_window_metadata(artifact_paths: Sequence[Path]) -> WindowMetadata:
     identity: tuple[str, str, str, str] | None = None
     record_shards: dict[str, str] = {}
 
+    # Iterate over `artifact_paths` one item at a time so ordering, validation, and failure
+    # attribution remain explicit.
     for path in artifact_paths:
+        # Attempt this boundary operation here so (BadZipFile, OSError, ValueError), SplitError can
+        # be translated or cleaned up under the repository contract.
         try:
+            # Scope `np.load(path, allow_pickle=False)` here so resource cleanup occurs on both
+            # success and failure paths.
             with np.load(path, allow_pickle=False) as artifact:
                 required = {
                     "schema_version",
@@ -244,12 +271,18 @@ def load_window_metadata(artifact_paths: Sequence[Path]) -> WindowMetadata:
                     "window_config_version",
                 }
                 missing = required - set(artifact.files)
+                # Evaluate `missing` explicitly so invalid or alternate states follow the documented
+                # contract.
                 if missing:
                     raise SplitError(f"window artifact {path} is missing fields: {sorted(missing)}")
+                # Evaluate `_integer_scalar(artifact['schema_version'], path, 'schema_version') !=
+                # 1` explicitly so invalid or alternate states follow the documented contract.
                 if _integer_scalar(artifact["schema_version"], path, "schema_version") != 1:
                     raise SplitError(f"window artifact {path} must use schema_version 1")
                 artifact_records = _string_vector(artifact["record_ids"], path, "record_ids")
                 artifact_targets = _integer_vector(artifact["target_values"], path, "target_values")
+                # Evaluate `len(artifact_records) != len(artifact_targets)` explicitly so invalid or
+                # alternate states follow the documented contract.
                 if len(artifact_records) != len(artifact_targets):
                     raise SplitError(f"window artifact {path} has unequal lineage row counts")
                 artifact_identity = (
@@ -265,16 +298,22 @@ def load_window_metadata(artifact_paths: Sequence[Path]) -> WindowMetadata:
         except (BadZipFile, OSError, ValueError) as error:
             raise SplitError(f"could not load window artifact {path}: {error}") from error
 
+        # Evaluate `not artifact_records` explicitly so invalid or alternate states follow the
+        # documented contract.
         if not artifact_records:
             raise SplitError(f"window artifact {path} contains no windows")
         current_records = set(artifact_records)
         duplicated_records = current_records & seen_records
+        # Evaluate `duplicated_records` explicitly so invalid or alternate states follow the
+        # documented contract.
         if duplicated_records:
             raise SplitError(
                 f"records occur in multiple window artifacts: {sorted(duplicated_records)}"
             )
         seen_records.update(current_records)
         record_shards.update({record_id: str(path) for record_id in current_records})
+        # Evaluate `identity is None` explicitly so invalid or alternate states follow the
+        # documented contract.
         if identity is None:
             identity = artifact_identity
         elif artifact_identity != identity:
@@ -282,6 +321,8 @@ def load_window_metadata(artifact_paths: Sequence[Path]) -> WindowMetadata:
         record_ids.extend(artifact_records)
         target_arrays.append(artifact_targets)
 
+    # Evaluate `identity is None` explicitly so invalid or alternate states follow the documented
+    # contract.
     if identity is None:  # pragma: no cover - guarded by the non-empty input requirement
         raise SplitError("window artifact identity was not available")
     targets = np.concatenate(target_arrays).astype(np.int64, copy=False)
@@ -317,6 +358,8 @@ def create_split_quality_summary(
     diagnostics: dict[str, dict[str, Any]] = {}
     violations: list[QualityViolation] = []
     total_unique_shards = len(set(metadata.record_shards.values()))
+    # Iterate over `names` one item at a time so ordering, validation, and failure attribution
+    # remain explicit.
     for name in names:
         partition = manifest.partitions[name]
         shards = sorted(
@@ -361,13 +404,20 @@ def create_split_quality_summary(
             ("minimum_records", partition.record_count, config.quality.min_records_per_partition),
             ("minimum_windows", partition.window_count, config.quality.min_windows_per_partition),
         )
+        # Iterate over `checks` one item at a time so ordering, validation, and failure attribution
+        # remain explicit.
         for check, actual, minimum in checks:
+            # Evaluate `actual < minimum` explicitly so invalid or alternate states follow the
+            # documented contract.
             if actual < minimum:
                 violations.append(
                     _violation(
                         config, check, name, f"{actual} is below configured minimum {minimum}"
                     )
                 )
+        # Evaluate `binary and class_counts['1'] <
+        # config.quality.min_positive_examples_per_partition` explicitly so invalid or alternate
+        # states follow the documented contract.
         if binary and class_counts["1"] < config.quality.min_positive_examples_per_partition:
             violations.append(
                 _violation(
@@ -377,12 +427,16 @@ def create_split_quality_summary(
                     f"{class_counts['1']} is below configured minimum {config.quality.min_positive_examples_per_partition}",
                 )
             )
+        # Evaluate `name in config.quality.required_class_coverage` explicitly so invalid or
+        # alternate states follow the documented contract.
         if name in config.quality.required_class_coverage:
             missing = [
                 value
                 for value in config.quality.required_classes
                 if class_counts.get(str(value), 0) == 0
             ]
+            # Evaluate `missing` explicitly so invalid or alternate states follow the documented
+            # contract.
             if missing:
                 violations.append(
                     _violation(
@@ -392,6 +446,9 @@ def create_split_quality_summary(
                         f"missing required classes {missing}",
                     )
                 )
+        # Evaluate `diagnostics[name]['subject_ratio_deviation'] >
+        # config.quality.max_partition_ratio_deviation` explicitly so invalid or alternate states
+        # follow the documented contract.
         if (
             diagnostics[name]["subject_ratio_deviation"]
             > config.quality.max_partition_ratio_deviation
@@ -404,12 +461,16 @@ def create_split_quality_summary(
                     f"subject ratio deviation {diagnostics[name]['subject_ratio_deviation']:.6f} exceeds {config.quality.max_partition_ratio_deviation:.6f}",
                 )
             )
+    # Evaluate `not subject_disjoint` explicitly so invalid or alternate states follow the
+    # documented contract.
     if not subject_disjoint:
         violations.append(
             _violation(
                 config, "subject_disjointness", None, "subjects occur in multiple partitions"
             )
         )
+    # Evaluate `not record_disjoint` explicitly so invalid or alternate states follow the documented
+    # contract.
     if not record_disjoint:
         violations.append(
             _violation(config, "record_disjointness", None, "records occur in multiple partitions")
@@ -436,6 +497,8 @@ def create_split_quality_summary(
 
 def write_split_quality_summary(summary: SplitQualitySummary, output_path: Path) -> None:
     """Write split diagnostics to an existing directory."""
+    # Evaluate `output_path.suffix != '.json' or not output_path.parent.is_dir()` explicitly so
+    # invalid or alternate states follow the documented contract.
     if output_path.suffix != ".json" or not output_path.parent.is_dir():
         raise SplitError("split quality summary must be a JSON file in an existing directory")
     output_path.write_text(summary.to_json(), encoding="utf-8")
@@ -444,12 +507,15 @@ def write_split_quality_summary(summary: SplitQualitySummary, output_path: Path)
 def enforce_split_quality(summary: SplitQualitySummary) -> None:
     """Fail closed after the diagnostic artifact has been made available."""
     failures = [item for item in summary.violations if item.severity == "failure"]
+    # Evaluate `failures` explicitly so invalid or alternate states follow the documented contract.
     if failures:
         raise SplitError(f"split quality checks failed: {len(failures)} failure(s)")
 
 
 def create_split_manifest(config: SplitConfig, metadata: WindowMetadata) -> SplitManifest:
     """Assign complete subjects and report subject, record, and target counts."""
+    # Evaluate `len(metadata.record_ids) != len(metadata.target_values)` explicitly so invalid or
+    # alternate states follow the documented contract.
     if len(metadata.record_ids) != len(metadata.target_values):
         raise SplitError("window metadata record and target row counts must match")
     unique_records = sorted(set(metadata.record_ids))
@@ -458,6 +524,8 @@ def create_split_manifest(config: SplitConfig, metadata: WindowMetadata) -> Spli
         if config.schema_version == 1
         else config.record_subjects
     )
+    # Evaluate `set(record_subjects) != set(unique_records)` explicitly so invalid or alternate
+    # states follow the documented contract.
     if set(record_subjects) != set(unique_records):
         raise SplitError(
             "record-to-subject metadata must exactly cover window records; "
@@ -465,6 +533,8 @@ def create_split_manifest(config: SplitConfig, metadata: WindowMetadata) -> Spli
             f"extra={sorted(set(record_subjects) - set(unique_records))}"
         )
     unique_subjects = sorted(set(record_subjects.values()))
+    # Evaluate `len(unique_subjects) < 3` explicitly so invalid or alternate states follow the
+    # documented contract.
     if len(unique_subjects) < 3:
         raise SplitError("subject-grouped splitting requires at least 3 subjects")
 
@@ -507,8 +577,12 @@ def create_split_manifest(config: SplitConfig, metadata: WindowMetadata) -> Spli
 
 def write_split_manifest(manifest: SplitManifest, output_path: Path) -> None:
     """Write a JSON split manifest to an existing directory."""
+    # Evaluate `output_path.suffix != '.json'` explicitly so invalid or alternate states follow the
+    # documented contract.
     if output_path.suffix != ".json":
         raise SplitError("split manifest must use the .json extension")
+    # Evaluate `not output_path.parent.is_dir()` explicitly so invalid or alternate states follow
+    # the documented contract.
     if not output_path.parent.is_dir():
         raise SplitError(f"split manifest parent directory does not exist: {output_path.parent}")
     output_path.write_text(manifest.to_json(), encoding="utf-8")
@@ -516,6 +590,8 @@ def write_split_manifest(manifest: SplitManifest, output_path: Path) -> None:
 
 def read_split_manifest(path: Path) -> SplitManifest:
     """Read and validate a grouped split manifest from disk."""
+    # Attempt this boundary operation here so OSError can be translated or cleaned up under the
+    # repository contract.
     try:
         return SplitManifest.from_json(path.read_text(encoding="utf-8"))
     except OSError as error:
@@ -525,15 +601,36 @@ def read_split_manifest(path: Path) -> SplitManifest:
 def _partition_sizes(
     subject_count: int, ratios: tuple[float, float, float]
 ) -> tuple[int, int, int]:
+    """Calculate partition sizes for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        subject_count: The subject count value supplied by the caller or surrounding test fixture.
+        ratios: The ratios value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     exact = [subject_count * ratio for ratio in ratios]
     sizes = [int(value) for value in exact]
     remainder = subject_count - sum(sizes)
     order = sorted(range(3), key=lambda index: (-(exact[index] - sizes[index]), index))
+    # Iterate over `order[:remainder]` one item at a time so ordering, validation, and failure
+    # attribution remain explicit.
     for index in order[:remainder]:
         sizes[index] += 1
+    # Iterate over `enumerate(sizes)` one item at a time so ordering, validation, and failure
+    # attribution remain explicit.
     for empty_index, size in enumerate(sizes):
+        # Evaluate `size == 0` explicitly so invalid or alternate states follow the documented
+        # contract.
         if size == 0:
             donor = max(range(3), key=lambda index: sizes[index])
+            # Evaluate `sizes[donor] <= 1` explicitly so invalid or alternate states follow the
+            # documented contract.
             if sizes[donor] <= 1:
                 raise SplitError("could not create three non-empty subject partitions")
             sizes[donor] -= 1
@@ -544,6 +641,20 @@ def _partition_sizes(
 def _summarize_partition(
     subjects: tuple[str, ...], record_subjects: dict[str, str], metadata: WindowMetadata
 ) -> PartitionSummary:
+    """Summarize one partition's records, subjects, shards, labels, and ratio diagnostics.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        subjects: The subjects value supplied by the caller or surrounding test fixture.
+        record_subjects: The record subjects value supplied by the caller or surrounding test fixture.
+        metadata: The metadata value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     subject_membership = set(subjects)
     records = tuple(
         sorted(
@@ -574,35 +685,78 @@ def _summarize_partition(
 def _validate_partitions(
     partitions: dict[str, PartitionSummary], expected_subjects: set[str], expected_records: set[str]
 ) -> None:
+    """Validate partitions according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        partitions: The partitions value supplied by the caller or surrounding test fixture.
+        expected_subjects: The expected subjects value supplied by the caller or surrounding test fixture.
+        expected_records: The expected records value supplied by the caller or surrounding test fixture.
+    """
+
     subject_sets = [set(summary.subject_ids) for summary in partitions.values()]
+    # Evaluate `any((left & right for index, left in enumerate(subject_sets) for right in
+    # subject_sets[index + 1:]))` explicitly so invalid or alternate states follow the documented
+    # contract.
     if any(
         left & right
         for index, left in enumerate(subject_sets)
         for right in subject_sets[index + 1 :]
     ):
         raise SplitError("subject leakage detected across partitions")
+    # Evaluate `set().union(*subject_sets) != expected_subjects` explicitly so invalid or alternate
+    # states follow the documented contract.
     if set().union(*subject_sets) != expected_subjects:
         raise SplitError("split partitions do not cover every input subject")
     record_sets = [set(summary.record_ids) for summary in partitions.values()]
+    # Evaluate `any((left & right for index, left in enumerate(record_sets) for right in
+    # record_sets[index + 1:]))` explicitly so invalid or alternate states follow the documented
+    # contract.
     if any(
         left & right for index, left in enumerate(record_sets) for right in record_sets[index + 1 :]
     ):
         raise SplitError("record leakage detected across partitions")
+    # Evaluate `set().union(*record_sets) != expected_records` explicitly so invalid or alternate
+    # states follow the documented contract.
     if set().union(*record_sets) != expected_records:
         raise SplitError("split partitions do not cover every input record")
 
 
 def _parse_partition_summary(name: str, value: Any, schema_version: Any) -> PartitionSummary:
+    """Parse partition summary according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        name: The name value supplied by the caller or surrounding test fixture.
+        value: Candidate value whose contract is being enforced.
+        schema_version: The schema version value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Evaluate `not isinstance(value, dict)` explicitly so invalid or alternate states follow the
+    # documented contract.
     if not isinstance(value, dict):
         raise SplitError(f"split partition {name} must be an object")
     record_ids = value.get("record_ids")
     target_counts = value.get("target_value_counts")
+    # Evaluate `not isinstance(record_ids, list) or not all((isinstance(item, str) and item for item
+    # in record_ids)) or len(record_id...` explicitly so invalid or alternate states follow the
+    # documented contract.
     if (
         not isinstance(record_ids, list)
         or not all(isinstance(item, str) and item for item in record_ids)
         or len(record_ids) != len(set(record_ids))
     ):
         raise SplitError(f"split partition {name} has invalid record IDs")
+    # Evaluate `not isinstance(target_counts, dict) or not all((isinstance(key, str) and key and
+    # isinstance(count, int) and (not isin...` explicitly so invalid or alternate states follow the
+    # documented contract.
     if not isinstance(target_counts, dict) or not all(
         isinstance(key, str)
         and key
@@ -616,6 +770,9 @@ def _parse_partition_summary(name: str, value: Any, schema_version: Any) -> Part
     record_subjects_value = (
         value.get("record_subjects") if schema_version == 2 else {item: item for item in record_ids}
     )
+    # Evaluate `not isinstance(subject_ids_value, list) or not all((isinstance(item, str) and item
+    # for item in subject_ids_value)) or...` explicitly so invalid or alternate states follow the
+    # documented contract.
     if (
         not isinstance(subject_ids_value, list)
         or not all(isinstance(item, str) and item for item in subject_ids_value)
@@ -641,6 +798,18 @@ def _parse_partition_summary(name: str, value: Any, schema_version: Any) -> Part
 
 
 def _validate_serialized_manifest(manifest: SplitManifest) -> None:
+    """Validate serialized manifest according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        manifest: The manifest value supplied by the caller or surrounding test fixture.
+    """
+
+    # Evaluate `not isinstance(manifest.schema_version, int) or isinstance(manifest.schema_version,
+    # bool) or manifest.schema_version ...` explicitly so invalid or alternate states follow the
+    # documented contract.
     if (
         not isinstance(manifest.schema_version, int)
         or isinstance(manifest.schema_version, bool)
@@ -648,38 +817,68 @@ def _validate_serialized_manifest(manifest: SplitManifest) -> None:
     ):
         raise SplitError("split manifest must use schema_version 1 or 2")
     record_sets = [set(partition.record_ids) for partition in manifest.partitions.values()]
+    # Evaluate `any((left & right for index, left in enumerate(record_sets) for right in
+    # record_sets[index + 1:]))` explicitly so invalid or alternate states follow the documented
+    # contract.
     if any(
         left & right for index, left in enumerate(record_sets) for right in record_sets[index + 1 :]
     ):
         raise SplitError("split manifest contains record leakage across partitions")
     subject_sets = [set(partition.subject_ids) for partition in manifest.partitions.values()]
+    # Evaluate `any((left & right for index, left in enumerate(subject_sets) for right in
+    # subject_sets[index + 1:]))` explicitly so invalid or alternate states follow the documented
+    # contract.
     if any(
         left & right
         for index, left in enumerate(subject_sets)
         for right in subject_sets[index + 1 :]
     ):
         raise SplitError("split manifest contains subject leakage across partitions")
+    # Iterate over `manifest.partitions.items()` one item at a time so ordering, validation, and
+    # failure attribution remain explicit.
     for name, partition in manifest.partitions.items():
+        # Evaluate `partition.subject_count == 0 or partition.subject_count !=
+        # len(partition.subject_ids)` explicitly so invalid or alternate states follow the
+        # documented contract.
         if partition.subject_count == 0 or partition.subject_count != len(partition.subject_ids):
             raise SplitError(f"split partition {name} subject count does not match membership")
+        # Evaluate `set(partition.record_subjects) != set(partition.record_ids)` explicitly so
+        # invalid or alternate states follow the documented contract.
         if set(partition.record_subjects) != set(partition.record_ids):
             raise SplitError(f"split partition {name} record-to-subject metadata is incomplete")
+        # Evaluate `set(partition.record_subjects.values()) != set(partition.subject_ids)`
+        # explicitly so invalid or alternate states follow the documented contract.
         if set(partition.record_subjects.values()) != set(partition.subject_ids):
             raise SplitError(f"split partition {name} subject membership does not match records")
+        # Evaluate `partition.record_count == 0` explicitly so invalid or alternate states follow
+        # the documented contract.
         if partition.record_count == 0:
             raise SplitError(f"split partition {name} must contain at least one record")
+        # Evaluate `partition.record_count != len(partition.record_ids)` explicitly so invalid or
+        # alternate states follow the documented contract.
         if partition.record_count != len(partition.record_ids):
             raise SplitError(f"split partition {name} record count does not match membership")
+        # Evaluate `partition.window_count != sum(partition.target_value_counts.values())`
+        # explicitly so invalid or alternate states follow the documented contract.
         if partition.window_count != sum(partition.target_value_counts.values()):
             raise SplitError(f"split partition {name} window and target counts do not match")
+    # Evaluate `manifest.total_record_count != sum((partition.record_count for partition in
+    # manifest.partitions.values()))` explicitly so invalid or alternate states follow the
+    # documented contract.
     if manifest.total_record_count != sum(
         partition.record_count for partition in manifest.partitions.values()
     ):
         raise SplitError("split manifest total record count does not match partitions")
+    # Evaluate `manifest.total_subject_count != sum((partition.subject_count for partition in
+    # manifest.partitions.values()))` explicitly so invalid or alternate states follow the
+    # documented contract.
     if manifest.total_subject_count != sum(
         partition.subject_count for partition in manifest.partitions.values()
     ):
         raise SplitError("split manifest total subject count does not match partitions")
+    # Evaluate `manifest.total_window_count != sum((partition.window_count for partition in
+    # manifest.partitions.values()))` explicitly so invalid or alternate states follow the
+    # documented contract.
     if manifest.total_window_count != sum(
         partition.window_count for partition in manifest.partitions.values()
     ):
@@ -687,42 +886,122 @@ def _validate_serialized_manifest(manifest: SplitManifest) -> None:
     target_key_sets = {
         frozenset(partition.target_value_counts) for partition in manifest.partitions.values()
     }
+    # Evaluate `len(target_key_sets) != 1 or not next(iter(target_key_sets))` explicitly so invalid
+    # or alternate states follow the documented contract.
     if len(target_key_sets) != 1 or not next(iter(target_key_sets)):
         raise SplitError("split partitions must report one consistent set of target values")
 
 
 def _manifest_string(values: dict[str, Any], key: str) -> str:
+    """Construct manifest string for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+        key: The key value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     value = values.get(key)
+    # Evaluate `not isinstance(value, str) or not value.strip()` explicitly so invalid or alternate
+    # states follow the documented contract.
     if not isinstance(value, str) or not value.strip():
         raise SplitError(f"split manifest {key} must be a non-empty string")
     return value.strip()
 
 
 def _manifest_nonnegative_int(values: dict[str, Any], key: str) -> int:
+    """Construct manifest nonnegative int for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+        key: The key value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     value = values.get(key)
+    # Evaluate `not isinstance(value, int) or isinstance(value, bool) or value < 0` explicitly so
+    # invalid or alternate states follow the documented contract.
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise SplitError(f"split manifest {key} must be a nonnegative integer")
     return value
 
 
 def _required_string(values: dict[str, Any], key: str) -> str:
+    """Compute and return required string for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+        key: The key value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     value = values.get(key)
+    # Evaluate `not isinstance(value, str) or not value.strip()` explicitly so invalid or alternate
+    # states follow the documented contract.
     if not isinstance(value, str) or not value.strip():
         raise SplitError(f"split.{key} must be a non-empty string")
     return value.strip()
 
 
 def _required_nonnegative_int(values: dict[str, Any], key: str) -> int:
+    """Compute and return required nonnegative int for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+        key: The key value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     value = values.get(key)
+    # Evaluate `not isinstance(value, int) or isinstance(value, bool) or value < 0` explicitly so
+    # invalid or alternate states follow the documented contract.
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise SplitError(f"split.{key} must be a nonnegative integer")
     return value
 
 
 def _record_subject_mapping(document: dict[str, Any], schema_version: int) -> dict[str, str]:
+    """Record subject mapping according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        document: Parsed document whose schema and values are being checked.
+        schema_version: The schema version value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Evaluate `schema_version == 1` explicitly so invalid or alternate states follow the documented
+    # contract.
     if schema_version == 1:
         return {}
     subjects = document.get("record_subjects")
+    # Evaluate `not isinstance(subjects, dict) or not subjects or (not all((isinstance(record_id,
+    # str) and record_id and isinstance(s...` explicitly so invalid or alternate states follow the
+    # documented contract.
     if (
         not isinstance(subjects, dict)
         or not subjects
@@ -736,14 +1015,43 @@ def _record_subject_mapping(document: dict[str, Any], schema_version: int) -> di
 
 
 def _required_ratio(values: dict[str, Any], key: str) -> float:
+    """Compute and return required ratio for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+        key: The key value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     value = values.get(key)
+    # Evaluate `not isinstance(value, (int, float)) or isinstance(value, bool) or (not 0 < value <
+    # 1)` explicitly so invalid or alternate states follow the documented contract.
     if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 < value < 1:
         raise SplitError(f"split.ratios.{key} must be between 0 and 1")
     return float(value)
 
 
 def _quality_config(split: dict[str, Any]) -> SplitQualityConfig:
+    """Build quality config for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        split: The split value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     value = split.get("quality", {})
+    # Evaluate `not isinstance(value, dict)` explicitly so invalid or alternate states follow the
+    # documented contract.
     if not isinstance(value, dict):
         raise SplitError("split.quality must be a table")
     severity = value.get("default_severity", "failure")
@@ -760,28 +1068,55 @@ def _quality_config(split: dict[str, Any]) -> SplitQualityConfig:
         "subject_disjointness",
         "record_disjointness",
     }
+    # Evaluate `severity not in {'warning', 'failure'}` explicitly so invalid or alternate states
+    # follow the documented contract.
     if severity not in {"warning", "failure"}:
         raise SplitError("split.quality.default_severity must be 'warning' or 'failure'")
+    # Evaluate `not isinstance(warning_checks, list) or not all((item in valid_checks for item in
+    # warning_checks))` explicitly so invalid or alternate states follow the documented contract.
     if not isinstance(warning_checks, list) or not all(
         item in valid_checks for item in warning_checks
     ):
         raise SplitError("split.quality.warning_checks contains an unknown check")
+    # Evaluate `not isinstance(coverage, list) or not all((item in {'train', 'validation', 'test'}
+    # for item in coverage))` explicitly so invalid or alternate states follow the documented
+    # contract.
     if not isinstance(coverage, list) or not all(
         item in {"train", "validation", "test"} for item in coverage
     ):
         raise SplitError("split.quality.required_class_coverage contains an unknown partition")
+    # Evaluate `not isinstance(classes, list) or not all((isinstance(item, int) and (not
+    # isinstance(item, bool)) for item in classes))` explicitly so invalid or alternate states
+    # follow the documented contract.
     if not isinstance(classes, list) or not all(
         isinstance(item, int) and not isinstance(item, bool) for item in classes
     ):
         raise SplitError("split.quality.required_classes must contain integers")
 
     def nonnegative(name: str, default: int) -> int:
+        """Read and validate nonnegative for the documented repository workflow.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Args:
+            name: The name value supplied by the caller or surrounding test fixture.
+            default: The default value supplied by the caller or surrounding test fixture.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         item = value.get(name, default)
+        # Evaluate `not isinstance(item, int) or isinstance(item, bool) or item < 0` explicitly so
+        # invalid or alternate states follow the documented contract.
         if not isinstance(item, int) or isinstance(item, bool) or item < 0:
             raise SplitError(f"split.quality.{name} must be a nonnegative integer")
         return item
 
     deviation = value.get("max_partition_ratio_deviation", 1.0)
+    # Evaluate `not isinstance(deviation, (int, float)) or isinstance(deviation, bool) or (not 0 <=
+    # deviation <= 1)` explicitly so invalid or alternate states follow the documented contract.
     if (
         not isinstance(deviation, (int, float))
         or isinstance(deviation, bool)
@@ -804,6 +1139,21 @@ def _quality_config(split: dict[str, Any]) -> SplitQualityConfig:
 def _violation(
     config: SplitConfig, check: str, partition: str | None, message: str
 ) -> QualityViolation:
+    """Format violation for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        config: Validated configuration controlling the documented operation.
+        check: The check value supplied by the caller or surrounding test fixture.
+        partition: The partition value supplied by the caller or surrounding test fixture.
+        message: The message value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     severity = (
         "warning" if check in config.quality.warning_checks else config.quality.default_severity
     )
@@ -811,40 +1161,120 @@ def _violation(
 
 
 def _sets_are_disjoint(values: list[set[str]]) -> bool:
+    """Return whether sets are disjoint under the documented validation contract.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return not any(
         left & right for index, left in enumerate(values) for right in values[index + 1 :]
     )
 
 
 def _string_vector(value: np.ndarray[Any, Any], path: Path, field: str) -> tuple[str, ...]:
+    """Compute and return string vector for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        value: Candidate value whose contract is being enforced.
+        path: Filesystem path identifying the input or output under review.
+        field: The field value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     array = np.asarray(value)
+    # Evaluate `array.ndim != 1 or array.dtype.kind not in {'U', 'S'}` explicitly so invalid or
+    # alternate states follow the documented contract.
     if array.ndim != 1 or array.dtype.kind not in {"U", "S"}:
         raise SplitError(f"window artifact {path} field {field} must be a string vector")
     result = tuple(str(item) for item in array.tolist())
+    # Evaluate `any((not item for item in result))` explicitly so invalid or alternate states follow
+    # the documented contract.
     if any(not item for item in result):
         raise SplitError(f"window artifact {path} field {field} contains an empty string")
     return result
 
 
 def _integer_vector(value: np.ndarray[Any, Any], path: Path, field: str) -> IntegerArray:
+    """Compute and return integer vector for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        value: Candidate value whose contract is being enforced.
+        path: Filesystem path identifying the input or output under review.
+        field: The field value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     array = np.asarray(value)
+    # Evaluate `array.ndim != 1 or array.dtype.kind not in {'i', 'u'}` explicitly so invalid or
+    # alternate states follow the documented contract.
     if array.ndim != 1 or array.dtype.kind not in {"i", "u"}:
         raise SplitError(f"window artifact {path} field {field} must be an integer vector")
     return np.asarray(array, dtype=np.int64)
 
 
 def _string_scalar(value: np.ndarray[Any, Any], path: Path, field: str) -> str:
+    """Compute and return string scalar for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        value: Candidate value whose contract is being enforced.
+        path: Filesystem path identifying the input or output under review.
+        field: The field value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     array = np.asarray(value)
+    # Evaluate `array.ndim != 0 or array.dtype.kind not in {'U', 'S'}` explicitly so invalid or
+    # alternate states follow the documented contract.
     if array.ndim != 0 or array.dtype.kind not in {"U", "S"}:
         raise SplitError(f"window artifact {path} field {field} must be a string scalar")
     result = str(array.item())
+    # Evaluate `not result` explicitly so invalid or alternate states follow the documented
+    # contract.
     if not result:
         raise SplitError(f"window artifact {path} field {field} must not be empty")
     return result
 
 
 def _integer_scalar(value: np.ndarray[Any, Any], path: Path, field: str) -> int:
+    """Compute and return integer scalar for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        value: Candidate value whose contract is being enforced.
+        path: Filesystem path identifying the input or output under review.
+        field: The field value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     array = np.asarray(value)
+    # Evaluate `array.ndim != 0 or array.dtype.kind not in {'i', 'u'}` explicitly so invalid or
+    # alternate states follow the documented contract.
     if array.ndim != 0 or array.dtype.kind not in {"i", "u"}:
         raise SplitError(f"window artifact {path} field {field} must be an integer scalar")
     return int(array.item())

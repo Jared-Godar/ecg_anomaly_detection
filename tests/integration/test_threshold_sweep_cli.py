@@ -10,6 +10,7 @@ import numpy as np
 
 from ecg_anomaly_detection.cli import main
 
+# Centralize _CONFIG so every caller shares the same documented invariant.
 _CONFIG = (
     "schema_version = 1\n\n"
     "[threshold_sweep]\n"
@@ -22,6 +23,15 @@ _CONFIG = (
 
 
 def test_evaluate_threshold_sweep_command_writes_metrics(tmp_path: Path) -> None:
+    """Verify that evaluate threshold sweep command writes metrics.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     paths = _repository(tmp_path)
     config_path = tmp_path / "threshold-sweep.toml"
     config_path.write_text(_CONFIG, encoding="utf-8")
@@ -56,6 +66,15 @@ def test_evaluate_threshold_sweep_command_writes_metrics(tmp_path: Path) -> None
 
 
 def test_evaluate_threshold_sweep_command_fails_closed_on_digest_mismatch(tmp_path: Path) -> None:
+    """Verify that evaluate threshold sweep command fails closed on digest mismatch.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     paths = _repository(tmp_path)
     paths["model"].write_bytes(paths["model"].read_bytes() + b" ")
     config_path = tmp_path / "threshold-sweep.toml"
@@ -87,6 +106,18 @@ def test_evaluate_threshold_sweep_command_fails_closed_on_digest_mismatch(tmp_pa
 
 
 def _repository(root: Path) -> dict[str, Path]:
+    """Compute and return repository for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        root: Repository root used to enforce path and trust boundaries.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     (root / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     shard_dir = root / "data" / "interim" / "runs" / "fixture" / "windows"
     index_dir = root / "data" / "processed" / "runs" / "fixture"
@@ -176,6 +207,19 @@ def _repository(root: Path) -> dict[str, Path]:
 
 
 def _identity(root: Path, path: Path) -> dict[str, object]:
+    """Compute and return identity for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        root: Repository root used to enforce path and trust boundaries.
+        path: Filesystem path identifying the input or output under review.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     content = path.read_bytes()
     return {
         "path": path.relative_to(root).as_posix(),
@@ -185,4 +229,16 @@ def _identity(root: Path, path: Path) -> dict[str, object]:
 
 
 def _counts(values: np.ndarray) -> dict[str, int]:
+    """Compute and return counts for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return {str(value): int(np.count_nonzero(values == value)) for value in np.unique(values)}

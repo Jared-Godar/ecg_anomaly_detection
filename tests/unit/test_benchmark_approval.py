@@ -21,11 +21,17 @@ from ecg_anomaly_detection.run_manifest import (
     SplitEvidence,
 )
 
+# Centralize RUN_ID so every caller shares the same documented invariant.
 RUN_ID = "12345678-1234-5678-1234-567812345678"
+# Centralize OTHER_RUN_ID so every caller shares the same documented invariant.
 OTHER_RUN_ID = "87654321-4321-8765-4321-876543218765"
+# Centralize DATASET_CONFIG_PATH so every caller shares the same documented invariant.
 DATASET_CONFIG_PATH = "configs/dataset.toml"
+# Centralize TRAINING_CONFIG_PATH so every caller shares the same documented invariant.
 TRAINING_CONFIG_PATH = "configs/training.toml"
+# Centralize EVALUATION_CONFIG_PATH so every caller shares the same documented invariant.
 EVALUATION_CONFIG_PATH = "configs/evaluation.toml"
+# Centralize ALL_REFERENCES so every caller shares the same documented invariant.
 ALL_REFERENCES = frozenset(
     {
         "repository_commit_hash",
@@ -40,6 +46,15 @@ ALL_REFERENCES = frozenset(
 
 
 def _policy_text() -> str:
+    """Compute and return policy text for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     root = Path(__file__).parents[2]
     return (root / "configs" / "benchmark-policy-v1.toml").read_text(encoding="utf-8")
 
@@ -58,6 +73,22 @@ def _manifest(
         FileEvidence(EVALUATION_CONFIG_PATH, 1, "h" * 64),
     ),
 ) -> RunManifest:
+    """Construct manifest for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        run_id: The run id value supplied by the caller or surrounding test fixture.
+        git_revision: The git revision value supplied by the caller or surrounding test fixture.
+        split_name: The split name value supplied by the caller or surrounding test fixture.
+        evidence_files: The evidence files value supplied by the caller or surrounding test fixture.
+        configuration_files: The configuration files value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return RunManifest(
         schema_version=1,
         run_id=run_id,
@@ -119,6 +150,23 @@ def _approval_text(
     prior_attempt_exists: str = "false",
     lineage_configuration_paths: dict[str, str] | None = None,
 ) -> str:
+    """Compute and return approval text for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        owner: The owner value supplied by the caller or surrounding test fixture.
+        candidate_run_id: The candidate run id value supplied by the caller or surrounding test fixture.
+        purpose: The purpose value supplied by the caller or surrounding test fixture.
+        prior_attempt_exists: The prior attempt exists value supplied by the caller or surrounding test fixture.
+        lineage_configuration_paths: The lineage configuration paths value supplied by the caller or surrounding test
+            fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     paths = (
         {
             "dataset_configuration_hash": DATASET_CONFIG_PATH,
@@ -143,16 +191,50 @@ def _approval_text(
 
 @pytest.fixture
 def repository(tmp_path: Path) -> Path:
+    """Build or exercise the repository test fixture.
+
+    The helper keeps repeated test setup explicit without hiding the contract under
+    examination.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     (tmp_path / "artifacts").mkdir()
     return tmp_path
 
 
 def _write(path: Path, content: str) -> Path:
+    """Write one JSON fixture using deterministic formatting for approval tests.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        path: Filesystem path identifying the input or output under review.
+        content: The content value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     path.write_text(content, encoding="utf-8")
     return path
 
 
 def test_record_benchmark_approval_succeeds_and_writes_evidence(repository: Path) -> None:
+    """Verify that record benchmark approval succeeds and writes evidence.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        repository: The repository value supplied by the caller or surrounding test fixture.
+    """
+
     policy_path = _write(repository / "policy.toml", _policy_text())
     manifest_path = _write(repository / "run-manifest.json", _manifest().to_json())
     approval_path = _write(repository / "approval.toml", _approval_text())
@@ -172,6 +254,15 @@ def test_record_benchmark_approval_succeeds_and_writes_evidence(repository: Path
 
 
 def test_record_benchmark_approval_rejects_missing_owner(repository: Path) -> None:
+    """Verify that record benchmark approval rejects missing owner.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        repository: The repository value supplied by the caller or surrounding test fixture.
+    """
+
     policy_path = _write(repository / "policy.toml", _policy_text())
     manifest_path = _write(repository / "run-manifest.json", _manifest().to_json())
     approval_path = _write(
@@ -180,6 +271,8 @@ def test_record_benchmark_approval_rejects_missing_owner(repository: Path) -> No
     )
     output_path = repository / "artifacts" / "benchmark_approval.json"
 
+    # Scope `pytest.raises(BenchmarkApprovalError, match='approval.owner')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(BenchmarkApprovalError, match="approval.owner"):
         record_benchmark_approval(
             repository, policy_path, manifest_path, approval_path, output_path
@@ -187,6 +280,15 @@ def test_record_benchmark_approval_rejects_missing_owner(repository: Path) -> No
 
 
 def test_record_benchmark_approval_rejects_disabled_policy(repository: Path) -> None:
+    """Verify that record benchmark approval rejects disabled policy.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        repository: The repository value supplied by the caller or surrounding test fixture.
+    """
+
     policy_path = _write(
         repository / "policy.toml",
         _policy_text().replace("test_evaluation_enabled = false", "test_evaluation_enabled = true"),
@@ -195,6 +297,8 @@ def test_record_benchmark_approval_rejects_disabled_policy(repository: Path) -> 
     approval_path = _write(repository / "approval.toml", _approval_text())
     output_path = repository / "artifacts" / "benchmark_approval.json"
 
+    # Scope `pytest.raises(BenchmarkApprovalError, match='must be false')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(BenchmarkApprovalError, match="must be false"):
         record_benchmark_approval(
             repository, policy_path, manifest_path, approval_path, output_path
@@ -264,11 +368,25 @@ def test_record_benchmark_approval_fails_closed_on_missing_lineage_reference(
     manifest_kwargs: dict[str, Any],
     approval_kwargs: dict[str, Any],
 ) -> None:
+    """Verify that record benchmark approval fails closed on missing lineage reference.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        repository: The repository value supplied by the caller or surrounding test fixture.
+        missing_reference: The missing reference value supplied by the caller or surrounding test fixture.
+        manifest_kwargs: The manifest kwargs value supplied by the caller or surrounding test fixture.
+        approval_kwargs: The approval kwargs value supplied by the caller or surrounding test fixture.
+    """
+
     policy_path = _write(repository / "policy.toml", _policy_text())
     manifest_path = _write(repository / "run-manifest.json", _manifest(**manifest_kwargs).to_json())
     approval_path = _write(repository / "approval.toml", _approval_text(**approval_kwargs))
     output_path = repository / "artifacts" / "benchmark_approval.json"
 
+    # Scope `pytest.raises(BenchmarkApprovalError, match=missing_reference)` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(BenchmarkApprovalError, match=missing_reference):
         record_benchmark_approval(
             repository, policy_path, manifest_path, approval_path, output_path
@@ -291,6 +409,8 @@ def test_record_benchmark_approval_fails_closed_on_degraded_git_state(repository
     approval_path = _write(repository / "approval.toml", _approval_text())
     output_path = repository / "artifacts" / "benchmark_approval.json"
 
+    # Scope `pytest.raises(BenchmarkApprovalError, match='repository_commit_hash')` here so the
+    # expected failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(BenchmarkApprovalError, match="repository_commit_hash"):
         record_benchmark_approval(
             repository, policy_path, manifest_path, approval_path, output_path
@@ -315,6 +435,8 @@ def test_record_benchmark_approval_fails_closed_on_unknown_lineage_reference(
     approval_path = _write(repository / "approval.toml", _approval_text())
     output_path = repository / "artifacts" / "benchmark_approval.json"
 
+    # Scope `pytest.raises(BenchmarkApprovalError, match='future_requirement')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(BenchmarkApprovalError, match="future_requirement"):
         record_benchmark_approval(
             repository, policy_path, manifest_path, approval_path, output_path

@@ -38,6 +38,20 @@ class StatusField:
 
 
 def _run_gh(args: list[str]) -> str:
+    """Run one fixed GitHub CLI command and return its captured output.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        args: The args value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Attempt this boundary operation here so FileNotFoundError, subprocess.CalledProcessError can
+    # be translated or cleaned up under the repository contract.
     try:
         # command is a fixed literal ("gh", *args) built from this module's own
         # subcommand arguments, not runtime/user-constructed input.
@@ -68,9 +82,13 @@ def fetch_status_field(owner: str, project_number: int) -> StatusField:
     args = ["project", "field-list", str(project_number), "--owner", owner, "--format", "json"]
     payload = json.loads(_run_gh(args))
     field = next((f for f in payload["fields"] if f.get("name") == "Status"), None)
+    # Evaluate `field is None` explicitly so invalid or alternate states follow the documented
+    # contract.
     if field is None:
         raise ProjectStatusSyncError(f"Project #{project_number} has no 'Status' field")
     option = next((o for o in field.get("options", []) if o.get("name") == "Merged"), None)
+    # Evaluate `option is None` explicitly so invalid or alternate states follow the documented
+    # contract.
     if option is None:
         raise ProjectStatusSyncError(
             f"Project #{project_number}'s Status field has no 'Merged' option"
@@ -94,8 +112,13 @@ def find_pull_request_item_id(
         "500",
     ]
     payload = json.loads(_run_gh(args))
+    # Iterate over `payload['items']` one item at a time so ordering, validation, and failure
+    # attribution remain explicit.
     for item in payload["items"]:
         content = item.get("content", {})
+        # Evaluate `content.get('type') == 'PullRequest' and content.get('number') == pr_number and
+        # (content.get('repository') == repo)` explicitly so invalid or alternate states follow the
+        # documented contract.
         if (
             content.get("type") == "PullRequest"
             and content.get("number") == pr_number
@@ -124,6 +147,18 @@ def set_status_merged(item_id: str, project_id: str, field: StatusField) -> None
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse args according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        argv: Optional command-line arguments; defaults to the process arguments.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pr-number", type=int, required=True)
     parser.add_argument(
@@ -135,12 +170,28 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command-line entry point and return its process exit status.
+
+    Keeping orchestration here makes terminal behavior and error translation straightforward
+    to audit.
+
+    Args:
+        argv: Optional command-line arguments; defaults to the process arguments.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     args = parse_args(argv)
 
+    # Attempt this boundary operation here so ProjectStatusSyncError can be translated or cleaned up
+    # under the repository contract.
     try:
         item_id = find_pull_request_item_id(
             args.owner, args.project_number, args.repo, args.pr_number
         )
+        # Evaluate `item_id is None` explicitly so invalid or alternate states follow the documented
+        # contract.
         if item_id is None:
             print(
                 f"warning: pull request #{args.pr_number} is not a Project "
@@ -161,5 +212,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+# Evaluate `__name__ == '__main__'` explicitly so invalid or alternate states follow the documented
+# contract.
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -18,6 +18,15 @@ from ecg_anomaly_detection.training import (
 
 
 def test_training_is_deterministic_and_does_not_open_held_out_shards(tmp_path: Path) -> None:
+    """Verify that training is deterministic and does not open held out shards.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     index = _repository(tmp_path)
     config = _config()
     first_dir = tmp_path / "artifacts" / "runs" / "first"
@@ -40,12 +49,23 @@ def test_training_is_deterministic_and_does_not_open_held_out_shards(tmp_path: P
 
 
 def test_training_rejects_modified_training_shard(tmp_path: Path) -> None:
+    """Verify that training rejects modified training shard.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     index = _repository(tmp_path)
     shard = tmp_path / "data" / "interim" / "runs" / "fixture" / "windows" / "100.npz"
     shard.write_bytes(shard.read_bytes() + b"changed")
     output = tmp_path / "artifacts" / "runs" / "output"
     output.mkdir(parents=True)
 
+    # Scope `pytest.raises(TrainingError, match='digest does not match')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(TrainingError, match="digest does not match"):
         train_from_index(tmp_path, index, _config(), output / "model.json", output / "meta.json")
 
@@ -53,6 +73,15 @@ def test_training_rejects_modified_training_shard(tmp_path: Path) -> None:
 
 
 def test_training_config_rejects_unsupported_estimator(tmp_path: Path) -> None:
+    """Verify that training config rejects unsupported estimator.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     path = tmp_path / "training.toml"
     path.write_text(
         """
@@ -67,15 +96,28 @@ projection_components = 2
         encoding="utf-8",
     )
 
+    # Scope `pytest.raises(TrainingError, match='estimator')` here so the expected failure and
+    # fixture cleanup stay scoped to this assertion.
     with pytest.raises(TrainingError, match="estimator"):
         load_training_config(path)
 
 
 def test_training_fails_without_two_classes_before_writing(tmp_path: Path) -> None:
+    """Verify that training fails without two classes before writing.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     index = _repository(tmp_path, labels=np.asarray([0, 0], dtype=np.int64))
     output = tmp_path / "artifacts" / "runs" / "output"
     output.mkdir(parents=True)
 
+    # Scope `pytest.raises(TrainingError, match='at least two')` here so the expected failure and
+    # fixture cleanup stay scoped to this assertion.
     with pytest.raises(TrainingError, match="at least two"):
         train_from_index(tmp_path, index, _config(), output / "model.json", output / "meta.json")
 
@@ -83,10 +125,32 @@ def test_training_fails_without_two_classes_before_writing(tmp_path: Path) -> No
 
 
 def _config() -> TrainingConfig:
+    """Compute and return config for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return TrainingConfig(1, "fixture", "1.0.0", "random-projection-nearest-centroid", 11, 3)
 
 
 def _repository(tmp_path: Path, *, labels: np.ndarray | None = None) -> Path:
+    """Compute and return repository for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        labels: Target labels retained for validation or metric calculation.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     windows_dir = tmp_path / "data" / "interim" / "runs" / "fixture" / "windows"
     index_dir = tmp_path / "data" / "processed" / "runs" / "fixture"

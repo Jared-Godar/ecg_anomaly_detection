@@ -41,6 +41,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
+# Centralize REQUIRED_PROJECT_FIELDS so every caller shares the same documented invariant.
 REQUIRED_PROJECT_FIELDS: tuple[str, ...] = (
     "Status",
     "Workstream",
@@ -60,6 +61,7 @@ _FIELD_JSON_KEYS: dict[str, str] = {
     name: name[0].lower() + name[1:] for name in REQUIRED_PROJECT_FIELDS
 }
 
+# Centralize _CLOSING_KEYWORD_PATTERN so every caller shares the same documented invariant.
 _CLOSING_KEYWORD_PATTERN = re.compile(
     r"\b(?:clos(?:e|es|ed)|fix(?:es|ed)?|resolv(?:e|es|ed))\s*:?\s*#(\d+)",
     re.IGNORECASE,
@@ -93,12 +95,27 @@ class ProjectFieldReport:
 def extract_closing_issue_numbers(body: str) -> tuple[int, ...]:
     """Return issue numbers referenced by a GitHub closing keyword, in order, deduplicated."""
     seen: dict[int, None] = {}
+    # Iterate over `_CLOSING_KEYWORD_PATTERN.finditer(body or '')` one item at a time so ordering,
+    # validation, and failure attribution remain explicit.
     for match in _CLOSING_KEYWORD_PATTERN.finditer(body or ""):
         seen.setdefault(int(match.group(1)), None)
     return tuple(seen)
 
 
 def _has_label_with_prefix(labels: Sequence[str], prefix: str) -> bool:
+    """Return whether has label with prefix under the documented validation contract.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        labels: Target labels retained for validation or metric calculation.
+        prefix: The prefix value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     normalized_prefix = prefix.replace(" ", "").lower()
     return any(label.replace(" ", "").lower().startswith(normalized_prefix) for label in labels)
 
@@ -113,14 +130,24 @@ def validate_pull_request(
     (see closing_issue_milestones_require_pr_milestone).
     """
     violations: list[str] = []
+    # Evaluate `not pr.assignees` explicitly so invalid or alternate states follow the documented
+    # contract.
     if not pr.assignees:
         violations.append("pull request has no assignee")
+    # Evaluate `require_milestone and (not pr.milestone)` explicitly so invalid or alternate states
+    # follow the documented contract.
     if require_milestone and not pr.milestone:
         violations.append("pull request has no milestone")
+    # Evaluate `not _has_label_with_prefix(pr.labels, 'type:')` explicitly so invalid or alternate
+    # states follow the documented contract.
     if not _has_label_with_prefix(pr.labels, "type:"):
         violations.append("pull request is missing a type:* label")
+    # Evaluate `not _has_label_with_prefix(pr.labels, 'area:')` explicitly so invalid or alternate
+    # states follow the documented contract.
     if not _has_label_with_prefix(pr.labels, "area:"):
         violations.append("pull request is missing an area:* label")
+    # Evaluate `not extract_closing_issue_numbers(pr.body)` explicitly so invalid or alternate
+    # states follow the documented contract.
     if not extract_closing_issue_numbers(pr.body):
         violations.append("pull request body has no closing issue reference (e.g. 'Closes #123')")
     return tuple(violations)
@@ -133,6 +160,8 @@ def closing_issue_milestones_require_pr_milestone(milestones: Sequence[str | Non
     closing issues (or a milestone that could not be determined) fails closed and
     still requires one, matching this check's original, more conservative behavior.
     """
+    # Evaluate `not milestones` explicitly so invalid or alternate states follow the documented
+    # contract.
     if not milestones:
         return True
     return any(milestone is not None for milestone in milestones)
@@ -151,6 +180,8 @@ def build_project_field_report(
         ),
         None,
     )
+    # Evaluate `matching is None` explicitly so invalid or alternate states follow the documented
+    # contract.
     if matching is None:
         return ProjectFieldReport(issue_number, is_project_member=False, missing_fields=())
     missing = tuple(
@@ -161,8 +192,12 @@ def build_project_field_report(
 
 def validate_project_membership(report: ProjectFieldReport) -> tuple[str, ...]:
     """Return violations for one issue's Project membership and field completeness."""
+    # Evaluate `not report.is_project_member` explicitly so invalid or alternate states follow the
+    # documented contract.
     if not report.is_project_member:
         return (f"issue #{report.issue_number} is not a member of the tracked Project",)
+    # Evaluate `report.missing_fields` explicitly so invalid or alternate states follow the
+    # documented contract.
     if report.missing_fields:
         return (
             f"issue #{report.issue_number} is missing Project fields: "
@@ -172,6 +207,20 @@ def validate_project_membership(report: ProjectFieldReport) -> tuple[str, ...]:
 
 
 def _run_gh(args: list[str]) -> str:
+    """Run one fixed GitHub CLI command and return its captured output.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        args: The args value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Attempt this boundary operation here so FileNotFoundError, subprocess.CalledProcessError can
+    # be translated or cleaned up under the repository contract.
     try:
         # command is a fixed literal ("gh", *args) built from this module's own
         # subcommand arguments, not runtime/user-constructed input.
@@ -193,6 +242,7 @@ def _run_gh(args: list[str]) -> str:
 def fetch_pull_request(pr_number: int, repo: str | None) -> PullRequestMetadata:
     """Fetch a pull request's metadata via the gh CLI."""
     args = ["pr", "view", str(pr_number), "--json", "number,assignees,milestone,labels,body"]
+    # Evaluate `repo` explicitly so invalid or alternate states follow the documented contract.
     if repo:
         args.extend(["--repo", repo])
     payload = json.loads(_run_gh(args))
@@ -213,6 +263,7 @@ def fetch_issue_milestone(issue_number: int, repo: str | None) -> str | None:
     needs no elevated Project-scope token -- the default GITHUB_TOKEN suffices.
     """
     args = ["issue", "view", str(issue_number), "--json", "milestone"]
+    # Evaluate `repo` explicitly so invalid or alternate states follow the documented contract.
     if repo:
         args.extend(["--repo", repo])
     payload = json.loads(_run_gh(args))
@@ -243,6 +294,18 @@ def fetch_project_items(owner: str, project_number: int) -> list[dict[str, Any]]
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse args according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        argv: Optional command-line arguments; defaults to the process arguments.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pr-number", type=int, required=True)
     parser.add_argument("--repo", help="GitHub OWNER/REPO; defaults to the current repository")
@@ -260,8 +323,22 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command-line entry point and return its process exit status.
+
+    Keeping orchestration here makes terminal behavior and error translation straightforward
+    to audit.
+
+    Args:
+        argv: Optional command-line arguments; defaults to the process arguments.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     args = parse_args(argv)
 
+    # Attempt this boundary operation here so MetadataValidationError can be translated or cleaned
+    # up under the repository contract.
     try:
         pr = fetch_pull_request(args.pr_number, args.repo)
     except MetadataValidationError as error:
@@ -271,7 +348,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     closing_issues = extract_closing_issue_numbers(pr.body)
 
     require_milestone = True
+    # Evaluate `closing_issues` explicitly so invalid or alternate states follow the documented
+    # contract.
     if closing_issues:
+        # Attempt this boundary operation here so MetadataValidationError can be translated or
+        # cleaned up under the repository contract.
         try:
             closing_milestones = tuple(
                 fetch_issue_milestone(number, args.repo) for number in closing_issues
@@ -283,11 +364,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     violations = list(validate_pull_request(pr, require_milestone=require_milestone))
 
+    # Evaluate `closing_issues` explicitly so invalid or alternate states follow the documented
+    # contract.
     if closing_issues:
+        # Attempt this boundary operation here so MetadataValidationError can be translated or
+        # cleaned up under the repository contract.
         try:
             items = fetch_project_items(args.owner, args.project_number)
         except MetadataValidationError as error:
             message = f"could not read Project #{args.project_number} data: {error}"
+            # Evaluate `args.strict_project_checks` explicitly so invalid or alternate states follow
+            # the documented contract.
             if args.strict_project_checks:
                 violations.append(message)
             else:
@@ -298,12 +385,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                     file=sys.stderr,
                 )
         else:
+            # Iterate over `closing_issues` one item at a time so ordering, validation, and failure
+            # attribution remain explicit.
             for issue_number in closing_issues:
                 report = build_project_field_report(issue_number, items)
                 violations.extend(validate_project_membership(report))
 
+    # Evaluate `violations` explicitly so invalid or alternate states follow the documented
+    # contract.
     if violations:
         print("Metadata validation failed:", file=sys.stderr)
+        # Iterate over `violations` one item at a time so ordering, validation, and failure
+        # attribution remain explicit.
         for violation in violations:
             print(f"  - {violation}", file=sys.stderr)
         return 1
@@ -312,5 +405,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+# Evaluate `__name__ == '__main__'` explicitly so invalid or alternate states follow the documented
+# contract.
 if __name__ == "__main__":
     raise SystemExit(main())

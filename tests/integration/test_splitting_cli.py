@@ -9,6 +9,15 @@ from ecg_anomaly_detection.cli import main
 
 
 def test_split_windows_writes_auditable_manifest(tmp_path: Path) -> None:
+    """Verify that split windows writes auditable manifest.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config_path = tmp_path / "split.toml"
     config_path.write_text(
         """
@@ -77,6 +86,15 @@ test = 0.25
 
 
 def test_split_windows_writes_failed_quality_summary_and_returns_failure(tmp_path: Path) -> None:
+    """Verify that split windows writes failed quality summary and returns failure.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config_path = tmp_path / "split.toml"
     config_path.write_text(
         """
@@ -135,6 +153,15 @@ default_severity = "failure"
 
 
 def test_split_windows_accepts_a_directory_of_artifacts(tmp_path: Path) -> None:
+    """Verify that split windows accepts a directory of artifacts.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config_path = tmp_path / "split.toml"
     config_path.write_text(
         """
@@ -189,6 +216,15 @@ test = 0.25
 
 
 def test_split_windows_reports_an_empty_input_directory(tmp_path: Path) -> None:
+    """Verify that split windows reports an empty input directory.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config_path = tmp_path / "split.toml"
     config_path.write_text(
         """

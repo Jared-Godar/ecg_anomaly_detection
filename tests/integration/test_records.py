@@ -11,6 +11,15 @@ from ecg_anomaly_detection.records import load_wfdb_record, validate_record
 
 
 def test_load_and_validate_synthetic_wfdb_record(tmp_path: Path) -> None:
+    """Verify that load and validate synthetic wfdb record.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     data_dir = tmp_path / "raw"
     data_dir.mkdir()
     _write_synthetic_record(data_dir)
@@ -28,6 +37,15 @@ def test_load_and_validate_synthetic_wfdb_record(tmp_path: Path) -> None:
 
 
 def test_validate_record_cli_writes_report(tmp_path: Path) -> None:
+    """Verify that validate record cli writes report.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     data_dir = tmp_path / "raw"
     data_dir.mkdir()
     _write_synthetic_record(data_dir)
@@ -57,6 +75,15 @@ def test_validate_record_cli_writes_report(tmp_path: Path) -> None:
 
 
 def test_map_annotations_cli_writes_audit_report(tmp_path: Path) -> None:
+    """Verify that map annotations cli writes audit report.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     data_dir = tmp_path / "raw"
     data_dir.mkdir()
     _write_synthetic_record(data_dir)
@@ -111,6 +138,15 @@ symbols = ["!"]
 
 
 def test_extract_windows_cli_writes_npz_and_report(tmp_path: Path) -> None:
+    """Verify that extract windows cli writes npz and report.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     data_dir = tmp_path / "raw"
     data_dir.mkdir()
     _write_synthetic_record(data_dir)
@@ -156,6 +192,8 @@ boundary_policy = "exclude"
     )
 
     assert exit_code == 0
+    # Scope `np.load(output_path, allow_pickle=False)` here so the expected failure and fixture
+    # cleanup stay scoped to this assertion.
     with np.load(output_path, allow_pickle=False) as artifact:
         assert artifact["windows"].shape == (3, 2)
         assert artifact["record_ids"].tolist() == ["100", "100", "100"]
@@ -163,6 +201,15 @@ boundary_policy = "exclude"
 
 
 def _write_synthetic_record(data_dir: Path) -> None:
+    """Write synthetic record according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        data_dir: The data dir value supplied by the caller or surrounding test fixture.
+    """
+
     sample_axis = np.linspace(0.0, 1.0, 16, endpoint=False)
     physical_signals = np.column_stack(
         (np.sin(2 * np.pi * sample_axis), np.cos(2 * np.pi * sample_axis))
@@ -185,6 +232,15 @@ def _write_synthetic_record(data_dir: Path) -> None:
 
 
 def _synthetic_config() -> DatasetConfig:
+    """Compute and return synthetic config for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return DatasetConfig(
         schema_version=1,
         name="Synthetic fixture",
@@ -200,6 +256,15 @@ def _synthetic_config() -> DatasetConfig:
 
 
 def _dataset_config_content() -> str:
+    """Construct dataset config content for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return """
 schema_version = 1
 [dataset]
@@ -216,6 +281,15 @@ required_extensions = ["atr", "dat", "hea"]
 
 
 def _mapping_config_content() -> str:
+    """Compute and return mapping config content for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return """
 schema_version = 1
 [mapping]

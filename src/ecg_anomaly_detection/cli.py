@@ -79,6 +79,7 @@ from ecg_anomaly_detection.windows import (
     write_window_report,
 )
 
+# Centralize _ARTIFACT_GLOB so every caller shares the same documented invariant.
 _ARTIFACT_GLOB = "*.npz"
 
 
@@ -99,11 +100,19 @@ def _resolve_input_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
     contain the same file twice.
     """
     resolved: list[Path] = []
+    # Iterate over `paths` one item at a time so ordering, validation, and failure attribution
+    # remain explicit.
     for path in paths:
+        # Evaluate `path.is_symlink()` explicitly so invalid or alternate states follow the
+        # documented contract.
         if path.is_symlink():
             raise ArtifactDiscoveryError(f"input path must not be a symbolic link: {path}")
+        # Evaluate `path.is_dir()` explicitly so invalid or alternate states follow the documented
+        # contract.
         if path.is_dir():
             discovered = sorted(path.glob(_ARTIFACT_GLOB))
+            # Evaluate `not discovered` explicitly so invalid or alternate states follow the
+            # documented contract.
             if not discovered:
                 raise ArtifactDiscoveryError(
                     f"no {_ARTIFACT_GLOB} artifact files found in directory: {path}"
@@ -115,12 +124,18 @@ def _resolve_input_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
             raise ArtifactDiscoveryError(f"input path does not exist: {path}")
     seen: dict[Path, Path] = {}
     duplicates: list[Path] = []
+    # Iterate over `resolved` one item at a time so ordering, validation, and failure attribution
+    # remain explicit.
     for path in resolved:
         canonical = path.resolve()
+        # Evaluate `canonical in seen` explicitly so invalid or alternate states follow the
+        # documented contract.
         if canonical in seen:
             duplicates.append(path)
         else:
             seen[canonical] = path
+    # Evaluate `duplicates` explicitly so invalid or alternate states follow the documented
+    # contract.
     if duplicates:
         raise ArtifactDiscoveryError(
             "duplicate input artifact path(s) after directory expansion: "
@@ -130,6 +145,15 @@ def _resolve_input_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build parser according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     parser = argparse.ArgumentParser(
         prog="ecg-data",
         description="Run supported local ECG data-pipeline stages.",
@@ -315,7 +339,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
     parser = build_parser()
     options = parser.parse_args(arguments)
 
+    # Attempt this boundary operation here so (AcquisitionError, AnnotationMappingError,
+    # ArtifactDiscoveryError, BenchmarkApprovalError, BenchmarkPolicyError, Conf... can be
+    # translated or cleaned up under the repository contract.
     try:
+        # Evaluate `options.command == 'check-local-notebooks'` explicitly so invalid or alternate
+        # states follow the documented contract.
         if options.command == "check-local-notebooks":
             from ecg_anomaly_detection.notebook_quality import (
                 NotebookQualityError,
@@ -323,6 +352,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 discover_local_notebooks,
             )
 
+            # Attempt this boundary operation here so NotebookQualityError can be translated or
+            # cleaned up under the repository contract.
             try:
                 notebook_paths = tuple(options.notebook) or discover_local_notebooks(
                     options.repository_root,
@@ -337,15 +368,21 @@ def main(arguments: Sequence[str] | None = None) -> int:
             except NotebookQualityError as error:
                 print(f"error: {error}", file=sys.stderr)
                 return 1
+            # Evaluate `options.json_output` explicitly so invalid or alternate states follow the
+            # documented contract.
             if options.json_output:
                 print(json.dumps(summary.to_dict(), indent=2, sort_keys=True))
             else:
+                # Iterate over `summary.notebooks` one item at a time so ordering, validation, and
+                # failure attribution remain explicit.
                 for report in summary.notebooks:
                     status = "valid" if report.valid else "invalid"
                     print(
                         f"{report.path}: {status}; {report.cell_count} cells, "
                         f"{report.output_count} outputs ({report.output_bytes} bytes)"
                     )
+                    # Iterate over `report.issues` one item at a time so ordering, validation, and
+                    # failure attribution remain explicit.
                     for issue in report.issues:
                         location = (
                             f" cell {issue.cell_index}" if issue.cell_index is not None else ""
@@ -358,10 +395,14 @@ def main(arguments: Sequence[str] | None = None) -> int:
                     f"checked {len(summary.notebooks)} notebooks; changed {summary.changed_count}"
                 )
             return 0 if summary.valid else 1
+        # Evaluate `options.command == 'validate-benchmark-policy'` explicitly so invalid or
+        # alternate states follow the documented contract.
         if options.command == "validate-benchmark-policy":
             policy = load_benchmark_policy(options.policy)
             print(f"validated benchmark policy {policy.policy_id} version {policy.version}")
             return 0
+        # Evaluate `options.command == 'record-benchmark-approval'` explicitly so invalid or
+        # alternate states follow the documented contract.
         if options.command == "record-benchmark-approval":
             record = record_benchmark_approval(
                 options.repository_root,
@@ -375,6 +416,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 f"in {options.output}"
             )
             return 0
+        # Evaluate `options.command == 'evaluate-threshold-sweep'` explicitly so invalid or
+        # alternate states follow the documented contract.
         if options.command == "evaluate-threshold-sweep":
             sweep_config = load_threshold_sweep_config(options.config)
             result = evaluate_threshold_sweep_from_index(
@@ -390,6 +433,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 f"{result.window_count} validation windows in {options.output}"
             )
             return 0
+        # Evaluate `options.command == 'index-dataset'` explicitly so invalid or alternate states
+        # follow the documented contract.
         if options.command == "index-dataset":
             index = create_dataset_index(
                 options.repository_root,
@@ -402,6 +447,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 f"{index.total_window_count} windows in {options.output}"
             )
             return 0
+        # Evaluate `options.command == 'run-pipeline'` explicitly so invalid or alternate states
+        # follow the documented contract.
         if options.command == "run-pipeline":
             started_at = perf_counter()
             result = run_pipeline(
@@ -420,6 +467,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 f"{result.window_count} windows, manifest {result.run_manifest_path}"
             )
             return 0
+        # Evaluate `options.command == 'create-run-manifest'` explicitly so invalid or alternate
+        # states follow the documented contract.
         if options.command == "create-run-manifest":
             manifest = create_run_manifest(
                 options.repository_root,
@@ -432,8 +481,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
             write_run_manifest(manifest, options.repository_root, options.output)
             print(f"recorded run {manifest.run_id} in {options.output}")
             return 0
+        # Evaluate `options.command == 'list-runs'` explicitly so invalid or alternate states follow
+        # the documented contract.
         if options.command == "list-runs":
             summaries = list_runs(options.repository_root)
+            # Evaluate `options.json_output` explicitly so invalid or alternate states follow the
+            # documented contract.
             if options.json_output:
                 print(
                     json.dumps(
@@ -452,8 +505,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
                     )
                 )
             else:
+                # Evaluate `not summaries` explicitly so invalid or alternate states follow the
+                # documented contract.
                 if not summaries:
                     print("no local runs found")
+                # Iterate over `summaries` one item at a time so ordering, validation, and failure
+                # attribution remain explicit.
                 for summary in summaries:
                     manifest_note = "manifest" if summary.has_run_manifest else "no manifest"
                     print(
@@ -461,13 +518,19 @@ def main(arguments: Sequence[str] | None = None) -> int:
                         f"{len(summary.directories)} directories  {manifest_note}"
                     )
             return 0
+        # Evaluate `options.command == 'purge-run'` explicitly so invalid or alternate states follow
+        # the documented contract.
         if options.command == "purge-run":
             result = purge_run(options.repository_root, options.run_id, dry_run=options.dry_run)
             verb = "would remove" if result.dry_run else "removed"
+            # Iterate over `result.removed_directories` one item at a time so ordering, validation,
+            # and failure attribution remain explicit.
             for directory in result.removed_directories:
                 print(f"{verb} {directory}")
             print(f"{verb.capitalize()} {result.freed_bytes} bytes for run {result.run_id}")
             return 0
+        # Evaluate `options.command == 'split-windows'` explicitly so invalid or alternate states
+        # follow the documented contract.
         if options.command == "split-windows":
             split_config = load_split_config(options.split_config)
             metadata = load_window_metadata(_resolve_input_paths(options.input))
@@ -478,7 +541,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
             )
             quality = create_split_quality_summary(split_config, manifest, metadata)
             write_split_quality_summary(quality, quality_path)
+            # Iterate over `quality.violations` one item at a time so ordering, validation, and
+            # failure attribution remain explicit.
             for violation in quality.violations:
+                # Evaluate `violation.severity == 'warning'` explicitly so invalid or alternate
+                # states follow the documented contract.
                 if violation.severity == "warning":
                     print(f"warning: {violation.message}", file=sys.stderr)
             enforce_split_quality(quality)
@@ -488,6 +555,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
             )
             return 0
         config = load_dataset_config(options.config)
+        # Evaluate `options.command == 'acquire'` explicitly so invalid or alternate states follow
+        # the documented contract.
         if options.command == "acquire":
             result = acquire_dataset(
                 config,
@@ -553,5 +622,14 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add repository-root and configuration arguments shared by CLI subcommands.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        parser: The parser value supplied by the caller or surrounding test fixture.
+    """
+
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--data-dir", type=Path, required=True)

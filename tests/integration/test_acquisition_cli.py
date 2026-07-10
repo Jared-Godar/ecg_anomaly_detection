@@ -12,6 +12,16 @@ from ecg_anomaly_detection.cli import main
 
 
 def test_acquire_command_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that acquire command is idempotent.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        monkeypatch: Pytest monkeypatch fixture used to isolate external behavior.
+    """
+
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     (tmp_path / "data" / "raw").mkdir(parents=True)
     (tmp_path / "artifacts").mkdir()
@@ -40,6 +50,21 @@ expected_source_files = [
     calls: list[str] = []
 
     def fake_fetch(url: str, output: Path, _: float, __: int) -> TransferResult:
+        """Build or exercise the fake fetch test fixture.
+
+        The helper keeps repeated test setup explicit without hiding the contract under
+        examination.
+
+        Args:
+            url: The url value supplied by the caller or surrounding test fixture.
+            output: The output value supplied by the caller or surrounding test fixture.
+            _: The operation value supplied by the caller or surrounding test fixture.
+            __: The operation value supplied by the caller or surrounding test fixture.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         content = f"fixture-{output.name}".encode()
         output.write_bytes(content)
         calls.append(url)

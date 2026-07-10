@@ -24,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
+# Centralize _CANDIDATE_ID_PATTERN so every caller shares the same documented invariant.
 _CANDIDATE_ID_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?$")
 
 
@@ -59,6 +60,12 @@ class CandidateRecorder:
     __slots__ = ("_metrics", "_predictions")
 
     def __init__(self) -> None:
+        """Initialize this object with the validated state required by its contract.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+        """
+
         self._metrics: dict[str, float] = {}
         self._predictions: np.ndarray | None = None
 
@@ -82,12 +89,32 @@ class ExperimentTracker:
         monotonic: Callable[[], float] = time.perf_counter,
         clock: Callable[[], float] = time.time,
     ) -> None:
+        """Initialize this object with the validated state required by its contract.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Args:
+            checkpoint_directory: The checkpoint directory value supplied by the caller or surrounding test fixture.
+            candidate_ids: The candidate ids value supplied by the caller or surrounding test fixture.
+            monotonic: The monotonic value supplied by the caller or surrounding test fixture.
+            clock: The clock value supplied by the caller or surrounding test fixture.
+        """
+
+        # Evaluate `not candidate_ids` explicitly so invalid or alternate states follow the
+        # documented contract.
         if not candidate_ids:
             raise ExperimentTrackingError("candidate_ids must not be empty")
+        # Iterate over `candidate_ids` one item at a time so ordering, validation, and failure
+        # attribution remain explicit.
         for candidate_id in candidate_ids:
             _validate_candidate_id(candidate_id)
+        # Evaluate `len(set(candidate_ids)) != len(candidate_ids)` explicitly so invalid or
+        # alternate states follow the documented contract.
         if len(set(candidate_ids)) != len(candidate_ids):
             raise ExperimentTrackingError("candidate_ids must be unique")
+        # Evaluate `checkpoint_directory.is_symlink()` explicitly so invalid or alternate states
+        # follow the documented contract.
         if checkpoint_directory.is_symlink():
             raise ExperimentTrackingError(
                 f"checkpoint directory must not be a symbolic link: {checkpoint_directory}"
@@ -117,6 +144,8 @@ class ExperimentTracker:
     def load_result(self, candidate_id: str) -> CandidateResult:
         """Load one candidate's previously checkpointed result."""
         path = self._result_path(candidate_id)
+        # Evaluate `not path.is_file()` explicitly so invalid or alternate states follow the
+        # documented contract.
         if not path.is_file():
             raise ExperimentTrackingError(f"no checkpointed result for candidate: {candidate_id}")
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -130,6 +159,8 @@ class ExperimentTracker:
     def load_predictions(self, candidate_id: str) -> np.ndarray | None:
         """Load one candidate's previously checkpointed predictions, if any were saved."""
         path = self._predictions_path(candidate_id)
+        # Evaluate `not path.is_file()` explicitly so invalid or alternate states follow the
+        # documented contract.
         if not path.is_file():
             return None
         return np.load(path, allow_pickle=False)
@@ -138,12 +169,16 @@ class ExperimentTracker:
     def track(self, candidate_id: str) -> Iterator[CandidateRecorder]:
         """Time and checkpoint one candidate; nothing is persisted if the body raises."""
         _validate_candidate_id(candidate_id)
+        # Evaluate `candidate_id not in self._candidate_ids` explicitly so invalid or alternate
+        # states follow the documented contract.
         if candidate_id not in self._candidate_ids:
             raise ExperimentTrackingError(f"unknown candidate ID for this tracker: {candidate_id}")
         started_at = self._monotonic()
         recorder = CandidateRecorder()
         yield recorder
         duration_seconds = self._monotonic() - started_at
+        # Evaluate `duration_seconds < 0` explicitly so invalid or alternate states follow the
+        # documented contract.
         if duration_seconds < 0:
             raise ExperimentTrackingError("monotonic timer moved backwards")
         result = CandidateResult(
@@ -161,6 +196,8 @@ class ExperimentTracker:
             },
             self._result_path(candidate_id),
         )
+        # Evaluate `recorder._predictions is not None` explicitly so invalid or alternate states
+        # follow the documented contract.
         if recorder._predictions is not None:  # noqa: SLF001 - same-module cooperating class
             _atomic_write_npy(recorder._predictions, self._predictions_path(candidate_id))  # noqa: SLF001
         self._session_durations.append(duration_seconds)
@@ -193,6 +230,8 @@ class ExperimentTracker:
             for candidate_id in self._candidate_ids
             if not self.is_completed(candidate_id)
         ]
+        # Evaluate `missing` explicitly so invalid or alternate states follow the documented
+        # contract.
         if missing:
             raise ExperimentTrackingError(
                 f"cannot finalize: {len(missing)} candidate(s) not yet completed: "
@@ -220,13 +259,48 @@ class ExperimentTracker:
         return self._final_path
 
     def _result_path(self, candidate_id: str) -> Path:
+        """Resolve result path for the documented repository workflow.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Args:
+            candidate_id: The candidate id value supplied by the caller or surrounding test fixture.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         return self._results_dir / f"{candidate_id}.json"
 
     def _predictions_path(self, candidate_id: str) -> Path:
+        """Resolve predictions path for the documented repository workflow.
+
+        The helper isolates this step so its assumptions, outputs, and failure behavior remain
+        reviewable.
+
+        Args:
+            candidate_id: The candidate id value supplied by the caller or surrounding test fixture.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         return self._predictions_dir / f"{candidate_id}.npy"
 
 
 def _validate_candidate_id(candidate_id: str) -> None:
+    """Validate candidate id according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        candidate_id: The candidate id value supplied by the caller or surrounding test fixture.
+    """
+
+    # Evaluate `not isinstance(candidate_id, str) or not _CANDIDATE_ID_PATTERN.match(candidate_id)`
+    # explicitly so invalid or alternate states follow the documented contract.
     if not isinstance(candidate_id, str) or not _CANDIDATE_ID_PATTERN.match(candidate_id):
         raise ExperimentTrackingError(
             f"candidate ID must be a non-empty filesystem-safe token: {candidate_id!r}"
@@ -234,10 +308,32 @@ def _validate_candidate_id(candidate_id: str) -> None:
 
 
 def _temp_path(path: Path) -> Path:
+    """Construct temp path for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        path: Filesystem path identifying the input or output under review.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return path.with_name(f"{path.stem}.tmp{path.suffix}")
 
 
 def _atomic_write_json(payload: dict, path: Path) -> None:
+    """Persist atomic write json for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        payload: The payload value supplied by the caller or surrounding test fixture.
+        path: Filesystem path identifying the input or output under review.
+    """
+
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = _temp_path(path)
     temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -245,6 +341,16 @@ def _atomic_write_json(payload: dict, path: Path) -> None:
 
 
 def _atomic_write_npy(array: np.ndarray, path: Path) -> None:
+    """Persist atomic write npy for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        array: The array value supplied by the caller or surrounding test fixture.
+        path: Filesystem path identifying the input or output under review.
+    """
+
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = _temp_path(path)
     np.save(temp_path, array, allow_pickle=False)

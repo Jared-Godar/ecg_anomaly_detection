@@ -21,8 +21,21 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
     tmp_path_factory: pytest.TempPathFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify that pipeline command connects all supported stages without network.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path_factory: The tmp path factory value supplied by the caller or surrounding test fixture.
+        monkeypatch: Pytest monkeypatch fixture used to isolate external behavior.
+    """
+
     source_dir = tmp_path_factory.mktemp("wfdb-source")
     record_ids = ("100", "101", "102")
+    # Iterate over `record_ids` one item at a time so ordering, validation, and failure attribution
+    # remain explicit.
     for record_id in record_ids:
         _write_synthetic_record(source_dir, record_id)
     payloads = {
@@ -34,6 +47,21 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
     calls: list[str] = []
 
     def fake_fetch(url: str, output: Path, _: float, __: int) -> TransferResult:
+        """Build or exercise the fake fetch test fixture.
+
+        The helper keeps repeated test setup explicit without hiding the contract under
+        examination.
+
+        Args:
+            url: The url value supplied by the caller or surrounding test fixture.
+            output: The output value supplied by the caller or surrounding test fixture.
+            _: The operation value supplied by the caller or surrounding test fixture.
+            __: The operation value supplied by the caller or surrounding test fixture.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         content = payloads[output.name]
         output.write_bytes(content)
         calls.append(url)
@@ -66,6 +94,8 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
     assert second_exit_code == 0
     assert len(calls) == 9
     assert len(run_directories) == 2
+    # Iterate over `run_directories` one item at a time so ordering, validation, and failure
+    # attribution remain explicit.
     for run_directory in run_directories:
         assert len(tuple((run_directory / "validation").glob("*.json"))) == 3
         assert len(tuple((run_directory / "mapping").glob("*.json"))) == 3
@@ -149,8 +179,22 @@ def test_run_pipeline_command_emits_stage_progress_and_total_elapsed_time(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """Verify that run pipeline command emits stage progress and total elapsed time.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path_factory: The tmp path factory value supplied by the caller or surrounding test fixture.
+        monkeypatch: Pytest monkeypatch fixture used to isolate external behavior.
+        capsys: Pytest capture fixture used to inspect terminal output.
+    """
+
     source_dir = tmp_path_factory.mktemp("wfdb-source")
     record_ids = ("100", "101", "102")
+    # Iterate over `record_ids` one item at a time so ordering, validation, and failure attribution
+    # remain explicit.
     for record_id in record_ids:
         _write_synthetic_record(source_dir, record_id)
     payloads = {
@@ -161,6 +205,21 @@ def test_run_pipeline_command_emits_stage_progress_and_total_elapsed_time(
     _initialize_repository(tmp_path, record_ids, payloads)
 
     def fake_fetch(url: str, output: Path, _: float, __: int) -> TransferResult:
+        """Build or exercise the fake fetch test fixture.
+
+        The helper keeps repeated test setup explicit without hiding the contract under
+        examination.
+
+        Args:
+            url: The url value supplied by the caller or surrounding test fixture.
+            output: The output value supplied by the caller or surrounding test fixture.
+            _: The operation value supplied by the caller or surrounding test fixture.
+            __: The operation value supplied by the caller or surrounding test fixture.
+
+        Returns:
+            The value produced by the documented operation.
+        """
+
         content = payloads[output.name]
         output.write_bytes(content)
         return TransferResult(len(content), hashlib.sha256(content).hexdigest())
@@ -189,6 +248,9 @@ def test_run_pipeline_command_emits_stage_progress_and_total_elapsed_time(
 
     assert exit_code == 0
     assert "run " in output.splitlines()[0]
+    # Iterate over `enumerate(('acquisition', 'inventory', 'record_processing', 'split',
+    # 'split_diagnostics', 'training', 'validation_eva...` one item at a time so ordering,
+    # validation, and failure attribution remain explicit.
     for index, name in enumerate(
         (
             "acquisition",
@@ -203,6 +265,8 @@ def test_run_pipeline_command_emits_stage_progress_and_total_elapsed_time(
     ):
         assert f"[{index}/7] {name}: starting" in output
         assert f"[{index}/7] {name}: complete in" in output
+    # Iterate over `record_ids` one item at a time so ordering, validation, and failure attribution
+    # remain explicit.
     for record_id in record_ids:
         assert f"({record_id}): " in output
     assert "completed run " in output.splitlines()[-1]
@@ -212,6 +276,17 @@ def test_run_pipeline_command_emits_stage_progress_and_total_elapsed_time(
 def _initialize_repository(
     root: Path, record_ids: tuple[str, ...], payloads: dict[str, bytes]
 ) -> None:
+    """Compute and return initialize repository for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        root: Repository root used to enforce path and trust boundaries.
+        record_ids: The record ids value supplied by the caller or surrounding test fixture.
+        payloads: The payloads value supplied by the caller or surrounding test fixture.
+    """
+
     (root / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     (root / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     (root / ".gitignore").write_text(
@@ -350,6 +425,16 @@ zero_division = 0.0
 
 
 def _write_synthetic_record(directory: Path, record_id: str) -> None:
+    """Write synthetic record according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        directory: The directory value supplied by the caller or surrounding test fixture.
+        record_id: The record id value supplied by the caller or surrounding test fixture.
+    """
+
     sample_axis = np.linspace(0.0, 1.0, 16, endpoint=False)
     signals = np.column_stack((np.sin(2 * np.pi * sample_axis), np.cos(2 * np.pi * sample_axis)))
     wfdb.wrsamp(

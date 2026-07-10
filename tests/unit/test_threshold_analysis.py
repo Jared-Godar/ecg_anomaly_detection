@@ -18,6 +18,15 @@ from ecg_anomaly_detection.evaluation import (
 
 
 def test_threshold_sweep_is_deterministic_and_test_shard_is_not_opened(tmp_path: Path) -> None:
+    """Verify that threshold sweep is deterministic and test shard is not opened.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     paths = _repository(tmp_path)
     first = _sweep(tmp_path, paths, "first")
     second = _sweep(tmp_path, paths, "second")
@@ -44,6 +53,15 @@ def test_threshold_sweep_is_deterministic_and_test_shard_is_not_opened(tmp_path:
 
 
 def test_threshold_sweep_config_rejects_test_partition(tmp_path: Path) -> None:
+    """Verify that threshold sweep config rejects test partition.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config = tmp_path / "threshold-sweep.toml"
     config.write_text(
         """
@@ -57,11 +75,22 @@ thresholds = [0.0, 1.0]
 """.strip(),
         encoding="utf-8",
     )
+    # Scope `pytest.raises(EvaluationError, match="must be 'validation'")` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(EvaluationError, match="must be 'validation'"):
         load_threshold_sweep_config(config)
 
 
 def test_threshold_sweep_config_rejects_non_increasing_thresholds(tmp_path: Path) -> None:
+    """Verify that threshold sweep config rejects non increasing thresholds.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config = tmp_path / "threshold-sweep.toml"
     config.write_text(
         """
@@ -75,11 +104,22 @@ thresholds = [1.0, 1.0, 2.0]
 """.strip(),
         encoding="utf-8",
     )
+    # Scope `pytest.raises(EvaluationError, match='strictly increasing')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(EvaluationError, match="strictly increasing"):
         load_threshold_sweep_config(config)
 
 
 def test_threshold_sweep_config_rejects_empty_thresholds(tmp_path: Path) -> None:
+    """Verify that threshold sweep config rejects empty thresholds.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config = tmp_path / "threshold-sweep.toml"
     config.write_text(
         """
@@ -93,13 +133,26 @@ thresholds = []
 """.strip(),
         encoding="utf-8",
     )
+    # Scope `pytest.raises(EvaluationError, match='non-empty numeric array')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(EvaluationError, match="non-empty numeric array"):
         load_threshold_sweep_config(config)
 
 
 @pytest.mark.parametrize("target", ["dataset", "model", "shard"])
 def test_digest_mismatch_fails_before_metrics_persistence(tmp_path: Path, target: str) -> None:
+    """Verify that digest mismatch fails before metrics persistence.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        target: The target value supplied by the caller or surrounding test fixture.
+    """
+
     paths = _repository(tmp_path)
+    # Exercise the `target == 'dataset'` branch so this regression documents every expected outcome.
     if target == "dataset":
         paths["index"].write_bytes(paths["index"].read_bytes() + b" ")
     elif target == "model":
@@ -108,6 +161,8 @@ def test_digest_mismatch_fails_before_metrics_persistence(tmp_path: Path, target
         paths["shard"].write_bytes(paths["shard"].read_bytes() + b"changed")
     output = _output(tmp_path, "digest")
 
+    # Scope `pytest.raises(EvaluationError, match='digest does not match')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(EvaluationError, match="digest does not match"):
         evaluate_threshold_sweep_from_index(
             tmp_path, paths["index"], paths["model"], paths["metadata"], _config(), output
@@ -117,6 +172,15 @@ def test_digest_mismatch_fails_before_metrics_persistence(tmp_path: Path, target
 
 
 def test_malformed_config_fails_before_metrics_persistence(tmp_path: Path) -> None:
+    """Verify that malformed config fails before metrics persistence.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     malformed = tmp_path / "malformed-threshold-sweep.toml"
     malformed.write_text(
         """
@@ -130,6 +194,8 @@ thresholds = [0.0, 1.0]
 """.strip(),
         encoding="utf-8",
     )
+    # Scope `pytest.raises(EvaluationError, match='zero_division must be 0.0 or 1.0')` here so the
+    # expected failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(EvaluationError, match="zero_division must be 0.0 or 1.0"):
         load_threshold_sweep_config(malformed)
 
@@ -137,6 +203,15 @@ thresholds = [0.0, 1.0]
 def test_zero_division_behavior_is_explicit_at_a_fully_excluding_threshold(
     tmp_path: Path,
 ) -> None:
+    """Verify that zero division behavior is explicit at a fully excluding threshold.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     paths = _repository(tmp_path)
     config = ThresholdSweepConfig(1, "fixture", "1.0.0", "validation", 1.0, (1000.0,))
     output = _output(tmp_path, "zero-division")
@@ -153,10 +228,33 @@ def test_zero_division_behavior_is_explicit_at_a_fully_excluding_threshold(
 
 
 def _config() -> ThresholdSweepConfig:
+    """Compute and return config for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return ThresholdSweepConfig(1, "fixture-sweep", "1.0.0", "validation", 0.0, (0.0, 1000.0))
 
 
 def _sweep(root: Path, paths: dict[str, Path], run_id: str) -> Path:
+    """Compute and return sweep for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        root: Repository root used to enforce path and trust boundaries.
+        paths: The paths value supplied by the caller or surrounding test fixture.
+        run_id: The run id value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     output = _output(root, run_id)
     result = evaluate_threshold_sweep_from_index(
         root, paths["index"], paths["model"], paths["metadata"], _config(), output
@@ -166,12 +264,37 @@ def _sweep(root: Path, paths: dict[str, Path], run_id: str) -> Path:
 
 
 def _output(root: Path, run_id: str) -> Path:
+    """Resolve and validate output for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        root: Repository root used to enforce path and trust boundaries.
+        run_id: The run id value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     directory = root / "artifacts" / "runs" / run_id / "evaluation"
     directory.mkdir(parents=True)
     return directory / "threshold-sweep-metrics.json"
 
 
 def _repository(root: Path) -> dict[str, Path]:
+    """Compute and return repository for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        root: Repository root used to enforce path and trust boundaries.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     (root / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     shard_dir = root / "data" / "interim" / "runs" / "fixture" / "windows"
     index_dir = root / "data" / "processed" / "runs" / "fixture"
@@ -261,6 +384,19 @@ def _repository(root: Path) -> dict[str, Path]:
 
 
 def _identity(root: Path, path: Path) -> dict[str, object]:
+    """Compute and return identity for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        root: Repository root used to enforce path and trust boundaries.
+        path: Filesystem path identifying the input or output under review.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     content = path.read_bytes()
     return {
         "path": path.relative_to(root).as_posix(),
@@ -270,4 +406,16 @@ def _identity(root: Path, path: Path) -> dict[str, object]:
 
 
 def _counts(values: np.ndarray) -> dict[str, int]:
+    """Compute and return counts for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return {str(value): int(np.count_nonzero(values == value)) for value in np.unique(values)}

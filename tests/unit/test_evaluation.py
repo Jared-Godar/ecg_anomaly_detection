@@ -21,6 +21,15 @@ from ecg_anomaly_detection.evaluation import (
 
 
 def test_exact_metrics_are_deterministic_and_test_shard_is_not_opened(tmp_path: Path) -> None:
+    """Verify that exact metrics are deterministic and test shard is not opened.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     paths = _repository(tmp_path)
     first = _evaluate(tmp_path, paths, "first")
     second = _evaluate(tmp_path, paths, "second")
@@ -45,6 +54,15 @@ def test_exact_metrics_are_deterministic_and_test_shard_is_not_opened(tmp_path: 
 
 
 def test_zero_division_behavior_is_explicit(tmp_path: Path) -> None:
+    """Verify that zero division behavior is explicit.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     paths = _repository(tmp_path, labels=np.asarray([0, 0], dtype=np.int64))
     metrics = json.loads(_evaluate(tmp_path, paths, "zero").read_text(encoding="utf-8"))
     assert metrics["zero_division"] == 0.0
@@ -58,7 +76,18 @@ def test_zero_division_behavior_is_explicit(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("target", ["dataset", "model", "shard"])
 def test_digest_mismatch_fails_before_metrics_persistence(tmp_path: Path, target: str) -> None:
+    """Verify that digest mismatch fails before metrics persistence.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        target: The target value supplied by the caller or surrounding test fixture.
+    """
+
     paths = _repository(tmp_path)
+    # Exercise the `target == 'dataset'` branch so this regression documents every expected outcome.
     if target == "dataset":
         paths["index"].write_bytes(paths["index"].read_bytes() + b" ")
     elif target == "model":
@@ -67,6 +96,8 @@ def test_digest_mismatch_fails_before_metrics_persistence(tmp_path: Path, target
         paths["shard"].write_bytes(paths["shard"].read_bytes() + b"changed")
     output = _output(tmp_path, "digest")
 
+    # Scope `pytest.raises(EvaluationError, match='digest does not match')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(EvaluationError, match="digest does not match"):
         evaluate_validation_from_index(
             tmp_path, paths["index"], paths["model"], paths["metadata"], _config(), output
@@ -76,9 +107,20 @@ def test_digest_mismatch_fails_before_metrics_persistence(tmp_path: Path, target
 
 
 def test_unknown_validation_label_fails_before_persistence(tmp_path: Path) -> None:
+    """Verify that unknown validation label fails before persistence.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     paths = _repository(tmp_path, labels=np.asarray([0, 2], dtype=np.int64))
     output = _output(tmp_path, "unknown")
 
+    # Scope `pytest.raises(EvaluationError, match='unknown to the model')` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(EvaluationError, match="unknown to the model"):
         evaluate_validation_from_index(
             tmp_path, paths["index"], paths["model"], paths["metadata"], _config(), output
@@ -88,9 +130,20 @@ def test_unknown_validation_label_fails_before_persistence(tmp_path: Path) -> No
 
 
 def test_malformed_model_with_matching_digest_fails_before_persistence(tmp_path: Path) -> None:
+    """Verify that malformed model with matching digest fails before persistence.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     paths = _repository(tmp_path, malformed_model=True)
     output = _output(tmp_path, "malformed")
 
+    # Scope `pytest.raises(EvaluationError, match='projection shape')` here so the expected failure
+    # and fixture cleanup stay scoped to this assertion.
     with pytest.raises(EvaluationError, match="projection shape"):
         evaluate_validation_from_index(
             tmp_path, paths["index"], paths["model"], paths["metadata"], _config(), output
@@ -100,6 +153,15 @@ def test_malformed_model_with_matching_digest_fails_before_persistence(tmp_path:
 
 
 def test_model_and_dataset_feature_width_must_be_compatible(tmp_path: Path) -> None:
+    """Verify that model and dataset feature width must be compatible.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     paths = _repository(tmp_path)
     index = json.loads(paths["index"].read_text(encoding="utf-8"))
     index["window_samples"] = 3
@@ -109,6 +171,8 @@ def test_model_and_dataset_feature_width_must_be_compatible(tmp_path: Path) -> N
     paths["metadata"].write_text(json.dumps(metadata), encoding="utf-8")
     output = _output(tmp_path, "incompatible")
 
+    # Scope `pytest.raises(EvaluationError, match='input width')` here so the expected failure and
+    # fixture cleanup stay scoped to this assertion.
     with pytest.raises(EvaluationError, match="input width"):
         evaluate_validation_from_index(
             tmp_path, paths["index"], paths["model"], paths["metadata"], _config(), output
@@ -118,6 +182,15 @@ def test_model_and_dataset_feature_width_must_be_compatible(tmp_path: Path) -> N
 
 
 def test_evaluation_config_rejects_test_partition(tmp_path: Path) -> None:
+    """Verify that evaluation config rejects test partition.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config = tmp_path / "evaluation.toml"
     config.write_text(
         """
@@ -131,11 +204,19 @@ zero_division = 0.0
 """.strip(),
         encoding="utf-8",
     )
+    # Scope `pytest.raises(EvaluationError, match="must be 'validation'")` here so the expected
+    # failure and fixture cleanup stay scoped to this assertion.
     with pytest.raises(EvaluationError, match="must be 'validation'"):
         load_evaluation_config(config)
 
 
 def test_threshold_margin_is_exact_for_known_centroid_distances() -> None:
+    """Verify that threshold margin is exact for known centroid distances.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+    """
+
     distances = np.asarray(
         [
             [9.0, 1.0],
@@ -149,6 +230,12 @@ def test_threshold_margin_is_exact_for_known_centroid_distances() -> None:
 
 
 def test_threshold_metrics_report_exact_coverage_and_macro_scores() -> None:
+    """Verify that threshold metrics report exact coverage and macro scores.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+    """
+
     classes = (0, 1)
     margins = np.asarray([0.0, 0.5, 1.0, 1.5], dtype=np.float64)
     labels = np.asarray([0, 0, 1, 1], dtype=np.int64)
@@ -200,23 +287,59 @@ def test_threshold_metrics_report_exact_coverage_and_macro_scores() -> None:
 def test_threshold_sweep_config_rejects_invalid_values(
     tmp_path: Path, table: str, message: str
 ) -> None:
+    """Verify that threshold sweep config rejects invalid values.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        table: The table value supplied by the caller or surrounding test fixture.
+        message: The message value supplied by the caller or surrounding test fixture.
+    """
+
     config = tmp_path / "threshold-sweep.toml"
     config.write_text(
         f"schema_version = 1\n[threshold_sweep]\n{table}\n",
         encoding="utf-8",
     )
 
+    # Scope `pytest.raises(EvaluationError, match=message)` here so the expected failure and fixture
+    # cleanup stay scoped to this assertion.
     with pytest.raises(EvaluationError, match=message):
         load_threshold_sweep_config(config)
 
 
 def _config() -> EvaluationConfig:
+    """Compute and return config for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return EvaluationConfig(
         1, "fixture-validation", "1.0.0", "random-projection-nearest-centroid", "validation", 0.0
     )
 
 
 def _evaluate(root: Path, paths: dict[str, Path], run_id: str) -> Path:
+    """Compute and return evaluate for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        root: Repository root used to enforce path and trust boundaries.
+        paths: The paths value supplied by the caller or surrounding test fixture.
+        run_id: The run id value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     output = _output(root, run_id)
     result = evaluate_validation_from_index(
         root, paths["index"], paths["model"], paths["metadata"], _config(), output
@@ -226,6 +349,19 @@ def _evaluate(root: Path, paths: dict[str, Path], run_id: str) -> Path:
 
 
 def _output(root: Path, run_id: str) -> Path:
+    """Resolve and validate output for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        root: Repository root used to enforce path and trust boundaries.
+        run_id: The run id value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     directory = root / "artifacts" / "runs" / run_id / "evaluation"
     directory.mkdir(parents=True)
     return directory / "validation-metrics.json"
@@ -237,6 +373,20 @@ def _repository(
     labels: np.ndarray | None = None,
     malformed_model: bool = False,
 ) -> dict[str, Path]:
+    """Compute and return repository for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        root: Repository root used to enforce path and trust boundaries.
+        labels: Target labels retained for validation or metric calculation.
+        malformed_model: The malformed model value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     (root / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     shard_dir = root / "data" / "interim" / "runs" / "fixture" / "windows"
     index_dir = root / "data" / "processed" / "runs" / "fixture"
@@ -326,6 +476,19 @@ def _repository(
 
 
 def _identity(root: Path, path: Path) -> dict[str, object]:
+    """Compute and return identity for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        root: Repository root used to enforce path and trust boundaries.
+        path: Filesystem path identifying the input or output under review.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     content = path.read_bytes()
     return {
         "path": path.relative_to(root).as_posix(),
@@ -335,4 +498,16 @@ def _identity(root: Path, path: Path) -> dict[str, object]:
 
 
 def _counts(values: np.ndarray) -> dict[str, int]:
+    """Compute and return counts for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        values: Structured values to validate, transform, or serialize.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return {str(value): int(np.count_nonzero(values == value)) for value in np.unique(values)}

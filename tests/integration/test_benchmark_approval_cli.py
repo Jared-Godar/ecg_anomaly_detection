@@ -14,15 +14,34 @@ from ecg_anomaly_detection.run_manifest import (
     SplitEvidence,
 )
 
+# Centralize RUN_ID so every caller shares the same documented invariant.
 RUN_ID = "12345678-1234-5678-1234-567812345678"
 
 
 def _policy_text() -> str:
+    """Compute and return policy text for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     root = Path(__file__).parents[2]
     return (root / "configs" / "benchmark-policy-v1.toml").read_text(encoding="utf-8")
 
 
 def _manifest_json() -> str:
+    """Construct manifest json for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     manifest = RunManifest(
         schema_version=1,
         run_id=RUN_ID,
@@ -82,6 +101,15 @@ def _manifest_json() -> str:
 
 
 def _approval_text() -> str:
+    """Compute and return approval text for the documented repository workflow.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     return (
         "schema_version = 1\n\n"
         "[approval]\n"
@@ -97,6 +125,15 @@ def _approval_text() -> str:
 
 
 def test_record_benchmark_approval_command_records_approval_evidence(tmp_path: Path) -> None:
+    """Verify that record benchmark approval command records approval evidence.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     (tmp_path / "artifacts").mkdir()
     policy_path = tmp_path / "policy.toml"
     policy_path.write_text(_policy_text(), encoding="utf-8")
@@ -132,6 +169,15 @@ def test_record_benchmark_approval_command_records_approval_evidence(tmp_path: P
 def test_record_benchmark_approval_command_fails_closed_on_candidate_mismatch(
     tmp_path: Path,
 ) -> None:
+    """Verify that record benchmark approval command fails closed on candidate mismatch.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     (tmp_path / "artifacts").mkdir()
     policy_path = tmp_path / "policy.toml"
     policy_path.write_text(_policy_text(), encoding="utf-8")

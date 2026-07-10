@@ -58,6 +58,7 @@ class PipelineError(ValueError):
     """Raised when orchestration paths or run identity violate their contract."""
 
 
+# Centralize _TOTAL_REPORTED_STAGES so every caller shares the same documented invariant.
 _TOTAL_REPORTED_STAGES = 7
 
 
@@ -103,6 +104,8 @@ def run_pipeline(
 ) -> PipelineRunResult:
     """Run acquisition through fitting and validation-only evaluation."""
     root = repository_root.resolve()
+    # Evaluate `not (root / 'pyproject.toml').is_file()` explicitly so invalid or alternate states
+    # follow the documented contract.
     if not (root / "pyproject.toml").is_file():
         raise PipelineError(f"repository root does not contain pyproject.toml: {root}")
     config_paths = tuple(
@@ -134,6 +137,10 @@ def run_pipeline(
     )
     dataset_evidence_dir.mkdir(parents=True, exist_ok=True)
     acquisition_manifest_path = dataset_evidence_dir / "acquisition.json"
+    # Scope `progress.stage('acquisition', 1, _TOTAL_REPORTED_STAGES,
+    # detail=f'{len(dataset_config.record_ids)} records, {len(data...,
+    # runtime_timer.stage('acquisition')` here so resource cleanup occurs on both success and
+    # failure paths.
     with (
         progress.stage(
             "acquisition",
@@ -159,6 +166,9 @@ def run_pipeline(
     mapping_directory = run_directory / "mapping"
     window_report_directory = run_directory / "windows"
     window_artifact_directory = interim_directory / "windows"
+    # Iterate over `(validation_directory, mapping_directory, window_report_directory,
+    # window_artifact_directory)` one item at a time so ordering, validation, and failure
+    # attribution remain explicit.
     for directory in (
         validation_directory,
         mapping_directory,
@@ -167,6 +177,8 @@ def run_pipeline(
     ):
         directory.mkdir()
 
+    # Scope `progress.stage('inventory', 2, _TOTAL_REPORTED_STAGES)` here so resource cleanup occurs
+    # on both success and failure paths.
     with progress.stage("inventory", 2, _TOTAL_REPORTED_STAGES) as stage:
         inventory = create_inventory(dataset_config, raw_data_dir, clock=timestamp)
         inventory_manifest_path = run_directory / "inventory.json"
@@ -179,27 +191,39 @@ def run_pipeline(
     window_artifact_paths: list[Path] = []
     total_windows = 0
     record_total = len(dataset_config.record_ids)
+    # Scope `progress.stage('record_processing', 3, _TOTAL_REPORTED_STAGES, detail=f'{record_total}
+    # records')` here so resource cleanup occurs on both success and failure paths.
     with progress.stage(
         "record_processing", 3, _TOTAL_REPORTED_STAGES, detail=f"{record_total} records"
     ) as stage:
+        # Iterate over `enumerate(dataset_config.record_ids, start=1)` one item at a time so
+        # ordering, validation, and failure attribution remain explicit.
         for record_index, record_id in enumerate(dataset_config.record_ids, start=1):
             loaded = load_wfdb_record(dataset_config, raw_data_dir, record_id)
+            # Scope `runtime_timer.stage('validation')` here so resource cleanup occurs on both
+            # success and failure paths.
             with runtime_timer.stage("validation"):
                 validation = validate_record(dataset_config, loaded.signal, loaded.annotations)
                 validation_path = validation_directory / f"{record_id}.json"
                 write_validation_report(validation, validation_path)
             validation_paths.append(validation_path)
 
+            # Evaluate `record_id in window_config.exclude_record_ids` explicitly so invalid or
+            # alternate states follow the documented contract.
             if record_id in window_config.exclude_record_ids:
                 progress.note(f"record {record_index}/{record_total} ({record_id}): excluded")
                 continue
 
+            # Scope `runtime_timer.stage('annotation_mapping')` here so resource cleanup occurs on
+            # both success and failure paths.
             with runtime_timer.stage("annotation_mapping"):
                 mapped = map_annotations(mapping_config, loaded.annotations)
                 mapping_path = mapping_directory / f"{record_id}.json"
                 write_mapping_report(mapped.report, mapping_path)
             mapping_paths.append(mapping_path)
 
+            # Scope `runtime_timer.stage('window_extraction')` here so resource cleanup occurs on
+            # both success and failure paths.
             with runtime_timer.stage("window_extraction"):
                 extracted = extract_windows(window_config, mapping_config, loaded.signal, mapped)
                 window_artifact_path = window_artifact_directory / f"{record_id}.npz"
@@ -215,6 +239,8 @@ def run_pipeline(
             )
         stage.detail(f"{total_windows} windows across {len(window_artifact_paths)} records")
 
+    # Scope `progress.stage('split', 4, _TOTAL_REPORTED_STAGES), runtime_timer.stage('split')` here
+    # so resource cleanup occurs on both success and failure paths.
     with (
         progress.stage("split", 4, _TOTAL_REPORTED_STAGES) as stage,
         runtime_timer.stage("split"),
@@ -222,6 +248,8 @@ def run_pipeline(
         metadata = load_window_metadata(window_artifact_paths)
         split_record_ids = set(metadata.record_shards)
         filtered_split_config = split_config
+        # Evaluate `set(split_config.record_subjects) != split_record_ids` explicitly so invalid or
+        # alternate states follow the documented contract.
         if set(split_config.record_subjects) != split_record_ids:
             filtered_split_config = type(split_config)(
                 schema_version=split_config.schema_version,
@@ -246,6 +274,9 @@ def run_pipeline(
             f"{split_manifest.total_record_count} records, "
             f"manifest {split_manifest_path.relative_to(root)}"
         )
+    # Scope `progress.stage('split_diagnostics', 5, _TOTAL_REPORTED_STAGES),
+    # runtime_timer.stage('split_diagnostics')` here so resource cleanup occurs on both success and
+    # failure paths.
     with (
         progress.stage("split_diagnostics", 5, _TOTAL_REPORTED_STAGES) as stage,
         runtime_timer.stage("split_diagnostics"),
@@ -255,6 +286,8 @@ def run_pipeline(
         write_split_quality_summary(split_quality_summary, split_quality_summary_path)
         enforce_split_quality(split_quality_summary)
         stage.detail(f"quality {split_quality_summary.status}")
+    # Evaluate `split_manifest.total_window_count != total_windows` explicitly so invalid or
+    # alternate states follow the documented contract.
     if split_manifest.total_window_count != total_windows:
         raise PipelineError("split window count does not match per-record extraction reports")
 
@@ -266,6 +299,8 @@ def run_pipeline(
     training_directory.mkdir()
     model_path = training_directory / "model.json"
     training_metadata_path = training_directory / "training-metadata.json"
+    # Scope `progress.stage('training', 6, _TOTAL_REPORTED_STAGES), runtime_timer.stage('training')`
+    # here so resource cleanup occurs on both success and failure paths.
     with (
         progress.stage("training", 6, _TOTAL_REPORTED_STAGES) as stage,
         runtime_timer.stage("training"),
@@ -282,6 +317,9 @@ def run_pipeline(
     evaluation_directory = run_directory / "evaluation"
     evaluation_directory.mkdir()
     validation_metrics_path = evaluation_directory / "validation-metrics.json"
+    # Scope `progress.stage('validation_evaluation', 7, _TOTAL_REPORTED_STAGES),
+    # runtime_timer.stage('validation_evaluation')` here so resource cleanup occurs on both success
+    # and failure paths.
     with (
         progress.stage("validation_evaluation", 7, _TOTAL_REPORTED_STAGES) as stage,
         runtime_timer.stage("validation_evaluation"),
@@ -375,39 +413,91 @@ def run_pipeline(
 
 
 def _resolve_config(repository_root: Path, path: Path) -> Path:
+    """Resolve config according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        repository_root: Repository root used to enforce path and trust boundaries.
+        path: Filesystem path identifying the input or output under review.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     candidate = path if path.is_absolute() else repository_root / path
+    # Evaluate `candidate.is_symlink()` explicitly so invalid or alternate states follow the
+    # documented contract.
     if candidate.is_symlink():
         raise PipelineError(f"pipeline configuration must not be a symbolic link: {candidate}")
     resolved = candidate.resolve()
+    # Attempt this boundary operation here so ValueError can be translated or cleaned up under the
+    # repository contract.
     try:
         relative = resolved.relative_to(repository_root)
     except ValueError as error:
         raise PipelineError("pipeline configuration must stay within repository root") from error
+    # Evaluate `not relative.parts or relative.parts[0] != 'configs'` explicitly so invalid or
+    # alternate states follow the documented contract.
     if not relative.parts or relative.parts[0] != "configs":
         raise PipelineError("pipeline configuration must be stored under configs/")
+    # Evaluate `not resolved.is_file()` explicitly so invalid or alternate states follow the
+    # documented contract.
     if not resolved.is_file():
         raise PipelineError(f"pipeline configuration must be a regular file: {resolved}")
     return resolved
 
 
 def _create_run_id(run_id_factory: Callable[[], str] | None) -> str:
+    """Create run id according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        run_id_factory: The run id factory value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     candidate = (run_id_factory or (lambda: str(uuid.uuid4())))()
+    # Attempt this boundary operation here so (AttributeError, TypeError, ValueError) can be
+    # translated or cleaned up under the repository contract.
     try:
         parsed = uuid.UUID(candidate)
     except (AttributeError, TypeError, ValueError) as error:
         raise PipelineError("pipeline run ID must be a valid UUID") from error
+    # Evaluate `str(parsed) != candidate` explicitly so invalid or alternate states follow the
+    # documented contract.
     if str(parsed) != candidate:
         raise PipelineError("pipeline run ID must use canonical lowercase UUID formatting")
     return candidate
 
 
 def _create_run_directories(repository_root: Path, run_id: str) -> tuple[Path, Path, Path]:
+    """Create run directories according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        repository_root: Repository root used to enforce path and trust boundaries.
+        run_id: The run id value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     artifact_runs = _prepare_run_parent(repository_root / "artifacts")
     interim_runs = _prepare_run_parent(repository_root / "data" / "interim")
     processed_runs = _prepare_run_parent(repository_root / "data" / "processed")
     run_directory = artifact_runs / run_id
     interim_directory = interim_runs / run_id
     processed_directory = processed_runs / run_id
+    # Attempt this boundary operation here so FileExistsError, OSError can be translated or cleaned
+    # up under the repository contract.
     try:
         run_directory.mkdir()
         interim_directory.mkdir()
@@ -420,13 +510,31 @@ def _create_run_directories(repository_root: Path, run_id: str) -> tuple[Path, P
 
 
 def _prepare_run_parent(base_directory: Path) -> Path:
+    """Prepare an ignored run parent without weakening create-only output guarantees.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        base_directory: The base directory value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Evaluate `base_directory.is_symlink() or not base_directory.is_dir()` explicitly so invalid or
+    # alternate states follow the documented contract.
     if base_directory.is_symlink() or not base_directory.is_dir():
         raise PipelineError(
             f"pipeline output base must be an existing regular directory: {base_directory}"
         )
     run_parent = base_directory / "runs"
+    # Evaluate `run_parent.is_symlink()` explicitly so invalid or alternate states follow the
+    # documented contract.
     if run_parent.is_symlink():
         raise PipelineError(f"pipeline run parent must not be a symbolic link: {run_parent}")
+    # Attempt this boundary operation here so OSError can be translated or cleaned up under the
+    # repository contract.
     try:
         run_parent.mkdir(exist_ok=True)
     except OSError as error:

@@ -18,7 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+# Centralize ROOT so every caller shares the same documented invariant.
 ROOT = Path(__file__).resolve().parents[1]
+# Centralize DEFAULT_MANIFEST so every caller shares the same documented invariant.
 DEFAULT_MANIFEST = ROOT / ".github" / "labels.json"
 
 
@@ -39,11 +41,17 @@ class DriftedItem:
 def load_canonical_label_names(manifest_path: Path) -> frozenset[str]:
     """Load the set of canonical label names from the repository's label manifest."""
     data: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
+    # Evaluate `data.get('schema_version') != 1 or not isinstance(data.get('labels'), list)`
+    # explicitly so invalid or alternate states follow the documented contract.
     if data.get("schema_version") != 1 or not isinstance(data.get("labels"), list):
         raise LabelDriftError("manifest must contain schema_version 1 and a labels array")
     names: set[str] = set()
+    # Iterate over `data['labels']` one item at a time so ordering, validation, and failure
+    # attribution remain explicit.
     for item in data["labels"]:
         name = item.get("name") if isinstance(item, dict) else None
+        # Evaluate `not isinstance(name, str) or not name` explicitly so invalid or alternate states
+        # follow the documented contract.
         if not isinstance(name, str) or not name:
             raise LabelDriftError("each manifest label requires a non-empty name")
         names.add(name)
@@ -60,14 +68,32 @@ def find_drifted_items(
 ) -> tuple[DriftedItem, ...]:
     """Return a DriftedItem for every item that carries at least one non-canonical label."""
     drifted: list[DriftedItem] = []
+    # Iterate over `items` one item at a time so ordering, validation, and failure attribution
+    # remain explicit.
     for item in items:
         labels = find_drifted_labels(item["labels"], canonical)
+        # Evaluate `labels` explicitly so invalid or alternate states follow the documented
+        # contract.
         if labels:
             drifted.append(DriftedItem(item["number"], item["kind"], item["title"], labels))
     return tuple(drifted)
 
 
 def _run_gh(args: list[str]) -> str:
+    """Run one fixed GitHub CLI command and return its captured output.
+
+    The helper isolates this step so its assumptions, outputs, and failure behavior remain
+    reviewable.
+
+    Args:
+        args: The args value supplied by the caller or surrounding test fixture.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    # Attempt this boundary operation here so FileNotFoundError, subprocess.CalledProcessError can
+    # be translated or cleaned up under the repository contract.
     try:
         # command is a fixed literal ("gh", *args) built from this module's own
         # subcommand arguments, not runtime/user-constructed input.
@@ -90,6 +116,8 @@ def fetch_items(repo: str | None, *, include_closed: bool) -> list[dict[str, Any
     """Fetch issues and pull requests with their labels via the gh CLI."""
     state = "all" if include_closed else "open"
     items: list[dict[str, Any]] = []
+    # Iterate over `(('issue', 'issue'), ('pull request', 'pr'))` one item at a time so ordering,
+    # validation, and failure attribution remain explicit.
     for kind, subcommand in (("issue", "issue"), ("pull request", "pr")):
         args = [
             subcommand,
@@ -101,9 +129,12 @@ def fetch_items(repo: str | None, *, include_closed: bool) -> list[dict[str, Any
             "--limit",
             "500",
         ]
+        # Evaluate `repo` explicitly so invalid or alternate states follow the documented contract.
         if repo:
             args.extend(["--repo", repo])
         payload = json.loads(_run_gh(args))
+        # Iterate over `payload` one item at a time so ordering, validation, and failure attribution
+        # remain explicit.
         for row in payload:
             items.append(
                 {
@@ -117,6 +148,18 @@ def fetch_items(repo: str | None, *, include_closed: bool) -> list[dict[str, Any
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse args according to the repository contract.
+
+    The helper centralizes validation and failure behavior so every caller follows the same
+    documented path.
+
+    Args:
+        argv: Optional command-line arguments; defaults to the process arguments.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--repo", help="GitHub OWNER/REPO; defaults to the current repository")
@@ -129,7 +172,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command-line entry point and return its process exit status.
+
+    Keeping orchestration here makes terminal behavior and error translation straightforward
+    to audit.
+
+    Args:
+        argv: Optional command-line arguments; defaults to the process arguments.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     args = parse_args(argv)
+    # Attempt this boundary operation here so LabelDriftError can be translated or cleaned up under
+    # the repository contract.
     try:
         canonical = load_canonical_label_names(args.manifest)
         items = fetch_items(args.repo, include_closed=args.include_closed)
@@ -138,8 +195,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     drifted = find_drifted_items(items, canonical)
+    # Evaluate `drifted` explicitly so invalid or alternate states follow the documented contract.
     if drifted:
         print(f"Label drift detected on {len(drifted)} item(s):", file=sys.stderr)
+        # Iterate over `drifted` one item at a time so ordering, validation, and failure attribution
+        # remain explicit.
         for item in drifted:
             print(
                 f"  - #{item.number} ({item.kind}) {item.title!r}: "
@@ -157,5 +217,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+# Evaluate `__name__ == '__main__'` explicitly so invalid or alternate states follow the documented
+# contract.
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -12,10 +12,14 @@ import sys
 import tomllib
 from pathlib import Path
 
+# Centralize _SCRIPT_PATH so every caller shares the same documented invariant.
 _SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "validate_curated_notebooks.py"
+# Centralize _SPEC so every caller shares the same documented invariant.
 _SPEC = importlib.util.spec_from_file_location("validate_curated_notebooks", _SCRIPT_PATH)
 assert _SPEC is not None and _SPEC.loader is not None
+# Construct vcn once so the module exposes one stable shared definition.
 vcn = importlib.util.module_from_spec(_SPEC)
+# Construct this module object once so the module exposes one stable shared definition.
 sys.modules[_SPEC.name] = vcn
 _SPEC.loader.exec_module(vcn)
 
@@ -23,6 +27,7 @@ from ecg_anomaly_detection.acquisition import AcquisitionManifest  # noqa: E402
 from ecg_anomaly_detection.config import load_dataset_config  # noqa: E402
 from ecg_anomaly_detection.splitting import load_split_config  # noqa: E402
 
+# Centralize _FILES so every caller shares the same documented invariant.
 _FILES = (
     vcn.SyntheticFile("900.atr", 128, "a" * 64),
     vcn.SyntheticFile("900.dat", 4096, "b" * 64),
@@ -31,10 +36,17 @@ _FILES = (
     vcn.SyntheticFile("901.dat", 4096, "e" * 64),
     vcn.SyntheticFile("901.hea", 96, "f" * 64),
 )
+# Centralize _RECORD_IDS so every caller shares the same documented invariant.
 _RECORD_IDS = ("900", "901")
 
 
 def test_dataset_config_toml_parses_as_valid_toml() -> None:
+    """Verify that dataset config toml parses as valid toml.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+    """
+
     document = tomllib.loads(vcn.build_dataset_config_toml(_FILES, _RECORD_IDS))
     assert document["dataset"]["slug"] == "mitdb"
     assert document["dataset"]["record_ids"] == list(_RECORD_IDS)
@@ -42,6 +54,15 @@ def test_dataset_config_toml_parses_as_valid_toml() -> None:
 
 
 def test_dataset_config_toml_loads_via_the_real_config_loader(tmp_path: Path) -> None:
+    """Verify that dataset config toml loads via the real config loader.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config_path = tmp_path / "mitdb-v1.0.0.toml"
     config_path.write_text(vcn.build_dataset_config_toml(_FILES, _RECORD_IDS), encoding="utf-8")
     config = load_dataset_config(config_path)
@@ -58,6 +79,15 @@ def test_dataset_config_toml_loads_via_the_real_config_loader(tmp_path: Path) ->
 
 
 def test_split_config_toml_loads_via_the_real_split_loader(tmp_path: Path) -> None:
+    """Verify that split config toml loads via the real split loader.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+
+    Args:
+        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    """
+
     config_path = tmp_path / "splitting-v2.toml"
     config_path.write_text(vcn.build_split_config_toml(_RECORD_IDS), encoding="utf-8")
     config = load_split_config(config_path)
@@ -67,6 +97,12 @@ def test_split_config_toml_loads_via_the_real_split_loader(tmp_path: Path) -> No
 
 
 def test_acquisition_manifest_round_trips_via_the_real_manifest_parser() -> None:
+    """Verify that acquisition manifest round trips via the real manifest parser.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+    """
+
     content = vcn.build_acquisition_manifest(_FILES, _RECORD_IDS)
     manifest = AcquisitionManifest.from_json(content)
     assert manifest.dataset_slug == "mitdb"
@@ -93,12 +129,20 @@ def test_acquisition_manifest_matches_dataset_config_identity(tmp_path: Path) ->
     assert manifest.download_url == config.download_url
     assert tuple(item.path for item in manifest.files) == config.expected_files
     expectations = config.expected_source_files_by_path
+    # Iterate over `manifest.files` one item at a time so ordering, validation, and failure
+    # attribution remain explicit.
     for item in manifest.files:
         assert item.size_bytes == expectations[item.path].size_bytes
         assert item.sha256 == expectations[item.path].sha256
 
 
 def test_dataset_config_toml_uses_only_the_given_files_and_record_ids() -> None:
+    """Verify that dataset config toml uses only the given files and record ids.
+
+    This regression test makes the named behavior and its failure boundary visible to future
+    maintainers.
+    """
+
     single_record_files = tuple(item for item in _FILES if item.name.startswith("900"))
     document = tomllib.loads(vcn.build_dataset_config_toml(single_record_files, ("900",)))
     assert document["dataset"]["record_ids"] == ["900"]
