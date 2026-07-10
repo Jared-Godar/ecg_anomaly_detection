@@ -26,6 +26,15 @@ from ecg_anomaly_detection.splitting import (
 
 @pytest.fixture
 def split_config() -> SplitConfig:
+    """A schema-2 subject-grouped config: subjects a/a/b/c across records 100-103.
+
+    Records 100 and 101 deliberately share subject-a, so tests can verify those two
+    records are always assigned to the same partition together.
+
+    Returns:
+        A SplitConfig with 4 records spanning 3 subjects.
+    """
+
     return SplitConfig(
         schema_version=2,
         name="test-subject-split",
@@ -46,6 +55,12 @@ def split_config() -> SplitConfig:
 
 @pytest.fixture
 def metadata() -> WindowMetadata:
+    """Window-level metadata matching split_config's 4 records, 2 windows each, both classes present.
+
+    Returns:
+        WindowMetadata with 8 total windows across records 100-103.
+    """
+
     targets = np.asarray([0, 1, 0, 1, 1, 0, 0, 0], dtype=np.int64)
     targets.setflags(write=False)
     return WindowMetadata(
@@ -60,6 +75,13 @@ def metadata() -> WindowMetadata:
 
 
 def test_repository_split_config_is_versioned_and_subject_grouped() -> None:
+    """The committed splitting-v2.toml config declares schema-2 subject grouping correctly.
+
+    Regression test guarding against an accidental edit to the repository's real
+    split config: confirms it declares the seeded-subject-shuffle strategy, groups
+    records 201/202 under the same subject, and its ratios still sum to 1.0.
+    """
+
     paths = RepositoryPaths.discover(Path(__file__))
     config = load_split_config(paths.configs / "splitting-v2.toml")
 
@@ -73,6 +95,21 @@ def test_repository_split_config_is_versioned_and_subject_grouped() -> None:
 def test_split_is_deterministic_complete_and_subject_disjoint(
     split_config: SplitConfig, metadata: WindowMetadata, tmp_path: Path
 ) -> None:
+    """The seeded shuffle is deterministic, covers every record/subject, and is leakage-free.
+
+    The core anti-leakage regression test: two independent create_split_manifest calls
+    with the same seed must produce byte-identical manifests, every subject/record must
+    appear in exactly one partition (union covers the input, no pairwise overlap), and
+    subjects sharing records (100/101 both under subject-a) must land in the same
+    partition together. Also round-trips the manifest through JSON to confirm
+    read_split_manifest reconstructs an equal object.
+
+    Args:
+        split_config: The 4-record, 3-subject fixture config.
+        metadata: Matching 8-window metadata for split_config's records.
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     first = create_split_manifest(split_config, metadata)
     second = create_split_manifest(split_config, metadata)
     output_path = tmp_path / "split.json"
@@ -107,6 +144,16 @@ def test_split_is_deterministic_complete_and_subject_disjoint(
 
 
 def test_three_subjects_produce_three_nonempty_partitions(split_config: SplitConfig) -> None:
+    """The minimum viable case (exactly 3 subjects) still produces one subject per partition.
+
+    Boundary test at create_split_manifest's documented floor: subject-grouped
+    splitting requires at least 3 subjects, so the smallest valid input should still
+    partition cleanly, one subject landing in each of train/validation/test.
+
+    Args:
+        split_config: The 4-record, 3-subject fixture config.
+    """
+
     metadata = WindowMetadata(
         record_ids=("100", "101", "102", "103"),
         target_values=np.asarray([0, 0, 0, 1], dtype=np.int64),
@@ -123,6 +170,12 @@ def test_three_subjects_produce_three_nonempty_partitions(split_config: SplitCon
 
 
 def test_split_rejects_too_few_subjects(split_config: SplitConfig) -> None:
+    """Below the 3-subject floor, create_split_manifest fails rather than degrading silently.
+
+    Args:
+        split_config: The base fixture config, overridden below to only 2 subjects.
+    """
+
     metadata = WindowMetadata(
         record_ids=("100", "101", "102"),
         target_values=np.asarray([0, 0, 1], dtype=np.int64),
@@ -133,6 +186,8 @@ def test_split_rejects_too_few_subjects(split_config: SplitConfig) -> None:
         window_config_version="1",
     )
 
+    # Only 2 distinct subjects (subject-a, subject-b) are declared below, one short of
+    # create_split_manifest's documented 3-subject minimum.
     with pytest.raises(SplitError, match="at least 3 subjects"):
         create_split_manifest(
             replace(
@@ -148,11 +203,22 @@ def test_split_rejects_too_few_subjects(split_config: SplitConfig) -> None:
 
 
 def test_window_metadata_loader_rejects_record_reuse_across_artifacts(tmp_path: Path) -> None:
+    """The same record ID appearing in two separate NPZ shards is rejected, not silently merged.
+
+    Protects the load-bearing leakage guard in load_window_metadata: a record must
+    originate from exactly one artifact, since a duplicate would make subsequent
+    subject-grouped partitioning unable to guarantee that record lands in only one split.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     first = tmp_path / "first.npz"
     second = tmp_path / "second.npz"
     _write_metadata_artifact(first, ["100"], [0])
     _write_metadata_artifact(second, ["100"], [1])
 
+    # Record "100" appears in both `first` and `second`.
     with pytest.raises(SplitError, match="multiple window artifacts"):
         load_window_metadata([first, second])
 
@@ -160,6 +226,18 @@ def test_window_metadata_loader_rejects_record_reuse_across_artifacts(tmp_path: 
 def test_manifest_reader_rejects_subject_crossing_partitions(
     split_config: SplitConfig, metadata: WindowMetadata
 ) -> None:
+    """A hand-edited manifest with a subject duplicated across partitions is rejected on read.
+
+    Protects _validate_serialized_manifest's re-verification of the leakage invariant:
+    a manifest read back from disk is untrusted input (possibly hand-edited), so
+    SplitManifest.from_json must independently re-check subject disjointness rather
+    than assuming a JSON file on disk is still valid just because it once was.
+
+    Args:
+        split_config: The 4-record, 3-subject fixture config.
+        metadata: Matching 8-window metadata for split_config's records.
+    """
+
     document = json.loads(create_split_manifest(split_config, metadata).to_json())
     leaked_subject = document["partitions"]["train"]["subject_ids"][0]
     validation = document["partitions"]["validation"]
@@ -170,6 +248,7 @@ def test_manifest_reader_rejects_subject_crossing_partitions(
     }
     assert displaced_subject != leaked_subject
 
+    # leaked_subject was copied from train into validation's subject_ids above.
     with pytest.raises(SplitError, match="subject leakage"):
         SplitManifest.from_json(json.dumps(document))
 
@@ -177,6 +256,13 @@ def test_manifest_reader_rejects_subject_crossing_partitions(
 def test_quality_summary_reports_deterministic_distributions_and_disjointness(
     split_config: SplitConfig, metadata: WindowMetadata
 ) -> None:
+    """create_split_quality_summary is deterministic and reports a clean pass for a valid split.
+
+    Args:
+        split_config: The 4-record, 3-subject fixture config.
+        metadata: Matching 8-window metadata for split_config's records.
+    """
+
     manifest = create_split_manifest(split_config, metadata)
 
     first = create_split_quality_summary(split_config, manifest, metadata)
@@ -202,6 +288,21 @@ def test_quality_summary_handles_missing_class_and_insufficient_counts(
     severity: str,
     expected_status: str,
 ) -> None:
+    """default_severity controls whether a quality violation is a warning or a hard failure.
+
+    Configures min_subjects_per_partition=2 (violated, since each partition here has 1
+    subject) and required_classes=(0, 1, 2) (class 2 never occurs, violating
+    required_class_coverage), then confirms both the reported status and whether
+    enforce_split_quality actually raises track the configured severity.
+
+    Args:
+        split_config: The 4-record, 3-subject fixture config, overridden below with a
+            stricter quality policy.
+        metadata: Matching 8-window metadata for split_config's records.
+        severity: The configured default_severity ("warning" or "failure").
+        expected_status: The summary status that severity should produce.
+    """
+
     config = replace(
         split_config,
         quality=SplitQualityConfig(
@@ -220,7 +321,10 @@ def test_quality_summary_handles_missing_class_and_insufficient_counts(
         "minimum_subjects",
         "required_class_coverage",
     }
+    # Only the "failure" severity should make enforce_split_quality actually raise;
+    # "warning" severity records the same violations but must not block execution.
     if severity == "failure":
+        # default_severity="failure" means enforce_split_quality must raise.
         with pytest.raises(SplitError, match="quality checks failed"):
             enforce_split_quality(summary)
     else:
@@ -286,6 +390,14 @@ def test_quality_summary_shard_count_and_ratios_with_multiple_source_artifacts(
 
 
 def _write_metadata_artifact(path: Path, record_ids: list[str], target_values: list[int]) -> None:
+    """Write a minimal, valid window-metadata NPZ artifact for load_window_metadata tests.
+
+    Args:
+        path: Where to write the NPZ artifact.
+        record_ids: Record ID for each window row.
+        target_values: Target label for each window row.
+    """
+
     np.savez_compressed(
         path,
         schema_version=np.asarray(1, dtype=np.int64),

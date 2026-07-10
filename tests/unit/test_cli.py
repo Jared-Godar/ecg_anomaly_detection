@@ -10,6 +10,12 @@ from ecg_anomaly_detection.cli import ArtifactDiscoveryError, _resolve_input_pat
 
 
 def test_file_arguments_pass_through_unchanged(tmp_path: Path) -> None:
+    """A single explicit .npz file argument is returned unchanged, as a one-element tuple.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     artifact = tmp_path / "100.npz"
     artifact.write_bytes(b"data")
 
@@ -17,6 +23,12 @@ def test_file_arguments_pass_through_unchanged(tmp_path: Path) -> None:
 
 
 def test_directory_expands_to_sorted_npz_children(tmp_path: Path) -> None:
+    """A directory argument expands to its .npz children in sorted order, ignoring non-.npz files.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     directory = tmp_path / "windows"
     directory.mkdir()
     (directory / "102.npz").write_bytes(b"data")
@@ -30,6 +42,13 @@ def test_directory_expands_to_sorted_npz_children(tmp_path: Path) -> None:
 
 
 def test_directory_is_not_searched_recursively(tmp_path: Path) -> None:
+    """A directory argument only expands its immediate .npz children; a nested subdirectory's
+    .npz files are not discovered.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     directory = tmp_path / "windows"
     nested = directory / "nested"
     nested.mkdir(parents=True)
@@ -42,6 +61,12 @@ def test_directory_is_not_searched_recursively(tmp_path: Path) -> None:
 
 
 def test_mixed_file_and_directory_arguments_combine(tmp_path: Path) -> None:
+    """An explicit file argument and a directory argument's expanded children are merged and sorted together.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     directory = tmp_path / "windows"
     directory.mkdir()
     (directory / "101.npz").write_bytes(b"data")
@@ -54,43 +79,84 @@ def test_mixed_file_and_directory_arguments_combine(tmp_path: Path) -> None:
 
 
 def test_empty_directory_raises_a_clear_error(tmp_path: Path) -> None:
+    """A directory argument with no .npz children raises a specific, actionable error.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     directory = tmp_path / "empty"
     directory.mkdir()
 
+    # directory above has no .npz files at all.
     with pytest.raises(ArtifactDiscoveryError, match="no \\*.npz artifact files found"):
         _resolve_input_paths([directory])
 
 
 def test_nonexistent_path_raises_a_clear_error(tmp_path: Path) -> None:
+    """A path argument that doesn't exist on disk raises a specific, actionable error.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
+    # tmp_path / "missing" was never created.
     with pytest.raises(ArtifactDiscoveryError, match="does not exist"):
         _resolve_input_paths([tmp_path / "missing"])
 
 
 def test_symlinked_directory_is_rejected(tmp_path: Path) -> None:
+    """A directory argument that is actually a symlink is refused rather than followed.
+
+    Following the symlink could expand an artifact set from outside the
+    directory the caller intended to scope the command to.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     real_target = tmp_path / "real"
     real_target.mkdir()
     link = tmp_path / "link"
     link.symlink_to(real_target, target_is_directory=True)
 
+    # link above is a symlink to real_target, not a real directory.
     with pytest.raises(ArtifactDiscoveryError, match="symbolic link"):
         _resolve_input_paths([link])
 
 
 def test_symlinked_file_is_rejected(tmp_path: Path) -> None:
+    """A file argument that is actually a symlink is refused rather than followed.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     real_target = tmp_path / "real.npz"
     real_target.write_bytes(b"data")
     link = tmp_path / "link.npz"
     link.symlink_to(real_target)
 
+    # link.npz above is a symlink to real_target, not a real file.
     with pytest.raises(ArtifactDiscoveryError, match="symbolic link"):
         _resolve_input_paths([link])
 
 
 def test_directory_expansion_overlapping_an_explicit_file_is_rejected(tmp_path: Path) -> None:
+    """A file already reachable through a directory argument is rejected if also passed explicitly.
+
+    This catches an ambiguous invocation (e.g. `cmd windows/ windows/100.npz`)
+    that would otherwise silently process the same artifact twice.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     directory = tmp_path / "windows"
     directory.mkdir()
     shard = directory / "100.npz"
     shard.write_bytes(b"data")
 
+    # shard is both inside directory (expanded) and passed explicitly below.
     with pytest.raises(ArtifactDiscoveryError, match="duplicate input artifact"):
         _resolve_input_paths([directory, shard])

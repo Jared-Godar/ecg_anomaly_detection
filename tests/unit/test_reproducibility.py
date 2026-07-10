@@ -20,6 +20,12 @@ from ecg_anomaly_detection.reproducibility import (
 
 
 def test_file_digest_and_artifact_evidence_are_stable(tmp_path: Path) -> None:
+    """sha256_file and collect_artifact_evidence agree on the same file's digest, size, and relative path.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     content = b"reproducible\n"
     artifact = tmp_path / "artifact.json"
     artifact.write_bytes(content)
@@ -33,9 +39,19 @@ def test_file_digest_and_artifact_evidence_are_stable(tmp_path: Path) -> None:
 
 
 def test_runtime_summary_has_fixed_stages_and_deterministic_json() -> None:
+    """A timed stage's duration is computed from the fake clock's readings, unused stages read 0.0,
+    and to_json() is stable and newline-terminated across repeated calls.
+
+    The four-reading fake clock is consumed in order: 0.0 at timer
+    construction (the overall start), 1.0 on stage entry, 1.25 on stage exit
+    (giving the "acquisition" stage a duration of 0.25), and 2.0 when
+    summary() records the overall end (giving total_runtime = 2.0 - 0.0).
+    """
+
     readings = iter((0.0, 1.0, 1.25, 2.0))
     timer = RuntimeStageTimer(lambda: next(readings))
 
+    # The fake clock yields 1.0 on stage entry and 1.25 on stage exit here.
     with timer.stage("acquisition"):
         pass
     summary = timer.summary()
@@ -53,6 +69,15 @@ def test_runtime_summary_has_fixed_stages_and_deterministic_json() -> None:
 def test_environment_capture_uses_null_fallbacks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """When every optional external command is unavailable, environment fields fall back to None
+    rather than raising, while the always-known dependency-lock path is still recorded.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+        monkeypatch: Used to force _run_optional/_run_optional_allow_empty to
+            report "unavailable" (None) for every command.
+    """
+
     (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     monkeypatch.setattr(reproducibility, "_run_optional", lambda *_: None)
     monkeypatch.setattr(reproducibility, "_run_optional_allow_empty", lambda *_: None)
@@ -70,7 +95,30 @@ def test_environment_capture_uses_null_fallbacks(
 def test_git_metadata_preserves_clean_status_when_other_values_are_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """An empty `git status --porcelain` output ("" = clean) is still correctly read as dirty=False,
+    even when commit and branch lookups both report unavailable.
+
+    An empty string is a valid, meaningful "clean" result distinct from
+    "unavailable" (None); this guards against collapsing the two cases into
+    the same null fallback.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+        monkeypatch: Used to substitute a fake git-command runner.
+    """
+
     def fake_run(command: tuple[str, ...], _: Path) -> str | None:
+        """Return "" for a git status command, None (unavailable) for anything else.
+
+        Args:
+            command: The git subcommand tuple being invoked; only command[1]
+                ("status" vs. anything else) is inspected.
+            _: The working directory argument (unused by this fake).
+
+        Returns:
+            "" for a status command, otherwise None.
+        """
+
         return "" if command[1] == "status" else None
 
     monkeypatch.setattr(reproducibility, "_run_optional", fake_run)
@@ -86,7 +134,22 @@ def test_git_metadata_preserves_clean_status_when_other_values_are_unavailable(
 def test_resource_capture_uses_null_fallbacks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """When disk usage raises OSError and CPU/memory probes report unavailable, every resource
+    field falls back to None rather than propagating the exception.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+        monkeypatch: Used to force shutil.disk_usage, os.cpu_count, and the
+            CPU/memory capture helpers to all report unavailable.
+    """
+
     def unavailable_disk(_: Path) -> None:
+        """Simulate a disk-usage probe that fails, e.g. on an unsupported filesystem.
+
+        Args:
+            _: The path disk usage would have been checked for (unused).
+        """
+
         raise OSError("unavailable")
 
     monkeypatch.setattr(reproducibility.shutil, "disk_usage", unavailable_disk)

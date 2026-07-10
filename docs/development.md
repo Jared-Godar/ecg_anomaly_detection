@@ -69,10 +69,25 @@ The checks cover:
 - JSON, TOML, and YAML syntax;
 - private keys and secret patterns;
 - Python linting, import ordering, and formatting with Ruff;
+- docstring and explanatory-comment coverage across all supported Python code;
 - Python type checking in Basic mode with Pyright;
 - Markdown style;
 - GitHub Actions security with zizmor; and
 - staged secret scanning with Gitleaks.
+
+The always-run `code-commentary` hook parses every Python file under `src/`, `scripts/`, and
+`tests/`. It requires docstrings on modules and all callable or class definitions, explanatory
+comments before control-flow and resource-management blocks, and comments for module-level
+assignments. Run that focused audit with:
+
+```fish
+uv run python scripts/check_code_commentary.py
+```
+
+See the [code commentary audit](code-commentary-audit.md) for the complete reviewed inventory,
+the historical baseline, and the limits of automated enforcement. The preserved
+`archive/original_2022/` tree remains outside this standard so current tooling does not rewrite the
+historical record.
 
 ## Validate local notebooks
 

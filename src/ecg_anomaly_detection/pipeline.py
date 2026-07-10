@@ -58,6 +58,10 @@ class PipelineError(ValueError):
     """Raised when orchestration paths or run identity violate their contract."""
 
 
+# The number of top-level stages run_pipeline reports progress for (acquisition,
+# inventory, record_processing, split, split_diagnostics, training,
+# validation_evaluation); used only to compute each stage's "N of TOTAL" progress
+# label, not as a loop bound.
 _TOTAL_REPORTED_STAGES = 7
 
 
@@ -103,6 +107,9 @@ def run_pipeline(
 ) -> PipelineRunResult:
     """Run acquisition through fitting and validation-only evaluation."""
     root = repository_root.resolve()
+    # A pyproject.toml at the root is the cheapest available signal that this is really
+    # the repository root, before every config/output path below trusts it as the
+    # containment root.
     if not (root / "pyproject.toml").is_file():
         raise PipelineError(f"repository root does not contain pyproject.toml: {root}")
     config_paths = tuple(
@@ -134,6 +141,9 @@ def run_pipeline(
     )
     dataset_evidence_dir.mkdir(parents=True, exist_ok=True)
     acquisition_manifest_path = dataset_evidence_dir / "acquisition.json"
+    # Acquisition evidence lives outside the run-scoped directory (under a
+    # dataset/version-keyed path instead), since the same acquired dataset baseline is
+    # shared and reused across multiple runs -- only this stage's timing is run-scoped.
     with (
         progress.stage(
             "acquisition",
@@ -159,6 +169,9 @@ def run_pipeline(
     mapping_directory = run_directory / "mapping"
     window_report_directory = run_directory / "windows"
     window_artifact_directory = interim_directory / "windows"
+    # Pre-create every per-record output subdirectory once, up front, rather than
+    # lazily inside the record loop below, so a mid-loop failure never leaves some
+    # directories present and others missing.
     for directory in (
         validation_directory,
         mapping_directory,
@@ -167,6 +180,8 @@ def run_pipeline(
     ):
         directory.mkdir()
 
+    # Re-hash and verify every acquired file against its acquisition-time digest, so a
+    # file modified between acquisition and this run is caught before it's used.
     with progress.stage("inventory", 2, _TOTAL_REPORTED_STAGES) as stage:
         inventory = create_inventory(dataset_config, raw_data_dir, clock=timestamp)
         inventory_manifest_path = run_directory / "inventory.json"
@@ -179,27 +194,42 @@ def run_pipeline(
     window_artifact_paths: list[Path] = []
     total_windows = 0
     record_total = len(dataset_config.record_ids)
+    # This is the per-record heart of the pipeline: validate, map annotations, then
+    # extract windows for each configured record in turn, before any cross-record
+    # stage (splitting, indexing) can run.
     with progress.stage(
         "record_processing", 3, _TOTAL_REPORTED_STAGES, detail=f"{record_total} records"
     ) as stage:
+        # Process records in their configured order for deterministic, reproducible
+        # per-record output file naming and progress reporting.
         for record_index, record_id in enumerate(dataset_config.record_ids, start=1):
             loaded = load_wfdb_record(dataset_config, raw_data_dir, record_id)
+            # Time and report validation separately from mapping/extraction below, so
+            # runtime_summary.json breaks down where time was actually spent per stage.
             with runtime_timer.stage("validation"):
                 validation = validate_record(dataset_config, loaded.signal, loaded.annotations)
                 validation_path = validation_directory / f"{record_id}.json"
                 write_validation_report(validation, validation_path)
             validation_paths.append(validation_path)
 
+            # A record on the window config's exclude list is validated (evidence is
+            # still recorded above) but deliberately skipped for mapping/extraction --
+            # e.g. a record with known channel or quality issues that shouldn't
+            # contribute windows to training/evaluation.
             if record_id in window_config.exclude_record_ids:
                 progress.note(f"record {record_index}/{record_total} ({record_id}): excluded")
                 continue
 
+            # Timed and reported separately from validation above and extraction
+            # below, matching runtime_summary.json's per-stage breakdown.
             with runtime_timer.stage("annotation_mapping"):
                 mapped = map_annotations(mapping_config, loaded.annotations)
                 mapping_path = mapping_directory / f"{record_id}.json"
                 write_mapping_report(mapped.report, mapping_path)
             mapping_paths.append(mapping_path)
 
+            # Writes both the boundary-safe NPZ window artifact and its human-readable
+            # extraction report for this one record.
             with runtime_timer.stage("window_extraction"):
                 extracted = extract_windows(window_config, mapping_config, loaded.signal, mapped)
                 window_artifact_path = window_artifact_directory / f"{record_id}.npz"
@@ -215,6 +245,8 @@ def run_pipeline(
             )
         stage.detail(f"{total_windows} windows across {len(window_artifact_paths)} records")
 
+    # Assigns complete subjects (never individual windows) to train/validation/test,
+    # the modernization's core fix versus the archived notebook's per-window split.
     with (
         progress.stage("split", 4, _TOTAL_REPORTED_STAGES) as stage,
         runtime_timer.stage("split"),
@@ -222,6 +254,11 @@ def run_pipeline(
         metadata = load_window_metadata(window_artifact_paths)
         split_record_ids = set(metadata.record_shards)
         filtered_split_config = split_config
+        # A schema-2 split config's record_subjects table may list more records than
+        # actually produced windows in this run (e.g. some were excluded above, or the
+        # config is shared across dataset subsets); narrow it to exactly the records
+        # this run extracted, since create_split_manifest requires an exact match
+        # between record_subjects and the windows actually being split.
         if set(split_config.record_subjects) != split_record_ids:
             filtered_split_config = type(split_config)(
                 schema_version=split_config.schema_version,
@@ -246,6 +283,9 @@ def run_pipeline(
             f"{split_manifest.total_record_count} records, "
             f"manifest {split_manifest_path.relative_to(root)}"
         )
+    # Writes the diagnostic artifact to disk unconditionally, then enforces its
+    # acceptance thresholds -- a rejected split still leaves the diagnostic evidence
+    # available for debugging, rather than raising before it's ever persisted.
     with (
         progress.stage("split_diagnostics", 5, _TOTAL_REPORTED_STAGES) as stage,
         runtime_timer.stage("split_diagnostics"),
@@ -255,6 +295,9 @@ def run_pipeline(
         write_split_quality_summary(split_quality_summary, split_quality_summary_path)
         enforce_split_quality(split_quality_summary)
         stage.detail(f"quality {split_quality_summary.status}")
+    # Cross-check the split's own window total against the sum of per-record
+    # extraction counts computed during record_processing above -- a mismatch would
+    # mean the split stage silently dropped or duplicated windows somewhere.
     if split_manifest.total_window_count != total_windows:
         raise PipelineError("split window count does not match per-record extraction reports")
 
@@ -266,6 +309,8 @@ def run_pipeline(
     training_directory.mkdir()
     model_path = training_directory / "model.json"
     training_metadata_path = training_directory / "training-metadata.json"
+    # Fits the deterministic baseline using only shards named by the indexed train
+    # partition (see training.py's own partition-boundary enforcement).
     with (
         progress.stage("training", 6, _TOTAL_REPORTED_STAGES) as stage,
         runtime_timer.stage("training"),
@@ -282,6 +327,9 @@ def run_pipeline(
     evaluation_directory = run_directory / "evaluation"
     evaluation_directory.mkdir()
     validation_metrics_path = evaluation_directory / "validation-metrics.json"
+    # This is the pipeline's final stage: it reads only the indexed validation
+    # partition (see evaluation.py's SUPPORTED_PARTITION) and never opens the
+    # protected test partition.
     with (
         progress.stage("validation_evaluation", 7, _TOTAL_REPORTED_STAGES) as stage,
         runtime_timer.stage("validation_evaluation"),
@@ -375,39 +423,97 @@ def run_pipeline(
 
 
 def _resolve_config(repository_root: Path, path: Path) -> Path:
+    """Resolve a pipeline stage config path and enforce it lives under configs/.
+
+    Shared by every one of run_pipeline's six config path arguments, so all pipeline
+    configuration is confirmed to come from the repository's versioned, reviewed
+    configs/ tree rather than an arbitrary filesystem location.
+
+    Args:
+        repository_root: Repository root used to enforce path and trust boundaries.
+        path: The candidate config path, absolute or relative to repository_root.
+
+    Returns:
+        The resolved, validated absolute path.
+    """
+
     candidate = path if path.is_absolute() else repository_root / path
+    # Reject a symlink before resolving it, so a link that points outside configs/
+    # can't be validated against a resolved target it doesn't actually name.
     if candidate.is_symlink():
         raise PipelineError(f"pipeline configuration must not be a symbolic link: {candidate}")
     resolved = candidate.resolve()
+    # relative_to raises ValueError when resolved escapes repository_root (e.g. via
+    # `..` segments); translate that into this module's own exception type.
     try:
         relative = resolved.relative_to(repository_root)
     except ValueError as error:
         raise PipelineError("pipeline configuration must stay within repository root") from error
+    # Every pipeline config is expected to live in the reviewed, versioned configs/
+    # tree, not an arbitrary repository location.
     if not relative.parts or relative.parts[0] != "configs":
         raise PipelineError("pipeline configuration must be stored under configs/")
+    # A directory or special file at this path would fail tomllib.load downstream
+    # with a less specific error; check it's a regular file up front.
     if not resolved.is_file():
         raise PipelineError(f"pipeline configuration must be a regular file: {resolved}")
     return resolved
 
 
 def _create_run_id(run_id_factory: Callable[[], str] | None) -> str:
+    """Generate (or accept an injected) run ID and enforce it's a canonical UUID.
+
+    Every run's artifacts, interim, and processed directories are keyed by this ID
+    (see _create_run_directories), so its uniqueness and canonical formatting directly
+    determine whether concurrent or repeated runs can collide.
+
+    Args:
+        run_id_factory: Overridable ID source; defaults to a fresh random UUID4.
+            Tests inject a fixed factory for deterministic run IDs.
+
+    Returns:
+        A canonical lowercase UUID string.
+    """
+
     candidate = (run_id_factory or (lambda: str(uuid.uuid4())))()
+    # A factory (especially an injected test double) could return something that
+    # isn't a UUID at all; collapse every way uuid.UUID's constructor can reject that
+    # into one PipelineError.
     try:
         parsed = uuid.UUID(candidate)
     except (AttributeError, TypeError, ValueError) as error:
         raise PipelineError("pipeline run ID must be a valid UUID") from error
+    # uuid.UUID accepts multiple textual representations of the same UUID (different
+    # case, with/without hyphens); require the canonical lowercase-hyphenated form so
+    # every directory path built from this ID is byte-for-byte predictable.
     if str(parsed) != candidate:
         raise PipelineError("pipeline run ID must use canonical lowercase UUID formatting")
     return candidate
 
 
 def _create_run_directories(repository_root: Path, run_id: str) -> tuple[Path, Path, Path]:
+    """Create this run's isolated artifact, interim, and processed directories.
+
+    Every run gets its own run-ID-keyed subdirectory in all three trees, so concurrent
+    or historical runs never share or overwrite each other's output.
+
+    Args:
+        repository_root: Repository root used to enforce path and trust boundaries.
+        run_id: This run's canonical UUID, used as the directory name in all three trees.
+
+    Returns:
+        The newly created (artifacts, interim, processed) run directories.
+    """
+
     artifact_runs = _prepare_run_parent(repository_root / "artifacts")
     interim_runs = _prepare_run_parent(repository_root / "data" / "interim")
     processed_runs = _prepare_run_parent(repository_root / "data" / "processed")
     run_directory = artifact_runs / run_id
     interim_directory = interim_runs / run_id
     processed_directory = processed_runs / run_id
+    # mkdir (without exist_ok) fails closed with FileExistsError if this run_id was
+    # somehow already used, which _create_run_id's UUID uniqueness should make
+    # vanishingly unlikely but this still guards against in practice.
     try:
         run_directory.mkdir()
         interim_directory.mkdir()
@@ -420,13 +526,31 @@ def _create_run_directories(repository_root: Path, run_id: str) -> tuple[Path, P
 
 
 def _prepare_run_parent(base_directory: Path) -> Path:
+    """Prepare an ignored run parent without weakening create-only output guarantees.
+
+    Args:
+        base_directory: One of artifacts/, data/interim/, or data/processed/ (already
+            expected to exist as part of the repository's tracked directory skeleton).
+
+    Returns:
+        The base_directory's "runs" subdirectory, created if not already present.
+    """
+
+    # base_directory itself (artifacts/, data/interim/, data/processed/) is expected to
+    # already exist as part of the repository's tracked skeleton; if it doesn't, the
+    # repository checkout itself is incomplete or damaged.
     if base_directory.is_symlink() or not base_directory.is_dir():
         raise PipelineError(
             f"pipeline output base must be an existing regular directory: {base_directory}"
         )
     run_parent = base_directory / "runs"
+    # Reject a symlink at the "runs" level specifically, even though exist_ok=True
+    # below would otherwise silently accept an existing directory there.
     if run_parent.is_symlink():
         raise PipelineError(f"pipeline run parent must not be a symbolic link: {run_parent}")
+    # exist_ok=True here (unlike the per-run mkdir calls in _create_run_directories)
+    # is intentional: "runs" is a shared parent every run creates its own subdirectory
+    # under, so it's expected to already exist after the first run.
     try:
         run_parent.mkdir(exist_ok=True)
     except OSError as error:

@@ -37,6 +37,7 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Historical archive provenance](../archive/original_2022/PROVENANCE.md) | Attribution audit method and provenance evidence for the archived 2022 project |
 | [Historical results](historical-results.md) | Saved 2022 metrics and their known evaluation defects |
 | [Development workflow](development.md) | Locked environment, tests, hooks, and CI behavior |
+| [Code commentary audit](code-commentary-audit.md) | Complete supported-Python inventory, documentation standard, and enforcement boundary |
 | [Local environment reproducibility](environment-reproducibility.md) | Dependency groups, locked setup commands, interpreter provenance, kernels, and troubleshooting |
 | [Modernization roadmap](modernization-roadmap.md) | Completed, active, and planned modernization phases |
 | [Governance guide](governance/index.md) | Repository, issue, security, versioning, and release governance |

@@ -9,6 +9,17 @@ from ecg_anomaly_detection.cli import main
 
 
 def test_split_windows_writes_auditable_manifest(tmp_path: Path) -> None:
+    """`ecg-data split-windows` produces a manifest that keeps subjects "100"/"101" (same subject)
+    in one partition, records every partition's subject_ids, and writes a "passed" quality summary.
+
+    Records "100" and "101" share subject "subject-a" in this fixture; the
+    leakage-aware invariant this command enforces requires them to land in
+    the same partition rather than being split across train/validation/test.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     config_path = tmp_path / "split.toml"
     config_path.write_text(
         """
@@ -77,6 +88,17 @@ test = 0.25
 
 
 def test_split_windows_writes_failed_quality_summary_and_returns_failure(tmp_path: Path) -> None:
+    """A split violating min_windows_per_partition under default_severity = "failure" exits 1 and
+    writes a quality summary listing every violating partition.
+
+    Each of the three partitions here gets only one window, well under the
+    configured minimum of 10, so all three ("test", "train", "validation")
+    must appear in the violations list rather than just the first one found.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     config_path = tmp_path / "split.toml"
     config_path.write_text(
         """
@@ -135,6 +157,12 @@ default_severity = "failure"
 
 
 def test_split_windows_accepts_a_directory_of_artifacts(tmp_path: Path) -> None:
+    """`split-windows --input <directory>` discovers and combines every NPZ shard in that directory.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     config_path = tmp_path / "split.toml"
     config_path.write_text(
         """
@@ -189,6 +217,12 @@ test = 0.25
 
 
 def test_split_windows_reports_an_empty_input_directory(tmp_path: Path) -> None:
+    """`split-windows --input <empty directory>` exits 1 rather than crashing on zero shards.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     config_path = tmp_path / "split.toml"
     config_path.write_text(
         """

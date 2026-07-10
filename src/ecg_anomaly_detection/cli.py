@@ -79,6 +79,8 @@ from ecg_anomaly_detection.windows import (
     write_window_report,
 )
 
+# The extension `--input` directory expansion looks for; matches the flat *.npz layout
+# run_pipeline() writes under data/interim/runs/<run-id>/windows/.
 _ARTIFACT_GLOB = "*.npz"
 
 
@@ -99,11 +101,20 @@ def _resolve_input_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
     contain the same file twice.
     """
     resolved: list[Path] = []
+    # Resolve each argument (file or directory) independently, since a directory
+    # expands into multiple files while a plain file passes through as one.
     for path in paths:
+        # Reject a symlink outright, whether it points to a file or a directory --
+        # this CLI's --input arguments are meant to name real pipeline artifacts, not
+        # links that could point outside the expected data layout.
         if path.is_symlink():
             raise ArtifactDiscoveryError(f"input path must not be a symbolic link: {path}")
+        # A directory expands to its immediate *.npz children (see _ARTIFACT_GLOB);
+        # anything else falls through to the plain-file branch below.
         if path.is_dir():
             discovered = sorted(path.glob(_ARTIFACT_GLOB))
+            # An empty directory (or one with no *.npz files) almost certainly means
+            # the wrong path was given, not an intentional "zero artifacts" request.
             if not discovered:
                 raise ArtifactDiscoveryError(
                     f"no {_ARTIFACT_GLOB} artifact files found in directory: {path}"
@@ -115,12 +126,17 @@ def _resolve_input_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
             raise ArtifactDiscoveryError(f"input path does not exist: {path}")
     seen: dict[Path, Path] = {}
     duplicates: list[Path] = []
+    # Detect the same underlying file reached twice (e.g. once via a direct path and
+    # once via directory expansion) by comparing resolved, canonical paths.
     for path in resolved:
         canonical = path.resolve()
+        # A canonical path already seen means this is a repeat of an earlier entry.
         if canonical in seen:
             duplicates.append(path)
         else:
             seen[canonical] = path
+    # A duplicated artifact would otherwise contribute its windows twice to whatever
+    # stage consumes this resolved path list (splitting, indexing).
     if duplicates:
         raise ArtifactDiscoveryError(
             "duplicate input artifact path(s) after directory expansion: "
@@ -130,6 +146,16 @@ def _resolve_input_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Construct the argparse CLI, one subparser per supported pipeline stage.
+
+    Kept as a thin, declarative parser definition -- no business logic lives here; each
+    subcommand's actual behavior lives in the corresponding stage module and is invoked
+    from main() below.
+
+    Returns:
+        The fully configured top-level argument parser.
+    """
+
     parser = argparse.ArgumentParser(
         prog="ecg-data",
         description="Run supported local ECG data-pipeline stages.",
@@ -315,7 +341,14 @@ def main(arguments: Sequence[str] | None = None) -> int:
     parser = build_parser()
     options = parser.parse_args(arguments)
 
+    # Every stage module's own error type funnels here into one shared exit-code path:
+    # print a one-line message to stderr and return 1, rather than a raw traceback --
+    # this is the CLI's only error-handling responsibility, since validation itself
+    # belongs to the stage modules.
     try:
+        # check-local-notebooks doesn't load a dataset config at all (it operates on
+        # notebooks/, not pipeline data), so it's handled as an early, self-contained
+        # branch before the shared `config = load_dataset_config(...)` further down.
         if options.command == "check-local-notebooks":
             from ecg_anomaly_detection.notebook_quality import (
                 NotebookQualityError,
@@ -323,6 +356,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 discover_local_notebooks,
             )
 
+            # notebook_quality.py's own exception type isn't in the shared tuple below
+            # (it's a local, deliberately narrow import), so it needs its own handler.
             try:
                 notebook_paths = tuple(options.notebook) or discover_local_notebooks(
                     options.repository_root,
@@ -337,15 +372,22 @@ def main(arguments: Sequence[str] | None = None) -> int:
             except NotebookQualityError as error:
                 print(f"error: {error}", file=sys.stderr)
                 return 1
+            # --json emits one machine-readable summary object; the default mode
+            # instead prints a human-scannable line per notebook plus its issues.
             if options.json_output:
                 print(json.dumps(summary.to_dict(), indent=2, sort_keys=True))
             else:
+                # Print one summary line per notebook, followed by its issues (if any)
+                # on stderr, so a human running this locally sees pass/fail state and
+                # detail without needing --json.
                 for report in summary.notebooks:
                     status = "valid" if report.valid else "invalid"
                     print(
                         f"{report.path}: {status}; {report.cell_count} cells, "
                         f"{report.output_count} outputs ({report.output_bytes} bytes)"
                     )
+                    # Route issue detail to stderr, separate from the stdout summary
+                    # lines, so stdout output stays parseable even without --json.
                     for issue in report.issues:
                         location = (
                             f" cell {issue.cell_index}" if issue.cell_index is not None else ""
@@ -358,10 +400,14 @@ def main(arguments: Sequence[str] | None = None) -> int:
                     f"checked {len(summary.notebooks)} notebooks; changed {summary.changed_count}"
                 )
             return 0 if summary.valid else 1
+        # validate-benchmark-policy only checks governance config shape/consistency;
+        # it deliberately never opens a run manifest or the protected test partition.
         if options.command == "validate-benchmark-policy":
             policy = load_benchmark_policy(options.policy)
             print(f"validated benchmark policy {policy.policy_id} version {policy.version}")
             return 0
+        # Approval evidence is recorded independently of running the benchmark itself;
+        # this command only verifies the eligibility/approval/lineage chain.
         if options.command == "record-benchmark-approval":
             record = record_benchmark_approval(
                 options.repository_root,
@@ -375,6 +421,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 f"in {options.output}"
             )
             return 0
+        # This sweep runs exclusively over the indexed validation partition (see
+        # evaluation.py's SUPPORTED_PARTITION); it never opens the protected test data.
         if options.command == "evaluate-threshold-sweep":
             sweep_config = load_threshold_sweep_config(options.config)
             result = evaluate_threshold_sweep_from_index(
@@ -390,6 +438,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 f"{result.window_count} validation windows in {options.output}"
             )
             return 0
+        # Indexing joins window shards to split membership; --input accepts either
+        # files or directories, expanded via _resolve_input_paths.
         if options.command == "index-dataset":
             index = create_dataset_index(
                 options.repository_root,
@@ -402,6 +452,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 f"{index.total_window_count} windows in {options.output}"
             )
             return 0
+        # run-pipeline is the composite command chaining every stage in order; it gets
+        # its own wall-clock timer and progress reporter since it's the longest-running
+        # single invocation a user is likely to make.
         if options.command == "run-pipeline":
             started_at = perf_counter()
             result = run_pipeline(
@@ -420,6 +473,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 f"{result.window_count} windows, manifest {result.run_manifest_path}"
             )
             return 0
+        # Ties inventory/split evidence, configs, and named artifacts together into
+        # one auditable manifest, independent of run-pipeline's own composite flow.
         if options.command == "create-run-manifest":
             manifest = create_run_manifest(
                 options.repository_root,
@@ -432,8 +487,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
             write_run_manifest(manifest, options.repository_root, options.output)
             print(f"recorded run {manifest.run_id} in {options.output}")
             return 0
+        # Reads only local artifact directory state (sizes, manifest presence); never
+        # touches dataset or model content.
         if options.command == "list-runs":
             summaries = list_runs(options.repository_root)
+            # --json emits a machine-readable array; the default mode prints one
+            # human-scannable summary line per run.
             if options.json_output:
                 print(
                     json.dumps(
@@ -452,8 +511,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
                     )
                 )
             else:
+                # An empty result set is worth an explicit message rather than silence,
+                # so a user knows the command ran successfully and simply found nothing.
                 if not summaries:
                     print("no local runs found")
+                # Print one summary line per run in the non-JSON, human-readable mode.
                 for summary in summaries:
                     manifest_note = "manifest" if summary.has_run_manifest else "no manifest"
                     print(
@@ -461,13 +523,21 @@ def main(arguments: Sequence[str] | None = None) -> int:
                         f"{len(summary.directories)} directories  {manifest_note}"
                     )
             return 0
+        # purge-run only removes one run's own artifact/interim/processed output
+        # directories, identified by run ID; it never touches the shared acquisition
+        # baseline or other runs' directories.
         if options.command == "purge-run":
             result = purge_run(options.repository_root, options.run_id, dry_run=options.dry_run)
             verb = "would remove" if result.dry_run else "removed"
+            # List every affected directory explicitly (rather than just a count), so
+            # --dry-run output is a trustworthy preview of exactly what --dry-run's
+            # absence would delete.
             for directory in result.removed_directories:
                 print(f"{verb} {directory}")
             print(f"{verb.capitalize()} {result.freed_bytes} bytes for run {result.run_id}")
             return 0
+        # split-windows only needs the split config and window artifacts -- unlike
+        # most other commands here, it doesn't load a dataset config at all.
         if options.command == "split-windows":
             split_config = load_split_config(options.split_config)
             metadata = load_window_metadata(_resolve_input_paths(options.input))
@@ -478,7 +548,13 @@ def main(arguments: Sequence[str] | None = None) -> int:
             )
             quality = create_split_quality_summary(split_config, manifest, metadata)
             write_split_quality_summary(quality, quality_path)
+            # Surface warning-severity violations on stderr immediately, even though
+            # enforce_split_quality below only raises on failure-severity ones -- a
+            # warning is informational and shouldn't block the command, but shouldn't
+            # be silent either.
             for violation in quality.violations:
+                # Only warning-severity violations print here; failures propagate via
+                # the enforce_split_quality() call below instead.
                 if violation.severity == "warning":
                     print(f"warning: {violation.message}", file=sys.stderr)
             enforce_split_quality(quality)
@@ -488,6 +564,10 @@ def main(arguments: Sequence[str] | None = None) -> int:
             )
             return 0
         config = load_dataset_config(options.config)
+        # The remaining commands (acquire, inventory, verify, validate-record,
+        # map-annotations, extract-windows) all share the same loaded dataset config
+        # and are mutually exclusive per invocation, so an elif chain (rather than
+        # separate early-return ifs like the commands above) is appropriate here.
         if options.command == "acquire":
             result = acquire_dataset(
                 config,
@@ -553,5 +633,15 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add repository-root and configuration arguments shared by CLI subcommands.
+
+    Every subcommand that ultimately calls load_dataset_config needs the same
+    --config/--data-dir pair; factoring their registration out here keeps that
+    duplication to one place instead of repeating it per subparser.
+
+    Args:
+        parser: The subparser to attach the shared arguments to.
+    """
+
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--data-dir", type=Path, required=True)

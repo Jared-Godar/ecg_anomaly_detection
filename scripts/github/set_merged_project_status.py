@@ -38,6 +38,18 @@ class StatusField:
 
 
 def _run_gh(args: list[str]) -> str:
+    """Run one fixed GitHub CLI command and return its captured output.
+
+    Args:
+        args: The `gh` subcommand and its arguments (without the leading "gh" itself).
+
+    Returns:
+        The command's captured stdout.
+    """
+
+    # Collapse "gh not installed" (FileNotFoundError) and "gh exited non-zero"
+    # (CalledProcessError, since check=True) into one ProjectStatusSyncError, so
+    # main()'s error handling only needs to catch this module's own exception type.
     try:
         # command is a fixed literal ("gh", *args) built from this module's own
         # subcommand arguments, not runtime/user-constructed input.
@@ -68,9 +80,13 @@ def fetch_status_field(owner: str, project_number: int) -> StatusField:
     args = ["project", "field-list", str(project_number), "--owner", owner, "--format", "json"]
     payload = json.loads(_run_gh(args))
     field = next((f for f in payload["fields"] if f.get("name") == "Status"), None)
+    # A project without a Status field at all can't be the field-id mutation target
+    # this script is designed to write to.
     if field is None:
         raise ProjectStatusSyncError(f"Project #{project_number} has no 'Status' field")
     option = next((o for o in field.get("options", []) if o.get("name") == "Merged"), None)
+    # Without a "Merged" option's node id, set_status_merged has no value to write --
+    # the Status field exists but doesn't have the specific option this script needs.
     if option is None:
         raise ProjectStatusSyncError(
             f"Project #{project_number}'s Status field has no 'Merged' option"
@@ -94,8 +110,13 @@ def find_pull_request_item_id(
         "500",
     ]
     payload = json.loads(_run_gh(args))
+    # Scan every project item for the one whose content matches this exact pull
+    # request (type + number + repo, since a project can track items across
+    # multiple repositories with overlapping PR numbers).
     for item in payload["items"]:
         content = item.get("content", {})
+        # All three fields must match: type distinguishes PRs from issues, number and
+        # repository together uniquely identify this exact pull request.
         if (
             content.get("type") == "PullRequest"
             and content.get("number") == pr_number
@@ -124,6 +145,15 @@ def set_status_merged(item_id: str, project_id: str, field: StatusField) -> None
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments for the merged-status sync entry point.
+
+    Args:
+        argv: Optional command-line arguments; defaults to the process arguments.
+
+    Returns:
+        Parsed arguments: PR number, repo, project owner, and project number.
+    """
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pr-number", type=int, required=True)
     parser.add_argument(
@@ -135,12 +165,29 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command-line entry point and return its process exit status.
+
+    Keeping orchestration here makes terminal behavior and error translation straightforward
+    to audit.
+
+    Args:
+        argv: Optional command-line arguments; defaults to the process arguments.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
     args = parse_args(argv)
 
+    # Every gh CLI failure mode this script can hit is collapsed into
+    # ProjectStatusSyncError by _run_gh; catch it once here for uniform error reporting.
     try:
         item_id = find_pull_request_item_id(
             args.owner, args.project_number, args.repo, args.pr_number
         )
+        # A PR that was never added to Project #5 has nothing to sync; this is a
+        # legitimate, non-fatal state (warn and exit 0), not a script failure, since
+        # not every merged PR is necessarily tracked on this project board.
         if item_id is None:
             print(
                 f"warning: pull request #{args.pr_number} is not a Project "
@@ -161,5 +208,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+# Standard script entry-point guard: only run main() when executed directly, not when
+# imported (e.g. by this script's own test module).
 if __name__ == "__main__":
     raise SystemExit(main())

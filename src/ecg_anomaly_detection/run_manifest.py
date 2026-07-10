@@ -19,7 +19,10 @@ from typing import Any
 from ecg_anomaly_detection.inventory import InventoryError, InventoryManifest, read_manifest
 from ecg_anomaly_detection.splitting import SplitError, read_split_manifest
 
+# Chunk size for streaming file reads during digest computation. 1 MiB balances syscall
+# overhead against peak memory for artifact files that can be large.
 BUFFER_SIZE = 1024 * 1024
+# See the attached docstring below for why this specific sentinel value was chosen.
 UNKNOWN_GIT_REVISION = "unknown"
 """Sentinel `GitState.revision` recorded when Git state cannot be captured.
 
@@ -146,8 +149,13 @@ def create_run_manifest(
 ) -> RunManifest:
     """Create an auditable manifest without embedding source or artifact contents."""
     root = repository_root.resolve()
+    # A pyproject.toml at the root is the cheapest available signal that this is really
+    # the repository root, before every evidence path below trusts it as the
+    # containment root.
     if not (root / "pyproject.toml").is_file():
         raise RunManifestError(f"repository root does not contain pyproject.toml: {root}")
+    # A manifest with zero configuration files would provide no evidence of what
+    # produced this run -- at least the dataset config is always expected.
     if not config_paths:
         raise RunManifestError("at least one configuration file is required")
 
@@ -160,11 +168,18 @@ def create_run_manifest(
     )
     resolved_paths = [_resolve_evidence_path(root, path) for path in all_paths]
     lock_path = _resolve_evidence_path(root, root / "uv.lock")
+    # A duplicated path would contribute the same file's evidence twice to the manifest.
     if len(set(resolved_paths)) != len(resolved_paths):
         raise RunManifestError("run inputs and artifacts must not contain duplicate paths")
+    # uv.lock is captured automatically below as dependency_lock; a caller repeating it
+    # in config/evidence/artifact paths would record its digest twice under different
+    # manifest sections, which is redundant and could drift if the file changes between
+    # the two captures.
     if lock_path in resolved_paths:
         raise RunManifestError("uv.lock is captured automatically and must not be repeated")
 
+    # inventory.py's own exception type is re-raised as this module's, so callers only
+    # need to catch RunManifestError for every failure mode here.
     try:
         inventory = read_manifest(resolved_paths[0])
     except InventoryError as error:
@@ -177,9 +192,14 @@ def create_run_manifest(
     evidence_end = config_end + len(evidence_paths)
 
     now = (clock or (lambda: datetime.now(UTC)))()
+    # created_at_utc is serialized with an explicit "Z" suffix below; a naive datetime
+    # would make that suffix a lie about the actual timezone the timestamp represents.
     if now.tzinfo is None:
         raise RunManifestError("run manifest clock must return a timezone-aware datetime")
     run_id = (run_id_factory or (lambda: str(uuid.uuid4())))()
+    # A factory (especially an injected test double) could return something that
+    # isn't a UUID at all; collapse every way uuid.UUID's constructor can reject that
+    # into one RunManifestError.
     try:
         uuid.UUID(run_id)
     except (AttributeError, TypeError, ValueError) as error:
@@ -208,18 +228,29 @@ def write_run_manifest(manifest: RunManifest, repository_root: Path, output_path
     """Write an ignored JSON run manifest within the repository boundary."""
     root = repository_root.resolve()
     output_candidate = output_path if output_path.is_absolute() else root / output_path
+    # Reject a symlink before resolving it: resolving would silently follow the link and
+    # write to wherever it points, defeating the repository-root containment check below.
     if output_candidate.is_symlink():
         raise RunManifestError("run manifest output must not be a symbolic link")
     resolved_output = output_candidate.resolve()
     _require_within_root(root, resolved_output, "run manifest output")
+    # relative_to raises ValueError when resolved_output escapes root; _require_within_root
+    # above already enforces this, so this branch is unreachable in practice, but the
+    # relative parts computed here are still needed for the artifacts/ check below.
     try:
         relative_output = resolved_output.relative_to(root)
     except ValueError as error:  # pragma: no cover - guarded by _require_within_root
         raise RunManifestError("run manifest output must stay within repository root") from error
+    # Run manifests are pipeline-generated evidence, matching this repository's
+    # directory contract for artifacts.
     if not relative_output.parts or relative_output.parts[0] != "artifacts":
         raise RunManifestError("run manifest output must be written under artifacts/")
+    # Enforce the extension so downstream tooling that globs for *.json manifests can
+    # rely on finding this file without a separate content sniff.
     if resolved_output.suffix != ".json":
         raise RunManifestError("run manifest output must use the .json extension")
+    # Fail before attempting the write rather than letting a missing parent directory
+    # surface as a generic OSError from write_text.
     if not resolved_output.parent.is_dir():
         raise RunManifestError(
             f"run manifest parent directory does not exist: {resolved_output.parent}"
@@ -229,12 +260,17 @@ def write_run_manifest(manifest: RunManifest, repository_root: Path, output_path
 
 def read_run_manifest(path: Path) -> RunManifest:
     """Load a previously written run manifest without recomputing any evidence."""
+    # Translate a missing, unreadable, or malformed-JSON file into RunManifestError.
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise RunManifestError(f"could not read run manifest {path}: {error}") from error
+    # Every field access in _manifest_from_document assumes document is a dict.
     if not isinstance(document, dict):
         raise RunManifestError(f"run manifest must be a JSON object: {path}")
+    # _manifest_from_document accesses many nested fields by key; collapse every way
+    # that can fail (a missing key, a wrong-shaped nested value) into one diagnostic
+    # naming the manifest path, rather than a bare KeyError deep in field construction.
     try:
         return _manifest_from_document(document)
     except (KeyError, TypeError, ValueError) as error:
@@ -242,6 +278,22 @@ def read_run_manifest(path: Path) -> RunManifest:
 
 
 def _manifest_from_document(document: dict[str, Any]) -> RunManifest:
+    """Reconstruct a RunManifest from its parsed JSON document.
+
+    The inverse of RunManifest.to_json's field layout; every nested structure
+    (GitState, EnvironmentSnapshot, DatasetEvidence, SplitEvidence, and their nested
+    FileEvidence/PartitionEvidence entries) is rebuilt field-by-field so a manifest
+    read back from disk is structurally identical to one just constructed by
+    create_run_manifest, without ever re-executing the evidence-gathering that
+    produced it.
+
+    Args:
+        document: The parsed run manifest JSON document.
+
+    Returns:
+        The reconstructed RunManifest.
+    """
+
     git = document["git"]
     environment = document["environment"]
     dataset = document["dataset"]
@@ -309,12 +361,31 @@ def _manifest_from_document(document: dict[str, Any]) -> RunManifest:
 
 
 def _file_evidence_from_document(value: dict[str, Any]) -> FileEvidence:
+    """Reconstruct one FileEvidence entry from its parsed JSON representation.
+
+    Args:
+        value: The parsed `{"path", "size_bytes", "sha256"}` JSON object.
+
+    Returns:
+        The reconstructed FileEvidence.
+    """
+
     return FileEvidence(path=value["path"], size_bytes=value["size_bytes"], sha256=value["sha256"])
 
 
 def _dataset_evidence(
     inventory: InventoryManifest, inventory_file: FileEvidence
 ) -> DatasetEvidence:
+    """Build the manifest's dataset evidence section from an already-verified inventory.
+
+    Args:
+        inventory: The verified inventory manifest supplying per-file evidence.
+        inventory_file: Digest evidence for the inventory manifest file itself.
+
+    Returns:
+        Aggregate dataset identity and file evidence for the run manifest.
+    """
+
     return DatasetEvidence(
         dataset_slug=inventory.dataset_slug,
         dataset_version=inventory.dataset_version,
@@ -330,6 +401,18 @@ def _dataset_evidence(
 
 
 def _read_split_evidence(path: Path, split_file: FileEvidence) -> SplitEvidence:
+    """Read and validate a split manifest, copying its summary into run-manifest evidence.
+
+    Args:
+        path: Path to the split manifest JSON file.
+        split_file: Digest evidence for the split manifest file itself.
+
+    Returns:
+        The split's identity, config lineage, and per-partition evidence.
+    """
+
+    # splitting.py's own exception type is re-raised as this module's, so callers only
+    # need to catch RunManifestError for every failure mode here.
     try:
         manifest = read_split_manifest(path)
     except SplitError as error:
@@ -363,6 +446,25 @@ def _read_split_evidence(path: Path, split_file: FileEvidence) -> SplitEvidence:
 
 
 def _capture_git_state(repository_root: Path) -> GitState:
+    """Capture the current Git commit and dirty-worktree state, degrading gracefully.
+
+    Unlike most validation in this package, a Git failure here (not a repository, git
+    not installed, detached/shallow clone quirks) degrades to UNKNOWN_GIT_REVISION
+    rather than raising -- run manifests should still be produced in a non-Git
+    checkout (e.g. a downloaded source archive), just with weaker provenance evidence.
+    A malformed-but-present revision, by contrast, does raise (see below), since that
+    indicates something is actually wrong rather than merely unavailable.
+
+    Args:
+        repository_root: The Git working directory to query.
+
+    Returns:
+        The captured (or UNKNOWN_GIT_REVISION-sentinel) Git state.
+    """
+
+    # Collapse "git not installed" (OSError) and "not a Git repository or other git
+    # failure" (CalledProcessError, since check=True) into the same unknown-state
+    # fallback below, rather than raising.
     try:
         # both command lists below are fixed literals, not runtime/user-constructed input.
         revision = subprocess.run(
@@ -381,15 +483,31 @@ def _capture_git_state(repository_root: Path) -> GitState:
         ).stdout
     except (OSError, subprocess.CalledProcessError):
         return GitState(revision=UNKNOWN_GIT_REVISION, dirty=None)
+    # Unlike a git command failing outright (handled above), a revision that's present
+    # but malformed indicates something is genuinely wrong (a corrupted repository, an
+    # unexpected git output format) rather than merely "Git unavailable" -- this is
+    # deliberately a hard failure, not a graceful degrade to UNKNOWN_GIT_REVISION.
     if len(revision) != 40 or any(character not in string.hexdigits for character in revision):
         raise RunManifestError("Git revision must be a full 40-character commit hash")
     return GitState(revision=revision.lower(), dirty=bool(status.strip()))
 
 
 def _capture_environment() -> EnvironmentSnapshot:
+    """Capture interpreter identity and every installed package's version.
+
+    Returns:
+        Runtime and dependency-version evidence for the current environment.
+    """
+
     packages: dict[str, str] = {}
+    # Enumerate every installed distribution (not just this package's direct
+    # dependencies), so the manifest captures the complete resolved environment uv
+    # actually installed, matching what uv.lock's own digest attests to.
     for distribution in metadata.distributions():
         name = distribution.metadata.get("Name")
+        # A distribution without a Name field is unusable as a dict key; skip it
+        # rather than recording it under a placeholder that could collide with a
+        # real package name.
         if name:
             packages[name.lower()] = distribution.version
     return EnvironmentSnapshot(
@@ -402,20 +520,51 @@ def _capture_environment() -> EnvironmentSnapshot:
 
 
 def _resolve_evidence_path(repository_root: Path, path: Path) -> Path:
+    """Resolve a run-evidence path and enforce it stays within the repository root.
+
+    Shared by every category of evidence create_run_manifest collects (inventory,
+    split manifest, configs, evidence files, artifacts, uv.lock).
+
+    Args:
+        repository_root: Repository root used to enforce path and trust boundaries.
+        path: The candidate path, absolute or relative to repository_root.
+
+    Returns:
+        The resolved, validated absolute path.
+    """
+
     candidate = path if path.is_absolute() else repository_root / path
+    # Reject a symlink before resolving it, so a link that points outside the
+    # repository can't be validated against a resolved target it doesn't actually name.
     if candidate.is_symlink():
         raise RunManifestError(f"run evidence must not be a symbolic link: {candidate}")
     resolved = candidate.resolve()
     _require_within_root(repository_root, resolved, "run evidence")
+    # A directory or special file can't be hashed as file content by _file_evidence.
     if not resolved.is_file():
         raise RunManifestError(f"run evidence must be a regular file: {resolved}")
     return resolved
 
 
 def _file_evidence(repository_root: Path, path: Path) -> FileEvidence:
+    """Hash and size one file, recording it as repository-relative FileEvidence.
+
+    Args:
+        repository_root: Repository root, used to store the evidence's path relative
+            rather than absolute (so manifests remain portable across checkouts).
+        path: The already-resolved, validated file path to hash.
+
+    Returns:
+        The file's repository-relative path, size, and SHA-256 digest.
+    """
+
     digest = hashlib.sha256()
     size_bytes = 0
+    # Read in fixed-size chunks rather than the whole file at once, since some
+    # evidence/artifact files can be large.
     with path.open("rb") as source:
+        # The walrus operator lets both the read and the loop's termination condition
+        # (an empty final chunk) live in one line without a separate `break`.
         while chunk := source.read(BUFFER_SIZE):
             digest.update(chunk)
             size_bytes += len(chunk)
@@ -427,6 +576,19 @@ def _file_evidence(repository_root: Path, path: Path) -> FileEvidence:
 
 
 def _require_within_root(repository_root: Path, path: Path, description: str) -> None:
+    """Require an evidence path to resolve inside the repository root.
+
+    Shared boundary check used by both _resolve_evidence_path (for inputs) and
+    write_run_manifest (for the output path).
+
+    Args:
+        repository_root: Repository root used to enforce path and trust boundaries.
+        path: The already-resolved path to check.
+        description: Human-readable label for this path, used in the error message.
+    """
+
+    # relative_to raises ValueError when path escapes repository_root (e.g. via `..`
+    # segments); translate that into this module's own exception type.
     try:
         path.relative_to(repository_root)
     except ValueError as error:

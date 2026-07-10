@@ -14,15 +14,32 @@ from ecg_anomaly_detection.run_manifest import (
     SplitEvidence,
 )
 
+# Centralize RUN_ID so every caller shares the same documented invariant.
 RUN_ID = "12345678-1234-5678-1234-567812345678"
 
 
 def _policy_text() -> str:
+    """Read the repository's real, committed configs/benchmark-policy-v1.toml as text.
+
+    Returns:
+        The committed benchmark policy file's full text.
+    """
+
     root = Path(__file__).parents[2]
     return (root / "configs" / "benchmark-policy-v1.toml").read_text(encoding="utf-8")
 
 
 def _manifest_json() -> str:
+    """A complete, minimal RunManifest for RUN_ID, serialized to JSON.
+
+    Every RunManifest field is populated with a small but structurally valid
+    value, since record-benchmark-approval reads and cross-checks the whole
+    manifest (not just run_id) against the policy and approval file.
+
+    Returns:
+        The manifest's JSON serialization.
+    """
+
     manifest = RunManifest(
         schema_version=1,
         run_id=RUN_ID,
@@ -82,6 +99,12 @@ def _manifest_json() -> str:
 
 
 def _approval_text() -> str:
+    """An approval TOML document whose candidate_run_id matches _manifest_json's RUN_ID.
+
+    Returns:
+        The approval file's full text.
+    """
+
     return (
         "schema_version = 1\n\n"
         "[approval]\n"
@@ -97,6 +120,13 @@ def _approval_text() -> str:
 
 
 def test_record_benchmark_approval_command_records_approval_evidence(tmp_path: Path) -> None:
+    """`ecg-data record-benchmark-approval` with a matching manifest and approval writes an
+    approval record carrying the run ID and the policy's own ID.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     (tmp_path / "artifacts").mkdir()
     policy_path = tmp_path / "policy.toml"
     policy_path.write_text(_policy_text(), encoding="utf-8")
@@ -132,6 +162,17 @@ def test_record_benchmark_approval_command_records_approval_evidence(tmp_path: P
 def test_record_benchmark_approval_command_fails_closed_on_candidate_mismatch(
     tmp_path: Path,
 ) -> None:
+    """An approval file whose candidate_run_id doesn't match the run manifest's run_id is
+    rejected, and no approval record is written.
+
+    This is the direct enforcement point of "an approval can only ratify the
+    specific run it names" -- a mismatched ID would let one approval be
+    reused (accidentally or otherwise) to certify a different run.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     (tmp_path / "artifacts").mkdir()
     policy_path = tmp_path / "policy.toml"
     policy_path.write_text(_policy_text(), encoding="utf-8")

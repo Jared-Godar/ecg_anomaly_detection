@@ -21,8 +21,27 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
     tmp_path_factory: pytest.TempPathFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A full `run-pipeline` invocation, run twice, exercises every stage and stays idempotent.
+
+    The most comprehensive test in this repository: seeds three synthetic WFDB records,
+    runs the entire acquisition-through-evaluation pipeline via the CLI (with only the
+    HTTPS fetcher faked out, so every other stage runs its real, unmodified code path),
+    then re-runs the identical command a second time to confirm acquisition's
+    verify-and-reuse resume path works end to end (no re-downloads) while still
+    producing a fresh, independent run directory and manifest.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory, used as the fake
+            repository root.
+        tmp_path_factory: Used to create a separate staging directory for the
+            synthetic WFDB source records, outside the fake repository.
+        monkeypatch: Used to replace the real HTTPS fetcher with a fake serving the
+            synthetic records' bytes.
+    """
+
     source_dir = tmp_path_factory.mktemp("wfdb-source")
     record_ids = ("100", "101", "102")
+    # Generate one synthetic WFDB record per configured record ID.
     for record_id in record_ids:
         _write_synthetic_record(source_dir, record_id)
     payloads = {
@@ -34,6 +53,22 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
     calls: list[str] = []
 
     def fake_fetch(url: str, output: Path, _: float, __: int) -> TransferResult:
+        """Serve pre-generated synthetic bytes instead of making a real HTTPS request.
+
+        Records every requested URL in `calls` so the test can assert the second
+        `run-pipeline` invocation makes zero fetch calls (proving the resume path
+        reused files rather than re-downloading).
+
+        Args:
+            url: The requested download URL, recorded into `calls`.
+            output: Where to write the served synthetic content.
+            _: Timeout, unused by this fake.
+            __: Size cap, unused by this fake.
+
+        Returns:
+            The digest of the served content.
+        """
+
         content = payloads[output.name]
         output.write_bytes(content)
         calls.append(url)
@@ -66,6 +101,9 @@ def test_pipeline_command_connects_all_supported_stages_without_network(
     assert second_exit_code == 0
     assert len(calls) == 9
     assert len(run_directories) == 2
+    # Verify both runs independently: each run gets its own directory, manifest, and
+    # complete set of stage outputs, even though the second run reused acquisition's
+    # cached files rather than re-downloading them.
     for run_directory in run_directories:
         assert len(tuple((run_directory / "validation").glob("*.json"))) == 3
         assert len(tuple((run_directory / "mapping").glob("*.json"))) == 3
@@ -149,8 +187,27 @@ def test_run_pipeline_command_emits_stage_progress_and_total_elapsed_time(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """`run-pipeline`'s stdout reports every stage's start/completion and a final elapsed time.
+
+    Protects the ProgressReporter integration end to end: every one of the 7 reported
+    stages must print both a "starting" and "complete in" line, per-record progress
+    notes must appear for each configured record, and the final line must report the
+    run's total elapsed time -- confirming CLI users actually see this feedback, not
+    just that ProgressReporter's own unit tests pass in isolation.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory, used as the fake
+            repository root.
+        tmp_path_factory: Used to create a separate staging directory for the
+            synthetic WFDB source records, outside the fake repository.
+        monkeypatch: Used to replace the real HTTPS fetcher with a fake serving the
+            synthetic records' bytes.
+        capsys: Used to capture the CLI's stdout for the assertions below.
+    """
+
     source_dir = tmp_path_factory.mktemp("wfdb-source")
     record_ids = ("100", "101", "102")
+    # Generate one synthetic WFDB record per configured record ID.
     for record_id in record_ids:
         _write_synthetic_record(source_dir, record_id)
     payloads = {
@@ -161,6 +218,19 @@ def test_run_pipeline_command_emits_stage_progress_and_total_elapsed_time(
     _initialize_repository(tmp_path, record_ids, payloads)
 
     def fake_fetch(url: str, output: Path, _: float, __: int) -> TransferResult:
+        """Serve pre-generated synthetic bytes instead of making a real HTTPS request.
+
+        Args:
+            url: The requested download URL, unused by this fake (no call recording
+                needed in this test, unlike the idempotency test above).
+            output: Where to write the served synthetic content.
+            _: Timeout, unused by this fake.
+            __: Size cap, unused by this fake.
+
+        Returns:
+            The digest of the served content.
+        """
+
         content = payloads[output.name]
         output.write_bytes(content)
         return TransferResult(len(content), hashlib.sha256(content).hexdigest())
@@ -189,6 +259,8 @@ def test_run_pipeline_command_emits_stage_progress_and_total_elapsed_time(
 
     assert exit_code == 0
     assert "run " in output.splitlines()[0]
+    # Confirm every one of the 7 stages reported both a starting and completion line,
+    # in the pipeline's own fixed stage order.
     for index, name in enumerate(
         (
             "acquisition",
@@ -203,6 +275,7 @@ def test_run_pipeline_command_emits_stage_progress_and_total_elapsed_time(
     ):
         assert f"[{index}/7] {name}: starting" in output
         assert f"[{index}/7] {name}: complete in" in output
+    # Confirm per-record progress notes were printed for every configured record.
     for record_id in record_ids:
         assert f"({record_id}): " in output
     assert "completed run " in output.splitlines()[-1]
@@ -212,6 +285,20 @@ def test_run_pipeline_command_emits_stage_progress_and_total_elapsed_time(
 def _initialize_repository(
     root: Path, record_ids: tuple[str, ...], payloads: dict[str, bytes]
 ) -> None:
+    """Build a complete fake repository: skeleton dirs, all six pipeline configs, and a Git commit.
+
+    Every config here is a minimal, internally consistent set matching the synthetic
+    fixture data (three records, 4 Hz sample rate, tiny window/split geometry) so
+    run_pipeline's real, unmodified code can execute against it end to end. A real Git
+    commit is required since run_manifest.py's git-state capture shells out to `git
+    rev-parse`/`git status`, which would otherwise report UNKNOWN_GIT_REVISION.
+
+    Args:
+        root: Repository root used to enforce path and trust boundaries.
+        record_ids: The record IDs to declare in the dataset config.
+        payloads: Every source file's content, used to compute expected_source_files digests.
+    """
+
     (root / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     (root / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     (root / ".gitignore").write_text(
@@ -350,6 +437,13 @@ zero_division = 0.0
 
 
 def _write_synthetic_record(directory: Path, record_id: str) -> None:
+    """Write one 4-second synthetic WFDB record with three well-spaced N/V/N beats.
+
+    Args:
+        directory: Where to write the record's WFDB companion files.
+        record_id: The record's base filename (matches the dataset config's record_ids).
+    """
+
     sample_axis = np.linspace(0.0, 1.0, 16, endpoint=False)
     signals = np.column_stack((np.sin(2 * np.pi * sample_axis), np.cos(2 * np.pi * sample_axis)))
     wfdb.wrsamp(

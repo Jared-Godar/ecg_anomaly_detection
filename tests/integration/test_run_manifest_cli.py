@@ -8,6 +8,18 @@ from ecg_anomaly_detection.cli import main
 
 
 def test_create_run_manifest_command_records_local_evidence(tmp_path: Path) -> None:
+    """`ecg-data create-run-manifest` assembles git, dependency-lock, dataset, split, and config
+    evidence into one run manifest file, through the real CLI and a real git repository.
+
+    A real `git init`/commit is performed on tmp_path (rather than mocking
+    git) so the 40-character commit SHA and dirty=True (from the untracked
+    file added after the commit) are genuine git output, not fixtures.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory, used as
+            both the fixture repository root and a real git working tree.
+    """
+
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     (tmp_path / "artifacts").mkdir()

@@ -9,6 +9,14 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Added
 
+- Added a comprehensive internal-documentation standard across every supported Python file under
+  `src/`, `scripts/`, and `tests/`: all modules, classes, functions, methods, and nested callables
+  now carry docstrings, while control flow, resource management, setup, assertions, and other
+  meaningful blocks include intentionally explicit comments describing both behavior and design
+  intent. Added `scripts/check_code_commentary.py`, its focused test suite, an always-run
+  pre-commit hook, and `docs/code-commentary-audit.md` to preserve the complete audited inventory
+  and prevent structural coverage from regressing. The historical `archive/original_2022/` tree is
+  intentionally unchanged (#149).
 - Added CI status, license, and Python-version badges to `README.md` (`Quality gates` workflow
   badge, MIT license, Python 3.12/3.13), confirmed green on `main` before badging (#94).
 - Added `src/ecg_anomaly_detection/benchmark_approval.py` (`ApprovalInput`, `ApprovalRecord`,

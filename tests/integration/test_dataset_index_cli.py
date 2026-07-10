@@ -11,6 +11,13 @@ from ecg_anomaly_detection.cli import main
 
 
 def _write_shard(path: Path, record_id: str) -> None:
+    """Write one valid window-shard NPZ artifact for record_id, matching windows.py's real output shape.
+
+    Args:
+        path: Where to write the NPZ artifact.
+        record_id: The record ID both windows in this shard belong to.
+    """
+
     windows = np.asarray([[1.0, 2.0, 3.0, 4.0], [4.0, 3.0, 2.0, 1.0]])
     np.savez_compressed(
         path,
@@ -38,6 +45,17 @@ def _write_shard(path: Path, record_id: str) -> None:
 def _write_split_manifest(
     path: Path, record_ids: tuple[str, ...], source_artifacts: tuple[str, ...]
 ) -> None:
+    """Write a split manifest assigning each of record_ids to a distinct partition (train/validation/test).
+
+    Args:
+        path: Where to write the split-manifest JSON.
+        record_ids: One record ID per partition, assigned in
+            (train, validation, test) order; fewer than three leaves the
+            remaining partitions unassigned.
+        source_artifacts: The shard paths this split manifest claims to
+            derive from, recorded for provenance only.
+    """
+
     payload = {
         "schema_version": 2,
         "split_name": "grouped",
@@ -69,12 +87,20 @@ def _write_split_manifest(
 
 
 def test_index_dataset_accepts_a_directory_of_shards(tmp_path: Path) -> None:
+    """`ecg-data index-dataset --input <directory>` discovers every shard in that directory and
+    builds a dataset index with the correct total record/window counts.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     interim = tmp_path / "data" / "interim" / "runs" / "test" / "windows"
     interim.mkdir(parents=True)
     artifacts = tmp_path / "artifacts" / "runs" / "test"
     artifacts.mkdir(parents=True)
     record_ids = ("100", "101", "102")
+    # Write one shard per record, matching the split manifest built below.
     for record_id in record_ids:
         _write_shard(interim / f"{record_id}.npz", record_id)
     split_path = artifacts / "split.json"
@@ -107,6 +133,12 @@ def test_index_dataset_accepts_a_directory_of_shards(tmp_path: Path) -> None:
 
 
 def test_index_dataset_reports_a_nonexistent_input_path(tmp_path: Path) -> None:
+    """`index-dataset --input <missing directory>` exits 1 rather than crashing with a raw traceback.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     artifacts = tmp_path / "artifacts" / "runs" / "test"
     artifacts.mkdir(parents=True)

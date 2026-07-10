@@ -21,11 +21,23 @@ from ecg_anomaly_detection.run_manifest import (
     SplitEvidence,
 )
 
+# A well-formed 40-char-hex-looking UUID used as the "real" candidate run's ID across
+# these tests; matches _manifest()'s default run_id so the happy-path tests align by default.
 RUN_ID = "12345678-1234-5678-1234-567812345678"
+# A second, distinct run ID used only by the run_manifest_reference mismatch test, to
+# simulate an approval input naming a different run than the manifest actually describes.
 OTHER_RUN_ID = "87654321-4321-8765-4321-876543218765"
+# Fake but consistently reused config paths, shared between _manifest's
+# configuration_files and _approval_text's lineage_configuration_paths so the two
+# agree by default, matching what _configuration_hash_present requires.
 DATASET_CONFIG_PATH = "configs/dataset.toml"
+# See DATASET_CONFIG_PATH's comment above; same reasoning applies to this path.
 TRAINING_CONFIG_PATH = "configs/training.toml"
+# See DATASET_CONFIG_PATH's comment above; same reasoning applies to this path.
 EVALUATION_CONFIG_PATH = "configs/evaluation.toml"
+# Mirrors benchmark_policy.py's REQUIRED_LINEAGE_REFERENCES; kept as a separate local
+# constant (not imported) so a test comparing against it would catch an accidental
+# drift between the two, rather than the comparison trivially matching itself.
 ALL_REFERENCES = frozenset(
     {
         "repository_commit_hash",
@@ -40,6 +52,15 @@ ALL_REFERENCES = frozenset(
 
 
 def _policy_text() -> str:
+    """Read the repository's real, committed benchmark-policy TOML as a test fixture.
+
+    Using the real config (rather than a synthetic one) means these tests exercise
+    load_benchmark_policy against the actual governance document this repository ships.
+
+    Returns:
+        The raw TOML content of configs/benchmark-policy-v1.toml.
+    """
+
     root = Path(__file__).parents[2]
     return (root / "configs" / "benchmark-policy-v1.toml").read_text(encoding="utf-8")
 
@@ -58,6 +79,26 @@ def _manifest(
         FileEvidence(EVALUATION_CONFIG_PATH, 1, "h" * 64),
     ),
 ) -> RunManifest:
+    """Build a complete, valid RunManifest, with every field overridable per-test.
+
+    Every keyword defaults to a value that makes record_benchmark_approval succeed;
+    individual tests override exactly the field(s) needed to trigger one specific
+    missing-lineage-reference failure, keeping each test's intent focused.
+
+    Args:
+        run_id: The manifest's own run_id.
+        git_revision: The manifest's git.revision; override with a malformed value or
+            UNKNOWN_GIT_REVISION to test the repository_commit_hash lineage check.
+        split_name: The manifest's split.split_name; override with "" to test the
+            split_identity lineage check.
+        evidence_files: The manifest's evidence_files; override with () to test the
+            reproducibility_evidence_reference lineage check.
+        configuration_files: The manifest's configuration_files.
+
+    Returns:
+        A fully populated RunManifest.
+    """
+
     return RunManifest(
         schema_version=1,
         run_id=run_id,
@@ -119,6 +160,22 @@ def _approval_text(
     prior_attempt_exists: str = "false",
     lineage_configuration_paths: dict[str, str] | None = None,
 ) -> str:
+    """Build a valid `[approval]` TOML document, with every field overridable per-test.
+
+    Args:
+        owner: The approval.owner field.
+        candidate_run_id: The approval.candidate_run_id field; override to mismatch
+            _manifest()'s run_id and test the run_manifest_reference lineage check.
+        purpose: The approval.purpose field.
+        prior_attempt_exists: The approval.prior_attempt_exists field, as a literal
+            TOML boolean token (not a Python bool), since this builds raw TOML text.
+        lineage_configuration_paths: Override to point a reference at a nonexistent
+            path (testing that config's hash-presence check) or omit an entry entirely.
+
+    Returns:
+        The raw TOML content for one `[approval]` document.
+    """
+
     paths = (
         {
             "dataset_configuration_hash": DATASET_CONFIG_PATH,
@@ -143,16 +200,42 @@ def _approval_text(
 
 @pytest.fixture
 def repository(tmp_path: Path) -> Path:
+    """A fake repository root with an empty artifacts/ directory for approval output.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+
+    Returns:
+        The fake repository root path.
+    """
+
     (tmp_path / "artifacts").mkdir()
     return tmp_path
 
 
 def _write(path: Path, content: str) -> Path:
+    """Write text content to a path and return that same path, for compact test setup.
+
+    Args:
+        path: Destination path to write to.
+        content: Text content to write.
+
+    Returns:
+        The same `path`, unchanged, so callers can inline this in an assignment.
+    """
+
     path.write_text(content, encoding="utf-8")
     return path
 
 
 def test_record_benchmark_approval_succeeds_and_writes_evidence(repository: Path) -> None:
+    """A fully valid policy/manifest/approval trio succeeds and writes a complete record.
+
+    Confirms the happy path end to end: every one of the 7 required lineage
+    references is verified present (matching ALL_REFERENCES exactly), and the written
+    JSON output reflects the approval input's own fields.
+    """
+
     policy_path = _write(repository / "policy.toml", _policy_text())
     manifest_path = _write(repository / "run-manifest.json", _manifest().to_json())
     approval_path = _write(repository / "approval.toml", _approval_text())
@@ -172,6 +255,13 @@ def test_record_benchmark_approval_succeeds_and_writes_evidence(repository: Path
 
 
 def test_record_benchmark_approval_rejects_missing_owner(repository: Path) -> None:
+    """An approval input missing the required `owner` field is rejected before verification.
+
+    Protects load_approval_input's own field validation, independent of the lineage
+    checks: a structurally incomplete approval document must fail before
+    record_benchmark_approval even reaches policy/manifest cross-checking.
+    """
+
     policy_path = _write(repository / "policy.toml", _policy_text())
     manifest_path = _write(repository / "run-manifest.json", _manifest().to_json())
     approval_path = _write(
@@ -180,6 +270,7 @@ def test_record_benchmark_approval_rejects_missing_owner(repository: Path) -> No
     )
     output_path = repository / "artifacts" / "benchmark_approval.json"
 
+    # The owner line was stripped from the approval TOML above.
     with pytest.raises(BenchmarkApprovalError, match="approval.owner"):
         record_benchmark_approval(
             repository, policy_path, manifest_path, approval_path, output_path
@@ -187,6 +278,13 @@ def test_record_benchmark_approval_rejects_missing_owner(repository: Path) -> No
 
 
 def test_record_benchmark_approval_rejects_disabled_policy(repository: Path) -> None:
+    """A policy with test_evaluation_enabled flipped to true is rejected outright.
+
+    Protects the core governance invariant enforced by load_benchmark_policy: no
+    policy may enable test-partition evaluation, regardless of how well-formed
+    everything else about it is.
+    """
+
     policy_path = _write(
         repository / "policy.toml",
         _policy_text().replace("test_evaluation_enabled = false", "test_evaluation_enabled = true"),
@@ -195,6 +293,7 @@ def test_record_benchmark_approval_rejects_disabled_policy(repository: Path) -> 
     approval_path = _write(repository / "approval.toml", _approval_text())
     output_path = repository / "artifacts" / "benchmark_approval.json"
 
+    # test_evaluation_enabled was flipped to true in the policy TOML above.
     with pytest.raises(BenchmarkApprovalError, match="must be false"):
         record_benchmark_approval(
             repository, policy_path, manifest_path, approval_path, output_path
@@ -264,11 +363,21 @@ def test_record_benchmark_approval_fails_closed_on_missing_lineage_reference(
     manifest_kwargs: dict[str, Any],
     approval_kwargs: dict[str, Any],
 ) -> None:
+    """Each of the 7 required lineage references independently blocks approval when missing.
+
+    One parametrized regression test covering every branch of
+    _missing_lineage_references: each case breaks exactly one lineage reference (via
+    the manifest or approval kwargs) while leaving the other 6 valid, confirming the
+    checks are independent rather than one masking another.
+    """
+
     policy_path = _write(repository / "policy.toml", _policy_text())
     manifest_path = _write(repository / "run-manifest.json", _manifest(**manifest_kwargs).to_json())
     approval_path = _write(repository / "approval.toml", _approval_text(**approval_kwargs))
     output_path = repository / "artifacts" / "benchmark_approval.json"
 
+    # Exactly one lineage reference (named by missing_reference) was broken by this
+    # parametrization's manifest_kwargs/approval_kwargs.
     with pytest.raises(BenchmarkApprovalError, match=missing_reference):
         record_benchmark_approval(
             repository, policy_path, manifest_path, approval_path, output_path
@@ -291,6 +400,7 @@ def test_record_benchmark_approval_fails_closed_on_degraded_git_state(repository
     approval_path = _write(repository / "approval.toml", _approval_text())
     output_path = repository / "artifacts" / "benchmark_approval.json"
 
+    # UNKNOWN_GIT_REVISION is not a valid 40-char hex commit hash.
     with pytest.raises(BenchmarkApprovalError, match="repository_commit_hash"):
         record_benchmark_approval(
             repository, policy_path, manifest_path, approval_path, output_path
@@ -315,6 +425,8 @@ def test_record_benchmark_approval_fails_closed_on_unknown_lineage_reference(
     approval_path = _write(repository / "approval.toml", _approval_text())
     output_path = repository / "artifacts" / "benchmark_approval.json"
 
+    # "future_requirement" has no dedicated check in _missing_lineage_references, so
+    # it must fall through to the catch-all else branch and fail closed.
     with pytest.raises(BenchmarkApprovalError, match="future_requirement"):
         record_benchmark_approval(
             repository, policy_path, manifest_path, approval_path, output_path

@@ -10,6 +10,12 @@ from ecg_anomaly_detection.cli import main
 
 
 def test_inventory_then_verify_commands(tmp_path: Path) -> None:
+    """`ecg-data inventory` writes a manifest that a subsequent `ecg-data verify` accepts unchanged.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     config_path = tmp_path / "dataset.toml"
     config_path.write_text(
         """
@@ -29,6 +35,7 @@ required_extensions = ["atr", "dat", "hea"]
     )
     data_dir = tmp_path / "raw"
     data_dir.mkdir()
+    # Write one distinct-content file per required extension, matching dataset.toml above.
     for extension in ("atr", "dat", "hea"):
         (data_dir / f"100.{extension}").write_bytes(extension.encode())
     manifest_path = tmp_path / "inventory.json"
@@ -64,6 +71,19 @@ required_extensions = ["atr", "dat", "hea"]
 def test_check_local_notebooks_cli_emits_json_without_execution(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """`ecg-data check-local-notebooks --json` reports a notebook as valid without ever running
+    its cells, even though the one cell present would raise if executed.
+
+    check_notebooks's "never executes cells" guarantee is what this test
+    actually protects; if the CLI ever started executing notebooks, this
+    deliberately-raising cell would surface as a crash instead of a clean
+    JSON report.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+        capsys: Used to capture and parse main's printed stdout as JSON.
+    """
+
     path = tmp_path / "notebooks/local/example.ipynb"
     path.parent.mkdir(parents=True)
     notebook = nbformat.v4.new_notebook(

@@ -36,6 +36,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: code-commentary
+        name: exhaustive code commentary audit
+        entry: uv run python scripts/check_code_commentary.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: pyright
         name: pyright type checking
         entry: uv run pyright

@@ -12,6 +12,9 @@ from ecg_anomaly_detection.config import (
 
 
 def test_repository_paths_discover_project_root() -> None:
+    """RepositoryPaths.discover walks up from this test file to find the repo root (has pyproject.toml)
+    and derives configs/, data/raw/, and artifacts/ relative to it."""
+
     paths = RepositoryPaths.discover(Path(__file__))
 
     assert (paths.root / "pyproject.toml").is_file()
@@ -21,6 +24,13 @@ def test_repository_paths_discover_project_root() -> None:
 
 
 def test_mitdb_config_defines_complete_required_inventory() -> None:
+    """The real, committed configs/mitdb-v1.0.0.toml loads with the full expected MIT-BIH inventory.
+
+    Confirms the 48-record database resolves to exactly 144 expected files
+    (48 records x 3 extensions), and that the first record's known file size
+    and SHA-256 digest are captured for later integrity verification.
+    """
+
     paths = RepositoryPaths.discover(Path(__file__))
     config = load_dataset_config(paths.configs / "mitdb-v1.0.0.toml")
 
@@ -39,6 +49,15 @@ def test_mitdb_config_defines_complete_required_inventory() -> None:
 
 
 def test_config_rejects_duplicate_inventory_values(tmp_path: Path) -> None:
+    """A dataset config listing the same record ID twice ("100", "100") is rejected as non-unique.
+
+    A duplicate record ID would make the expected-file inventory ambiguous
+    and could silently double-count a record's files.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     config_path = tmp_path / "invalid.toml"
     config_path.write_text(
         """
@@ -57,11 +76,18 @@ required_extensions = ["dat"]
         encoding="utf-8",
     )
 
+    # record_ids = ["100", "100"] above repeats the same ID twice.
     with pytest.raises(ConfigurationError, match="unique"):
         load_dataset_config(config_path)
 
 
 def test_config_rejects_insecure_download_url(tmp_path: Path) -> None:
+    """A dataset config with a plain http:// download_url is rejected; only HTTPS is accepted.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+    """
+
     config_path = tmp_path / "invalid-url.toml"
     config_path.write_text(
         """
@@ -80,5 +106,6 @@ required_extensions = ["dat"]
         encoding="utf-8",
     )
 
+    # download_url above uses "http://", not "https://".
     with pytest.raises(ConfigurationError, match="HTTPS URL"):
         load_dataset_config(config_path)

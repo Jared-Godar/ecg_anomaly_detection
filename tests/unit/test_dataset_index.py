@@ -19,6 +19,19 @@ from ecg_anomaly_detection.splitting import (
 
 @pytest.fixture
 def indexed_repository(tmp_path: Path) -> tuple[Path, Path, list[Path]]:
+    """A fake repository with 3 written window shards and a matching split manifest.
+
+    Each of the 3 records is assigned to a different partition (train/validation/test)
+    with 2 windows and both target classes, so index-building and its cross-checks
+    against the split manifest have real, non-degenerate data to exercise.
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+
+    Returns:
+        The repository root, the split manifest path, and the three shard paths.
+    """
+
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
     interim = tmp_path / "data" / "interim" / "runs" / "test" / "windows"
     processed = tmp_path / "data" / "processed" / "runs" / "test"
@@ -27,6 +40,7 @@ def indexed_repository(tmp_path: Path) -> tuple[Path, Path, list[Path]]:
     processed.mkdir(parents=True)
     artifacts.mkdir(parents=True)
     shard_paths = []
+    # Write one shard per record, matching the split manifest built below.
     for record_id in ("100", "101", "102"):
         path = interim / f"{record_id}.npz"
         _write_shard(path, record_id)
@@ -70,6 +84,13 @@ def indexed_repository(tmp_path: Path) -> tuple[Path, Path, list[Path]]:
 def test_dataset_index_preserves_grouped_shards_without_copying_arrays(
     indexed_repository: tuple[Path, Path, list[Path]],
 ) -> None:
+    """create_dataset_index joins split membership to shard evidence without duplicating window data.
+
+    Confirms every shard's record/subject/digest fields are correctly assembled from
+    the split manifest, and that the on-disk shard files themselves are left untouched
+    (never copied or moved) -- the index only ever references them by digest and path.
+    """
+
     repository, split_path, shard_paths = indexed_repository
     index = create_dataset_index(repository, split_path, shard_paths)
     output = repository / "data" / "processed" / "runs" / "test" / "dataset-index.json"
@@ -91,9 +112,12 @@ def test_dataset_index_preserves_grouped_shards_without_copying_arrays(
 def test_dataset_index_rejects_nonfinite_window_shard(
     indexed_repository: tuple[Path, Path, list[Path]],
 ) -> None:
+    """A shard containing a NaN window value is rejected before it could reach a model."""
+
     repository, split_path, shard_paths = indexed_repository
     _write_shard(shard_paths[1], "101", nonfinite=True)
 
+    # shard_paths[1] was rewritten with a NaN window value above.
     with pytest.raises(DatasetIndexError, match="finite floating-point"):
         create_dataset_index(repository, split_path, shard_paths)
 
@@ -101,9 +125,12 @@ def test_dataset_index_rejects_nonfinite_window_shard(
 def test_dataset_index_rejects_unordered_window_centers(
     indexed_repository: tuple[Path, Path, list[Path]],
 ) -> None:
+    """A shard whose center_sample_indices aren't ascending is rejected."""
+
     repository, split_path, shard_paths = indexed_repository
     _write_shard(shard_paths[1], "101", centers=(20, 10))
 
+    # centers=(20, 10) is out of ascending order.
     with pytest.raises(DatasetIndexError, match="nonnegative and ordered"):
         create_dataset_index(repository, split_path, shard_paths)
 
@@ -111,9 +138,19 @@ def test_dataset_index_rejects_unordered_window_centers(
 def test_dataset_index_rejects_mixed_channel_identity(
     indexed_repository: tuple[Path, Path, list[Path]],
 ) -> None:
+    """A shard extracted from a different channel produces a detailed, actionable diagnostic.
+
+    Protects _format_shard_identity_mismatch's report generation, not just that a
+    mismatch is detected: the error message must name every observed channel, the
+    shared configured selection, and specifically which record(s) are affected --
+    shard_paths[2] ("102") is rewritten with channel "V5" while the other two shards
+    keep "MLII".
+    """
+
     repository, split_path, shard_paths = indexed_repository
     _write_shard(shard_paths[2], "102", channel_index=0, channel_name="V5")
 
+    # Record "102"'s shard now reports channel "V5" while "100"/"101" still report "MLII".
     with pytest.raises(DatasetIndexError) as error:
         create_dataset_index(repository, split_path, shard_paths)
 
@@ -129,9 +166,12 @@ def test_dataset_index_rejects_mixed_channel_identity(
 def test_dataset_index_output_must_stay_in_processed_zone(
     indexed_repository: tuple[Path, Path, list[Path]],
 ) -> None:
+    """An output path outside data/processed/ is rejected, matching the directory contract."""
+
     repository, split_path, shard_paths = indexed_repository
     index = create_dataset_index(repository, split_path, shard_paths)
 
+    # Path("artifacts/index.json") is not under data/processed/.
     with pytest.raises(DatasetIndexError, match="under data/processed"):
         write_dataset_index(index, repository, Path("artifacts/index.json"))
 
@@ -145,7 +185,19 @@ def _write_shard(
     channel_index: int = 0,
     channel_name: str = "MLII",
 ) -> None:
+    """Write one valid (by default) window-shard NPZ artifact, with every field overridable.
+
+    Args:
+        path: Where to write the NPZ artifact.
+        record_id: The record ID this shard represents (two windows, "N" and "V").
+        nonfinite: If True, corrupt the first window's first sample to NaN.
+        centers: The two windows' center_sample_indices; override to test ordering.
+        channel_index: The shard's resolved channel_index; override to test identity mismatch.
+        channel_name: The shard's resolved channel_name; override to test identity mismatch.
+    """
+
     windows = np.asarray([[1.0, 2.0, 3.0, 4.0], [4.0, 3.0, 2.0, 1.0]])
+    # Corrupt one sample to NaN only when this test is exercising that failure mode.
     if nonfinite:
         windows[0, 0] = np.nan
     np.savez_compressed(
