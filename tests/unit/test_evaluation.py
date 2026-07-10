@@ -12,8 +12,11 @@ import pytest
 from ecg_anomaly_detection.evaluation import (
     EvaluationConfig,
     EvaluationError,
+    _margin,
+    _threshold_metrics,
     evaluate_validation_from_index,
     load_evaluation_config,
+    load_threshold_sweep_config,
 )
 
 
@@ -130,6 +133,81 @@ zero_division = 0.0
     )
     with pytest.raises(EvaluationError, match="must be 'validation'"):
         load_evaluation_config(config)
+
+
+def test_threshold_margin_is_exact_for_known_centroid_distances() -> None:
+    distances = np.asarray(
+        [
+            [9.0, 1.0],
+            [4.0, 4.0],
+            [0.25, 2.25],
+        ],
+        dtype=np.float64,
+    )
+
+    np.testing.assert_array_equal(_margin(distances), np.asarray([8.0, 0.0, 2.0]))
+
+
+def test_threshold_metrics_report_exact_coverage_and_macro_scores() -> None:
+    classes = (0, 1)
+    margins = np.asarray([0.0, 0.5, 1.0, 1.5], dtype=np.float64)
+    labels = np.asarray([0, 0, 1, 1], dtype=np.int64)
+    predictions = np.asarray([0, 1, 1, 0], dtype=np.int64)
+
+    all_windows = _threshold_metrics(0.0, classes, margins, labels, predictions, 0.0)
+    assert all_windows.covered_window_count == 4
+    assert all_windows.precision == pytest.approx(0.5)
+    assert all_windows.recall == pytest.approx(0.5)
+    assert all_windows.f1 == pytest.approx(0.5)
+
+    high_margin = _threshold_metrics(1.0, classes, margins, labels, predictions, 0.0)
+    assert high_margin.covered_window_count == 2
+    assert high_margin.precision == pytest.approx(0.5)
+    assert high_margin.recall == pytest.approx(0.25)
+    assert high_margin.f1 == pytest.approx(1 / 3)
+
+    no_windows = _threshold_metrics(2.0, classes, margins, labels, predictions, 1.0)
+    assert no_windows.covered_window_count == 0
+    assert no_windows.precision == 1.0
+    assert no_windows.recall == 1.0
+    assert no_windows.f1 == 1.0
+
+
+@pytest.mark.parametrize(
+    ("table", "message"),
+    [
+        (
+            'version = "1"\npartition = "validation"\nzero_division = 0.0\nthresholds = [0.0]',
+            "threshold_sweep.name must be a non-empty string",
+        ),
+        (
+            'name = "bad"\nversion = "1"\npartition = "test"\n'
+            "zero_division = 0.0\nthresholds = [0.0]",
+            "threshold_sweep.partition must be 'validation'",
+        ),
+        (
+            'name = "bad"\nversion = "1"\npartition = "validation"\n'
+            "zero_division = 0.0\nthresholds = [1.0, 0.0]",
+            "threshold_sweep.thresholds must be strictly increasing",
+        ),
+        (
+            'name = "bad"\nversion = "1"\npartition = "validation"\n'
+            "zero_division = 0.0\nthresholds = [0.0, inf]",
+            "threshold_sweep.thresholds must be finite",
+        ),
+    ],
+)
+def test_threshold_sweep_config_rejects_invalid_values(
+    tmp_path: Path, table: str, message: str
+) -> None:
+    config = tmp_path / "threshold-sweep.toml"
+    config.write_text(
+        f"schema_version = 1\n[threshold_sweep]\n{table}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(EvaluationError, match=message):
+        load_threshold_sweep_config(config)
 
 
 def _config() -> EvaluationConfig:
