@@ -11,14 +11,11 @@ from ecg_anomaly_detection.cli import main
 
 
 def _write_shard(path: Path, record_id: str) -> None:
-    """Write shard according to the repository contract.
-
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    """Write one valid window-shard NPZ artifact for record_id, matching windows.py's real output shape.
 
     Args:
-        path: Filesystem path identifying the input or output under review.
-        record_id: The record id value supplied by the caller or surrounding test fixture.
+        path: Where to write the NPZ artifact.
+        record_id: The record ID both windows in this shard belong to.
     """
 
     windows = np.asarray([[1.0, 2.0, 3.0, 4.0], [4.0, 3.0, 2.0, 1.0]])
@@ -48,15 +45,15 @@ def _write_shard(path: Path, record_id: str) -> None:
 def _write_split_manifest(
     path: Path, record_ids: tuple[str, ...], source_artifacts: tuple[str, ...]
 ) -> None:
-    """Write split manifest according to the repository contract.
-
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    """Write a split manifest assigning each of record_ids to a distinct partition (train/validation/test).
 
     Args:
-        path: Filesystem path identifying the input or output under review.
-        record_ids: The record ids value supplied by the caller or surrounding test fixture.
-        source_artifacts: The source artifacts value supplied by the caller or surrounding test fixture.
+        path: Where to write the split-manifest JSON.
+        record_ids: One record ID per partition, assigned in
+            (train, validation, test) order; fewer than three leaves the
+            remaining partitions unassigned.
+        source_artifacts: The shard paths this split manifest claims to
+            derive from, recorded for provenance only.
     """
 
     payload = {
@@ -90,13 +87,11 @@ def _write_split_manifest(
 
 
 def test_index_dataset_accepts_a_directory_of_shards(tmp_path: Path) -> None:
-    """Verify that index dataset accepts a directory of shards.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """`ecg-data index-dataset --input <directory>` discovers every shard in that directory and
+    builds a dataset index with the correct total record/window counts.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
@@ -105,8 +100,7 @@ def test_index_dataset_accepts_a_directory_of_shards(tmp_path: Path) -> None:
     artifacts = tmp_path / "artifacts" / "runs" / "test"
     artifacts.mkdir(parents=True)
     record_ids = ("100", "101", "102")
-    # Iterate over `record_ids` one item at a time so ordering, validation, and failure attribution
-    # remain explicit.
+    # Write one shard per record, matching the split manifest built below.
     for record_id in record_ids:
         _write_shard(interim / f"{record_id}.npz", record_id)
     split_path = artifacts / "split.json"
@@ -139,13 +133,10 @@ def test_index_dataset_accepts_a_directory_of_shards(tmp_path: Path) -> None:
 
 
 def test_index_dataset_reports_a_nonexistent_input_path(tmp_path: Path) -> None:
-    """Verify that index dataset reports a nonexistent input path.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """`index-dataset --input <missing directory>` exits 1 rather than crashing with a raw traceback.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+        tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
