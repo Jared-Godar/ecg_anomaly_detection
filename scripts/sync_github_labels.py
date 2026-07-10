@@ -10,22 +10,22 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-# Centralize ROOT so every caller shares the same documented invariant.
+# Repository root, resolved from this script's own location rather than the current
+# working directory, so the script behaves identically regardless of where it's invoked from.
 ROOT = Path(__file__).resolve().parents[1]
-# Centralize DEFAULT_MANIFEST so every caller shares the same documented invariant.
+# The committed, version-controlled source of truth for repository labels; every
+# label GitHub should have is declared here, not created ad hoc via the GitHub UI.
 DEFAULT_MANIFEST = ROOT / ".github" / "labels.json"
-# Centralize COLOR_PATTERN so every caller shares the same documented invariant.
+# GitHub label colors are exactly six hex digits (no leading '#'); this pattern
+# validates the manifest's color field matches that format before it's sent to `gh`.
 COLOR_PATTERN = re.compile(r"[0-9a-fA-F]{6}")
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse args according to the repository contract.
-
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    """Parse command-line arguments for the label-sync entry point.
 
     Returns:
-        The value produced by the documented operation.
+        Parsed arguments: manifest path, optional target repo, and dry-run flag.
     """
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -38,44 +38,38 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_labels(path: Path) -> list[dict[str, str]]:
-    """Load labels according to the repository contract.
-
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    """Load and validate the label manifest, normalizing colors to lowercase.
 
     Args:
-        path: Filesystem path identifying the input or output under review.
+        path: Path to the labels.json manifest file.
 
     Returns:
-        The value produced by the documented operation.
+        Validated label entries, each with name, color, and description.
     """
 
     data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
-    # Evaluate `data.get('schema_version') != 1 or not isinstance(data.get('labels'), list)`
-    # explicitly so invalid or alternate states follow the documented contract.
+    # schema_version pins this loader's understanding of the manifest's shape.
     if data.get("schema_version") != 1 or not isinstance(data.get("labels"), list):
         raise ValueError("manifest must contain schema_version 1 and a labels array")
 
     labels: list[dict[str, str]] = []
     names: set[str] = set()
-    # Iterate over `data['labels']` one item at a time so ordering, validation, and failure
-    # attribution remain explicit.
+    # Validate every label entry independently so a malformed entry anywhere in the
+    # manifest is caught, not just the first.
     for item in data["labels"]:
-        # Evaluate `not isinstance(item, dict)` explicitly so invalid or alternate states follow the
-        # documented contract.
+        # Every field access below assumes item is a dict.
         if not isinstance(item, dict):
             raise ValueError("each label must be an object")
         name, color, description = (item.get(key) for key in ("name", "color", "description"))
-        # Evaluate `not all((isinstance(value, str) and value for value in (name, color,
-        # description)))` explicitly so invalid or alternate states follow the documented contract.
+        # All three fields are required; `gh label create` would otherwise fail with a
+        # less specific error, or silently accept an empty string.
         if not all(isinstance(value, str) and value for value in (name, color, description)):
             raise ValueError("each label requires non-empty name, color, and description strings")
-        # Evaluate `name in names` explicitly so invalid or alternate states follow the documented
-        # contract.
+        # A duplicated name would create two manifest entries competing to define the
+        # same GitHub label, with only one actually taking effect.
         if name in names:
             raise ValueError(f"duplicate label: {name}")
-        # Evaluate `COLOR_PATTERN.fullmatch(color) is None` explicitly so invalid or alternate
-        # states follow the documented contract.
+        # gh label create requires a bare six-digit hex color, no leading '#'.
         if COLOR_PATTERN.fullmatch(color) is None:
             raise ValueError(f"invalid six-digit color for {name}: {color}")
         names.add(name)
@@ -97,8 +91,8 @@ def main() -> int:
     labels = load_labels(args.manifest)
     repo_args = ["--repo", args.repo] if args.repo else []
 
-    # Iterate over `labels` one item at a time so ordering, validation, and failure attribution
-    # remain explicit.
+    # Create or update (via --force) every manifest label in turn; `gh label create
+    # --force` is idempotent, so re-running this script is always safe.
     for label in labels:
         command = [
             "gh",
@@ -112,8 +106,8 @@ def main() -> int:
             "--force",
             *repo_args,
         ]
-        # Evaluate `args.dry_run` explicitly so invalid or alternate states follow the documented
-        # contract.
+        # --dry-run prints the command that would run instead of executing it, so a
+        # reviewer can confirm intended changes before actually syncing labels.
         if args.dry_run:
             print(json.dumps(command))
         else:
@@ -122,7 +116,7 @@ def main() -> int:
     return 0
 
 
-# Evaluate `__name__ == '__main__'` explicitly so invalid or alternate states follow the documented
-# contract.
+# Standard script entry-point guard: only run main() when executed directly, not when
+# imported (e.g. by this script's own test module).
 if __name__ == "__main__":
     raise SystemExit(main())

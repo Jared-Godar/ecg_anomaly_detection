@@ -40,18 +40,16 @@ class StatusField:
 def _run_gh(args: list[str]) -> str:
     """Run one fixed GitHub CLI command and return its captured output.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
-
     Args:
-        args: The args value supplied by the caller or surrounding test fixture.
+        args: The `gh` subcommand and its arguments (without the leading "gh" itself).
 
     Returns:
-        The value produced by the documented operation.
+        The command's captured stdout.
     """
 
-    # Attempt this boundary operation here so FileNotFoundError, subprocess.CalledProcessError can
-    # be translated or cleaned up under the repository contract.
+    # Collapse "gh not installed" (FileNotFoundError) and "gh exited non-zero"
+    # (CalledProcessError, since check=True) into one ProjectStatusSyncError, so
+    # main()'s error handling only needs to catch this module's own exception type.
     try:
         # command is a fixed literal ("gh", *args) built from this module's own
         # subcommand arguments, not runtime/user-constructed input.
@@ -82,13 +80,13 @@ def fetch_status_field(owner: str, project_number: int) -> StatusField:
     args = ["project", "field-list", str(project_number), "--owner", owner, "--format", "json"]
     payload = json.loads(_run_gh(args))
     field = next((f for f in payload["fields"] if f.get("name") == "Status"), None)
-    # Evaluate `field is None` explicitly so invalid or alternate states follow the documented
-    # contract.
+    # A project without a Status field at all can't be the field-id mutation target
+    # this script is designed to write to.
     if field is None:
         raise ProjectStatusSyncError(f"Project #{project_number} has no 'Status' field")
     option = next((o for o in field.get("options", []) if o.get("name") == "Merged"), None)
-    # Evaluate `option is None` explicitly so invalid or alternate states follow the documented
-    # contract.
+    # Without a "Merged" option's node id, set_status_merged has no value to write --
+    # the Status field exists but doesn't have the specific option this script needs.
     if option is None:
         raise ProjectStatusSyncError(
             f"Project #{project_number}'s Status field has no 'Merged' option"
@@ -112,13 +110,13 @@ def find_pull_request_item_id(
         "500",
     ]
     payload = json.loads(_run_gh(args))
-    # Iterate over `payload['items']` one item at a time so ordering, validation, and failure
-    # attribution remain explicit.
+    # Scan every project item for the one whose content matches this exact pull
+    # request (type + number + repo, since a project can track items across
+    # multiple repositories with overlapping PR numbers).
     for item in payload["items"]:
         content = item.get("content", {})
-        # Evaluate `content.get('type') == 'PullRequest' and content.get('number') == pr_number and
-        # (content.get('repository') == repo)` explicitly so invalid or alternate states follow the
-        # documented contract.
+        # All three fields must match: type distinguishes PRs from issues, number and
+        # repository together uniquely identify this exact pull request.
         if (
             content.get("type") == "PullRequest"
             and content.get("number") == pr_number
@@ -147,16 +145,13 @@ def set_status_merged(item_id: str, project_id: str, field: StatusField) -> None
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse args according to the repository contract.
-
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    """Parse command-line arguments for the merged-status sync entry point.
 
     Args:
         argv: Optional command-line arguments; defaults to the process arguments.
 
     Returns:
-        The value produced by the documented operation.
+        Parsed arguments: PR number, repo, project owner, and project number.
     """
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -184,14 +179,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parse_args(argv)
 
-    # Attempt this boundary operation here so ProjectStatusSyncError can be translated or cleaned up
-    # under the repository contract.
+    # Every gh CLI failure mode this script can hit is collapsed into
+    # ProjectStatusSyncError by _run_gh; catch it once here for uniform error reporting.
     try:
         item_id = find_pull_request_item_id(
             args.owner, args.project_number, args.repo, args.pr_number
         )
-        # Evaluate `item_id is None` explicitly so invalid or alternate states follow the documented
-        # contract.
+        # A PR that was never added to Project #5 has nothing to sync; this is a
+        # legitimate, non-fatal state (warn and exit 0), not a script failure, since
+        # not every merged PR is necessarily tracked on this project board.
         if item_id is None:
             print(
                 f"warning: pull request #{args.pr_number} is not a Project "
@@ -212,7 +208,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-# Evaluate `__name__ == '__main__'` explicitly so invalid or alternate states follow the documented
-# contract.
+# Standard script entry-point guard: only run main() when executed directly, not when
+# imported (e.g. by this script's own test module).
 if __name__ == "__main__":
     raise SystemExit(main())
