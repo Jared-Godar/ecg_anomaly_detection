@@ -18,13 +18,11 @@ from ecg_anomaly_detection.inventory import (
 
 @pytest.fixture
 def dataset_config() -> DatasetConfig:
-    """Build or exercise the dataset config test fixture.
-
-    The helper keeps repeated test setup explicit without hiding the contract under
-    examination.
+    """A two-record synthetic dataset config with three required file extensions per record.
 
     Returns:
-        The value produced by the documented operation.
+        A DatasetConfig whose expected_files property (six paths: 100/101 x
+        atr/dat/hea) drives both fixtures and tests below.
     """
 
     return DatasetConfig(
@@ -43,23 +41,24 @@ def dataset_config() -> DatasetConfig:
 
 @pytest.fixture
 def complete_data_dir(tmp_path: Path, dataset_config: DatasetConfig) -> Path:
-    """Build or exercise the complete data dir test fixture.
+    """A directory containing every file dataset_config.expected_files requires.
 
-    The helper keeps repeated test setup explicit without hiding the contract under
-    examination.
+    Each file's content is a short, distinct marker string (`fixture-<index>`)
+    so tests can corrupt a single file and expect exactly one hash mismatch.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        dataset_config: The dataset config value supplied by the caller or surrounding test fixture.
+        tmp_path: Pytest's per-test isolated temporary directory.
+        dataset_config: The two-record fixture whose expected_files this
+            directory must fully satisfy.
 
     Returns:
-        The value produced by the documented operation.
+        The populated "raw" data directory.
     """
 
     data_dir = tmp_path / "raw"
     data_dir.mkdir()
-    # Iterate over `enumerate(dataset_config.expected_files)` one item at a time so ordering,
-    # validation, and failure attribution remain explicit.
+    # Write one distinct-content file per expected path so a later single-file
+    # edit can be attributed to exactly that path in the assertions below.
     for index, relative_path in enumerate(dataset_config.expected_files):
         (data_dir / relative_path).write_bytes(f"fixture-{index}".encode())
     return data_dir
@@ -70,15 +69,16 @@ def test_inventory_is_deterministic_and_round_trips(
     dataset_config: DatasetConfig,
     complete_data_dir: Path,
 ) -> None:
-    """Verify that inventory is deterministic and round trips.
+    """A manifest built with a frozen clock has a fixed timestamp and survives a JSON round trip.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Confirms create_inventory records every expected file with a full 64-character
+    SHA-256 hex digest, and that both write_manifest/read_manifest (file-based) and
+    to_json/from_json (in-memory) reproduce an identical manifest.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        dataset_config: The dataset config value supplied by the caller or surrounding test fixture.
-        complete_data_dir: The complete data dir value supplied by the caller or surrounding test fixture.
+        tmp_path: Pytest's per-test isolated temporary directory.
+        dataset_config: The two-record fixture defining which files are expected.
+        complete_data_dir: A directory already containing every expected file.
     """
 
     frozen_time = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
@@ -98,18 +98,17 @@ def test_inventory_reports_every_missing_required_file(
     tmp_path: Path,
     dataset_config: DatasetConfig,
 ) -> None:
-    """Verify that inventory reports every missing required file.
+    """Building an inventory over an empty directory names the first missing file in the error.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    tmp_path here has none of dataset_config's six expected files, so
+    create_inventory must fail rather than silently produce a partial manifest.
 
     Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        dataset_config: The dataset config value supplied by the caller or surrounding test fixture.
+        tmp_path: An empty directory standing in for an incomplete download.
+        dataset_config: The two-record fixture defining which files are expected.
     """
 
-    # Scope `pytest.raises(InventoryError, match='missing: 100\\.atr')` here so the expected failure
-    # and fixture cleanup stay scoped to this assertion.
+    # tmp_path is empty, so "100.atr" (the first expected path) is missing.
     with pytest.raises(InventoryError, match=r"missing: 100\.atr"):
         create_inventory(dataset_config, tmp_path)
 
@@ -118,21 +117,21 @@ def test_verification_detects_content_change(
     dataset_config: DatasetConfig,
     complete_data_dir: Path,
 ) -> None:
-    """Verify that verification detects content change.
+    """A file rewritten after the manifest was created fails verification with its own hash.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Confirms verify_inventory recomputes hashes rather than trusting file
+    presence alone -- the file is neither missing nor renamed, only its bytes
+    have changed.
 
     Args:
-        dataset_config: The dataset config value supplied by the caller or surrounding test fixture.
-        complete_data_dir: The complete data dir value supplied by the caller or surrounding test fixture.
+        dataset_config: The two-record fixture defining which files are expected.
+        complete_data_dir: A directory already containing every expected file.
     """
 
     manifest = create_inventory(dataset_config, complete_data_dir)
     (complete_data_dir / "101.dat").write_bytes(b"changed")
 
-    # Scope `pytest.raises(InventoryError, match='101.dat')` here so the expected failure and
-    # fixture cleanup stay scoped to this assertion.
+    # "101.dat" was overwritten above, so its SHA-256 no longer matches the manifest.
     with pytest.raises(InventoryError, match="101.dat"):
         verify_inventory(dataset_config, complete_data_dir, manifest)
 
@@ -141,14 +140,14 @@ def test_verification_accepts_unchanged_required_files(
     dataset_config: DatasetConfig,
     complete_data_dir: Path,
 ) -> None:
-    """Verify that verification accepts unchanged required files.
+    """Verifying a manifest against the same, untouched directory it was built from succeeds.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    The positive-path counterpart to the content-change test above: no
+    exception means every recorded hash still matches.
 
     Args:
-        dataset_config: The dataset config value supplied by the caller or surrounding test fixture.
-        complete_data_dir: The complete data dir value supplied by the caller or surrounding test fixture.
+        dataset_config: The two-record fixture defining which files are expected.
+        complete_data_dir: A directory already containing every expected file.
     """
 
     manifest = create_inventory(dataset_config, complete_data_dir)
