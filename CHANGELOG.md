@@ -49,6 +49,21 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Changed
 
+- Changed `run_manifest._capture_git_state()` to degrade gracefully instead of raising
+  `RunManifestError` when Git is unavailable or exits non-zero, matching the existing
+  `reproducibility.capture_git_metadata()` pattern: it now returns a sentinel `GitState(revision=
+  "unknown", dirty=None)` rather than failing the whole `create-run-manifest` run. `GitState.dirty`
+  is widened to `bool | None` to carry the sentinel; the existing hard-error path (Git succeeds but
+  returns a malformed, non-40-hex revision) is unchanged. `UNKNOWN_GIT_REVISION` is documented on
+  the `GitState` dataclass and in `docs/run-manifests.md`, and is provably distinguishable from a
+  real commit hash since it is not 40 hex characters (#133). Also adds a
+  `test_benchmark_approval.py` test covering `_missing_lineage_references()`'s previously-untested
+  fail-closed else-branch for a required lineage reference beyond the known 7 (#135). Bundled
+  together because a new test proves the two compose safely: a manifest whose Git state degraded
+  under #133 still fails closed on `repository_commit_hash` in `record_benchmark_approval()`,
+  so the graceful-degradation change cannot let an unverifiable-provenance run pass benchmark
+  approval (#133, #135).
+
 ### Fixed
 
 - Fixed `create_split_quality_summary()` computing incorrect `shard_count` and `actual_ratios["shards"]` when `len(metadata.source_artifacts) > 1`: replaced the broken set-comprehension fallback (which used `record_id` as a shard path) with a direct `record_shards` lookup, and moved the total-unique-shards denominator outside the partition loop (#131).

@@ -1,12 +1,15 @@
 """Tests for auditable run-manifest creation."""
 
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+import ecg_anomaly_detection.run_manifest as run_manifest
 from ecg_anomaly_detection.run_manifest import (
+    UNKNOWN_GIT_REVISION,
     EnvironmentSnapshot,
     GitState,
     RunManifest,
@@ -17,6 +20,16 @@ from ecg_anomaly_detection.run_manifest import (
 )
 
 RUN_ID = "12345678-1234-5678-1234-567812345678"
+
+
+class _FailingSubprocess:
+    """Stand-in for the `subprocess` module when Git is unavailable."""
+
+    CalledProcessError = subprocess.CalledProcessError
+
+    @staticmethod
+    def run(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError("git executable not found")
 
 
 @pytest.fixture
@@ -179,6 +192,59 @@ def test_read_run_manifest_rejects_incomplete_document(tmp_path: Path) -> None:
 
     with pytest.raises(RunManifestError, match="invalid run manifest"):
         read_run_manifest(path)
+
+
+def test_capture_git_state_degrades_gracefully_when_git_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(run_manifest, "subprocess", _FailingSubprocess)
+
+    state = run_manifest._capture_git_state(tmp_path)
+
+    assert state == GitState(revision=UNKNOWN_GIT_REVISION, dirty=None)
+
+
+def test_create_run_manifest_completes_when_git_is_unavailable(
+    repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(run_manifest, "subprocess", _FailingSubprocess)
+
+    manifest = create_run_manifest(
+        repository,
+        Path("artifacts/inventory.json"),
+        Path("artifacts/split.json"),
+        [Path("configs/dataset.toml")],
+        artifact_paths=[Path("artifacts/windows.npz")],
+        clock=lambda: datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        run_id_factory=lambda: RUN_ID,
+        environment_provider=_environment,
+    )
+
+    assert manifest.git == GitState(revision=UNKNOWN_GIT_REVISION, dirty=None)
+
+
+def test_run_manifest_round_trips_degraded_git_state_as_json_null(repository: Path) -> None:
+    manifest = create_run_manifest(
+        repository,
+        Path("artifacts/inventory.json"),
+        Path("artifacts/split.json"),
+        [Path("configs/dataset.toml")],
+        artifact_paths=[Path("artifacts/windows.npz")],
+        clock=lambda: datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        run_id_factory=lambda: RUN_ID,
+        git_state_provider=lambda _: GitState(UNKNOWN_GIT_REVISION, None),
+        environment_provider=_environment,
+    )
+    output = repository / "artifacts" / "run.json"
+    write_run_manifest(manifest, repository, output)
+
+    assert json.loads(output.read_text(encoding="utf-8"))["git"] == {
+        "revision": UNKNOWN_GIT_REVISION,
+        "dirty": None,
+    }
+    reloaded = read_run_manifest(output)
+    assert reloaded.git == GitState(revision=UNKNOWN_GIT_REVISION, dirty=None)
+    assert reloaded == manifest
 
 
 def _create_manifest(repository: Path) -> RunManifest:
