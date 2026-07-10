@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-# Centralize REQUIRED_LINEAGE_REFERENCES so every caller shares the same documented invariant.
+# The fixed, closed set of lineage references a policy's execution.required_lineage_references
+# must name, matching every reference kind benchmark_approval.py's
+# _missing_lineage_references knows how to verify. A policy that named fewer would leave
+# some approval evidence unverified before a future benchmark could run.
 REQUIRED_LINEAGE_REFERENCES = frozenset(
     {
         "repository_commit_hash",
@@ -19,7 +22,9 @@ REQUIRED_LINEAGE_REFERENCES = frozenset(
         "run_manifest_reference",
     }
 )
-# Centralize REQUIRED_DISCLOSURES so every caller shares the same documented invariant.
+# The fixed, closed set of disclosures a policy's publication.required_disclosures must
+# name, per docs/benchmark-governance.md's publication requirements -- these are the
+# minimum evidence categories any future benchmark result must be published alongside.
 REQUIRED_DISCLOSURES = frozenset(
     {
         "repository_commit_hash",
@@ -34,7 +39,9 @@ REQUIRED_DISCLOSURES = frozenset(
         "limitations",
     }
 )
-# Centralize REQUIRED_LIMITATIONS so every caller shares the same documented invariant.
+# The fixed, closed set of limitation categories a policy's publication.required_limitations
+# must name, ensuring any future benchmark result is published alongside an explicit
+# statement of this project's non-clinical, research-only scope.
 REQUIRED_LIMITATIONS = frozenset(
     {
         "dataset_limitations",
@@ -47,7 +54,9 @@ REQUIRED_LIMITATIONS = frozenset(
         "lack_of_medical_utility",
     }
 )
-# Centralize REQUIRED_PROHIBITED_CLAIMS so every caller shares the same documented invariant.
+# The fixed, closed set of claims a policy's publication.prohibited_claims must name --
+# these are exactly the overclaiming statements this repository's non-clinical framing
+# forbids making about any future benchmark result.
 REQUIRED_PROHIBITED_CLAIMS = frozenset(
     {
         "model_quality_established",
@@ -56,7 +65,9 @@ REQUIRED_PROHIBITED_CLAIMS = frozenset(
         "medical_utility_established",
     }
 )
-# Centralize REQUIRED_ARCHIVAL_RECORDS so every caller shares the same documented invariant.
+# The fixed, closed set of archival record categories a policy's archival.required_records
+# must name, ensuring every future benchmark attempt (successful or not) leaves a
+# permanent, append-only audit trail rather than an overwritable result.
 REQUIRED_ARCHIVAL_RECORDS = frozenset(
     {
         "approval_record",
@@ -95,17 +106,15 @@ class BenchmarkPolicy:
 
 def load_benchmark_policy(path: Path) -> BenchmarkPolicy:
     """Load and validate policy metadata without accessing data or model artifacts."""
-    # Attempt this boundary operation here so (OSError, tomllib.TOMLDecodeError) can be translated
-    # or cleaned up under the repository contract.
+    # Translate a missing, unreadable, or malformed-TOML file into BenchmarkPolicyError.
     try:
-        # Scope `path.open('rb')` here so resource cleanup occurs on both success and failure paths.
+        # The `with` block ensures the file handle closes even if tomllib.load raises.
         with path.open("rb") as source:
             document = tomllib.load(source)
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise BenchmarkPolicyError(f"could not load benchmark policy {path}: {error}") from error
 
-    # Evaluate `document.get('schema_version') != 1` explicitly so invalid or alternate states
-    # follow the documented contract.
+    # schema_version pins this loader's understanding of the policy document's shape.
     if document.get("schema_version") != 1:
         raise BenchmarkPolicyError("benchmark policy must use schema_version = 1")
     benchmark = _table(document, "benchmark")
@@ -135,16 +144,18 @@ def load_benchmark_policy(path: Path) -> BenchmarkPolicy:
         rerun_allowed_reasons=_strings(reruns, "allowed_reasons", "reruns"),
         required_archival_records=_string_set(archival, "required_records", "archival"),
     )
-    # Evaluate `policy.protected_partition != 'test'` explicitly so invalid or alternate states
-    # follow the documented contract.
+    # This module governs exactly one protected partition, named "test"; a policy
+    # naming any other value would be describing a different, unsupported gate.
     if policy.protected_partition != "test":
         raise BenchmarkPolicyError("benchmark.protected_partition must be 'test'")
-    # Evaluate `policy.test_evaluation_enabled` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # This is the core governance invariant: no policy may enable test-partition
+    # evaluation. Benchmark execution is a deliberately deferred, separately governed
+    # milestone (see docs/benchmark-governance.md) -- this loader fails closed on any
+    # policy that tries to flip that switch, rather than merely warning.
     if policy.test_evaluation_enabled:
         raise BenchmarkPolicyError("benchmark.test_evaluation_enabled must be false")
-    # Evaluate `not policy.explicit_future_opt_in_required` explicitly so invalid or alternate
-    # states follow the documented contract.
+    # Symmetric to the check above: a future benchmark run must require deliberate,
+    # explicit opt-in rather than running automatically once other conditions are met.
     if not policy.explicit_future_opt_in_required:
         raise BenchmarkPolicyError("benchmark.explicit_future_opt_in_required must be true")
     _require_set(
@@ -172,9 +183,10 @@ def load_benchmark_policy(path: Path) -> BenchmarkPolicy:
         REQUIRED_ARCHIVAL_RECORDS,
         "archival.required_records",
     )
-    # Iterate over `((reruns, ('require_new_approval', 'require_prior_result_retention',
-    # 'prohibit_model_selection_after_result')), (arch...` one item at a time so ordering,
-    # validation, and failure attribution remain explicit.
+    # These boolean governance flags (rerun safeguards, archival immutability) must all
+    # be true; loop over both tables' key lists together since they share the same
+    # "every listed flag must be true" validation rather than duplicating the check
+    # once per table.
     for table, keys in (
         (
             reruns,
@@ -186,33 +198,28 @@ def load_benchmark_policy(path: Path) -> BenchmarkPolicy:
         ),
         (archival, ("retain_superseded_results", "append_only_history")),
     ):
-        # Iterate over `keys` one item at a time so ordering, validation, and failure attribution
-        # remain explicit.
+        # Check every flag in this table's key list.
         for key in keys:
-            # Evaluate `not _boolean(table, key, 'reruns' if table is reruns else 'archival')`
-            # explicitly so invalid or alternate states follow the documented contract.
+            # `table is reruns` distinguishes which table's name to report in the
+            # error, since both tables are validated by this same shared loop.
             if not _boolean(table, key, "reruns" if table is reruns else "archival"):
                 raise BenchmarkPolicyError(f"{key} must be true")
     return policy
 
 
 def _table(document: dict[str, Any], key: str) -> dict[str, Any]:
-    """Compute and return table for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """Require and return one top-level TOML table from the parsed policy document.
 
     Args:
-        document: Parsed document whose schema and values are being checked.
-        key: The key value supplied by the caller or surrounding test fixture.
+        document: The parsed policy document to read from.
+        key: The top-level table name to extract (e.g. "benchmark", "execution").
 
     Returns:
-        The value produced by the documented operation.
+        The requested table.
     """
 
     value = document.get(key)
-    # Evaluate `not isinstance(value, dict)` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # Every field access downstream assumes value is a dict.
     if not isinstance(value, dict):
         raise BenchmarkPolicyError(f"benchmark policy requires a [{key}] table")
     return value
@@ -221,21 +228,17 @@ def _table(document: dict[str, Any], key: str) -> dict[str, Any]:
 def _string(values: dict[str, Any], key: str, table: str) -> str:
     """Require and return a non-empty string from the requested structured field.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
-
     Args:
-        values: Structured values to validate, transform, or serialize.
-        key: The key value supplied by the caller or surrounding test fixture.
-        table: The table value supplied by the caller or surrounding test fixture.
+        values: The parsed table to read from.
+        key: The field name to extract.
+        table: The table name, used in the error message's dotted-path prefix.
 
     Returns:
-        The value produced by the documented operation.
+        The field's value with surrounding whitespace stripped.
     """
 
     value = values.get(key)
-    # Evaluate `not isinstance(value, str) or not value.strip()` explicitly so invalid or alternate
-    # states follow the documented contract.
+    # Reject a missing/wrong-typed value and a whitespace-only placeholder alike.
     if not isinstance(value, str) or not value.strip():
         raise BenchmarkPolicyError(f"{table}.{key} must be a non-empty string")
     return value.strip()
@@ -244,67 +247,65 @@ def _string(values: dict[str, Any], key: str, table: str) -> str:
 def _boolean(values: dict[str, Any], key: str, table: str) -> bool:
     """Require and return a strict boolean from the requested structured field.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    "Strict" here means TOML's actual boolean type, not a truthy value like the
+    string "true" or the integer 1 -- governance flags shouldn't be ambiguous about
+    what counts as enabled.
 
     Args:
-        values: Structured values to validate, transform, or serialize.
-        key: The key value supplied by the caller or surrounding test fixture.
-        table: The table value supplied by the caller or surrounding test fixture.
+        values: The parsed table to read from.
+        key: The field name to extract.
+        table: The table name, used in the error message's dotted-path prefix.
 
     Returns:
-        The value produced by the documented operation.
+        The field's boolean value.
     """
 
     value = values.get(key)
-    # Evaluate `not isinstance(value, bool)` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # bool is checked with isinstance, not truthiness, so "true"/1/etc. are rejected.
     if not isinstance(value, bool):
         raise BenchmarkPolicyError(f"{table}.{key} must be a boolean")
     return value
 
 
 def _strings(values: dict[str, Any], key: str, table: str) -> tuple[str, ...]:
-    """Compute and return strings for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """Require and return a non-empty array of unique, non-empty, stripped strings.
 
     Args:
-        values: Structured values to validate, transform, or serialize.
-        key: The key value supplied by the caller or surrounding test fixture.
-        table: The table value supplied by the caller or surrounding test fixture.
+        values: The parsed table to read from.
+        key: The field name to extract.
+        table: The table name, used in the error message's dotted-path prefix.
 
     Returns:
-        The value produced by the documented operation.
+        The validated, stripped values.
     """
 
     value = values.get(key)
-    # Evaluate `not isinstance(value, list) or not value or (not all((isinstance(item, str) for item
-    # in value)))` explicitly so invalid or alternate states follow the documented contract.
+    # Reject a missing/empty list or any non-string element before normalization below.
     if not isinstance(value, list) or not value or not all(isinstance(item, str) for item in value):
         raise BenchmarkPolicyError(f"{table}.{key} must be a non-empty string array")
     normalized = tuple(item.strip() for item in value)
-    # Evaluate `any((not item for item in normalized)) or len(normalized) != len(set(normalized))`
-    # explicitly so invalid or alternate states follow the documented contract.
+    # Stripping whitespace could reduce a previously-distinct entry to empty or to a
+    # duplicate of another entry; re-check both after normalization.
     if any(not item for item in normalized) or len(normalized) != len(set(normalized)):
         raise BenchmarkPolicyError(f"{table}.{key} must contain unique, non-empty strings")
     return normalized
 
 
 def _string_set(values: dict[str, Any], key: str, table: str) -> frozenset[str]:
-    """Compute and return string set for the documented repository workflow.
+    """Require and return an unordered set of unique, non-empty strings.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    A thin wrapper over _strings for the four fields (required_lineage_references,
+    required_disclosures, required_limitations, prohibited_claims,
+    required_archival_records) whose validation only cares about set membership, not
+    the TOML array's declared order.
 
     Args:
-        values: Structured values to validate, transform, or serialize.
-        key: The key value supplied by the caller or surrounding test fixture.
-        table: The table value supplied by the caller or surrounding test fixture.
+        values: The parsed table to read from.
+        key: The field name to extract.
+        table: The table name, used in the error message's dotted-path prefix.
 
     Returns:
-        The value produced by the documented operation.
+        The validated values as a frozenset.
     """
 
     return frozenset(_strings(values, key, table))
@@ -313,16 +314,18 @@ def _string_set(values: dict[str, Any], key: str, table: str) -> frozenset[str]:
 def _require_set(actual: frozenset[str], required: frozenset[str], field: str) -> None:
     """Require a configuration value to equal the complete expected string set.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    Used for every REQUIRED_* module-level constant: a policy author can't silently
+    omit an entry from one of these closed sets, since every required entry is checked
+    present.
 
     Args:
-        actual: The actual value supplied by the caller or surrounding test fixture.
-        required: The required value supplied by the caller or surrounding test fixture.
-        field: The field value supplied by the caller or surrounding test fixture.
+        actual: The set of values the policy document actually declared.
+        required: The complete, fixed set this field is required to contain.
+        field: The dotted-path field name, used in the error message.
     """
 
     missing = sorted(required - actual)
-    # Evaluate `missing` explicitly so invalid or alternate states follow the documented contract.
+    # A policy declaring exactly the required set (or a superset) passes; anything
+    # missing means that specific governance requirement isn't actually enforced.
     if missing:
         raise BenchmarkPolicyError(f"{field} is missing required values: {missing}")

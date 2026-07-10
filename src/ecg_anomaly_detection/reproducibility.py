@@ -16,9 +16,13 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-# Centralize BUFFER_SIZE so every caller shares the same documented invariant.
+# Chunk size for streaming file reads during digest computation. 1 MiB balances syscall
+# overhead against peak memory for evidence files that can be large.
 BUFFER_SIZE = 1024 * 1024
-# Centralize STAGE_NAMES so every caller shares the same documented invariant.
+# The fixed, closed set of pipeline stages RuntimeStageTimer accepts. Kept as an
+# explicit tuple (rather than discovered dynamically) so a typo'd stage name in calling
+# code fails immediately in RuntimeStageTimer.stage rather than silently creating an
+# unexpected new key in the runtime summary.
 STAGE_NAMES = (
     "acquisition",
     "validation",
@@ -70,11 +74,8 @@ class EnvironmentSummary:
     def to_json(self) -> str:
         """Serialize this structured record as deterministic JSON.
 
-        The helper isolates this step so its assumptions, outputs, and failure behavior remain
-        reviewable.
-
         Returns:
-            The value produced by the documented operation.
+            The summary as a JSON string with sorted, deterministic key ordering.
         """
 
         return _to_json(self)
@@ -92,11 +93,8 @@ class RuntimeSummary:
     def to_json(self) -> str:
         """Serialize this structured record as deterministic JSON.
 
-        The helper isolates this step so its assumptions, outputs, and failure behavior remain
-        reviewable.
-
         Returns:
-            The value produced by the documented operation.
+            The summary as a JSON string with sorted, deterministic key ordering.
         """
 
         return _to_json(self)
@@ -117,11 +115,8 @@ class ResourceSummary:
     def to_json(self) -> str:
         """Serialize this structured record as deterministic JSON.
 
-        The helper isolates this step so its assumptions, outputs, and failure behavior remain
-        reviewable.
-
         Returns:
-            The value produced by the documented operation.
+            The summary as a JSON string with sorted, deterministic key ordering.
         """
 
         return _to_json(self)
@@ -151,11 +146,8 @@ class EvidenceManifest:
     def to_json(self) -> str:
         """Serialize this structured record as deterministic JSON.
 
-        The helper isolates this step so its assumptions, outputs, and failure behavior remain
-        reviewable.
-
         Returns:
-            The value produced by the documented operation.
+            The manifest as a JSON string with sorted, deterministic key ordering.
         """
 
         return _to_json(self)
@@ -165,13 +157,11 @@ class RuntimeStageTimer:
     """Accumulate monotonic time by a fixed set of pipeline stages."""
 
     def __init__(self, timer: Callable[[], float] = perf_counter) -> None:
-        """Initialize this object with the validated state required by its contract.
-
-        The helper isolates this step so its assumptions, outputs, and failure behavior remain
-        reviewable.
+        """Start the timer and zero every stage's accumulated duration.
 
         Args:
-            timer: The timer value supplied by the caller or surrounding test fixture.
+            timer: A monotonic clock function; overridable in tests to control elapsed
+                time deterministically instead of depending on real wall-clock time.
         """
 
         self._timer = timer
@@ -180,48 +170,48 @@ class RuntimeStageTimer:
 
     @contextmanager
     def stage(self, name: str) -> Iterator[None]:
-        """Compute and return stage for the documented repository workflow.
+        """Measure and accumulate elapsed time for one named pipeline stage.
 
-        The helper isolates this step so its assumptions, outputs, and failure behavior remain
-        reviewable.
+        Reentrant-safe across separate calls for the same stage name: durations
+        accumulate rather than overwrite, so a stage entered multiple times (e.g. once
+        per record in a loop) reports its total time across all invocations.
 
         Args:
-            name: The name value supplied by the caller or surrounding test fixture.
+            name: Which stage this timing block belongs to; must be one of STAGE_NAMES.
 
         Returns:
-            The value produced by the documented operation.
+            A context manager; the enclosed block's wall-clock time is added to this
+            stage's running total when the block exits.
         """
 
-        # Evaluate `name not in self._durations` explicitly so invalid or alternate states follow
-        # the documented contract.
+        # An unrecognized stage name would otherwise silently create a new dict key
+        # rather than accumulating into one of the fixed, known stages.
         if name not in self._durations:
             raise ReproducibilityEvidenceError(f"unsupported runtime stage: {name}")
         started_at = self._timer()
-        # Attempt this boundary operation here so the declared boundary failures can be translated
-        # or cleaned up under the repository contract.
+        # `finally` ensures the elapsed time is recorded even if the enclosed block
+        # raises, so a failed stage's partial duration still contributes to the total.
         try:
             yield
         finally:
             elapsed = self._timer() - started_at
-            # Evaluate `elapsed < 0` explicitly so invalid or alternate states follow the documented
-            # contract.
+            # A monotonic clock should never move backwards; if it does, the timer
+            # implementation itself (or the injected fake in a test) is broken, and
+            # accumulating a negative duration would produce a nonsensical summary.
             if elapsed < 0:
                 raise ReproducibilityEvidenceError("monotonic timer moved backwards")
             self._durations[name] += elapsed
 
     def summary(self) -> RuntimeSummary:
-        """Compute and return summary for the documented repository workflow.
-
-        The helper isolates this step so its assumptions, outputs, and failure behavior remain
-        reviewable.
+        """Finalize accumulated stage durations into a serializable summary.
 
         Returns:
-            The value produced by the documented operation.
+            Per-stage durations and the total elapsed time since construction, in seconds.
         """
 
         total = self._timer() - self._started_at
-        # Evaluate `total < 0` explicitly so invalid or alternate states follow the documented
-        # contract.
+        # Same monotonic-clock sanity check as in stage() above, applied to the
+        # timer's total elapsed time since construction.
         if total < 0:
             raise ReproducibilityEvidenceError("monotonic timer moved backwards")
         return RuntimeSummary(
@@ -234,15 +224,16 @@ class RuntimeStageTimer:
 
 def sha256_file(path: Path) -> str:
     """Return the SHA-256 digest of a regular file."""
-    # Evaluate `path.is_symlink() or not path.is_file()` explicitly so invalid or alternate states
-    # follow the documented contract.
+    # Reject a symlink as well as a missing/non-regular file: resolving through a link
+    # could hash a file other than the one this evidence claims to describe.
     if path.is_symlink() or not path.is_file():
         raise ReproducibilityEvidenceError(f"evidence path must be a regular file: {path}")
     digest = hashlib.sha256()
-    # Scope `path.open('rb')` here so resource cleanup occurs on both success and failure paths.
+    # Read in fixed-size chunks rather than the whole file at once, since evidence
+    # files (e.g. uv.lock, large artifacts) can be sizable.
     with path.open("rb") as source:
-        # Continue while `(chunk := source.read(BUFFER_SIZE))` so the loop's termination rule
-        # remains visible to reviewers.
+        # The walrus operator lets both the read and the loop's termination condition
+        # (an empty final chunk) live in one line without a separate `break`.
         while chunk := source.read(BUFFER_SIZE):
             digest.update(chunk)
     return digest.hexdigest()
@@ -255,30 +246,29 @@ def collect_artifact_evidence(
     root = repository_root.resolve()
     evidence: list[ArtifactEvidence] = []
     seen: set[Path] = set()
-    # Iterate over `paths` one item at a time so ordering, validation, and failure attribution
-    # remain explicit.
+    # Preserve the caller's own ordering (rather than sorting) since callers pass
+    # semantically ordered lists (e.g. configs in the order they were loaded).
     for path in paths:
         candidate = path if path.is_absolute() else root / path
-        # Evaluate `candidate.is_symlink()` explicitly so invalid or alternate states follow the
-        # documented contract.
+        # Reject a symlink before resolving it, so a link that points outside the
+        # repository can't be validated against a resolved target it doesn't actually name.
         if candidate.is_symlink():
             raise ReproducibilityEvidenceError(f"evidence path must not be a symlink: {candidate}")
         resolved = candidate.resolve()
-        # Attempt this boundary operation here so ValueError can be translated or cleaned up under
-        # the repository contract.
+        # relative_to raises ValueError when resolved escapes root (e.g. via `..`
+        # segments); translate that into this module's own exception type.
         try:
             relative = resolved.relative_to(root)
         except ValueError as error:
             raise ReproducibilityEvidenceError(
                 f"evidence path must stay within repository root: {resolved}"
             ) from error
-        # Evaluate `resolved in seen` explicitly so invalid or alternate states follow the
-        # documented contract.
+        # A duplicated path would otherwise contribute the same file's evidence twice
+        # to the resulting tuple.
         if resolved in seen:
             raise ReproducibilityEvidenceError(f"duplicate evidence path: {relative.as_posix()}")
         seen.add(resolved)
-        # Evaluate `not resolved.is_file()` explicitly so invalid or alternate states follow the
-        # documented contract.
+        # A directory or special file can't be hashed as file content below.
         if not resolved.is_file():
             raise ReproducibilityEvidenceError(f"evidence path must be a regular file: {resolved}")
         evidence.append(
@@ -329,8 +319,8 @@ def capture_resource_summary(repository_root: Path) -> ResourceSummary:
     disk_total: int | None = None
     disk_used: int | None = None
     disk_free: int | None = None
-    # Attempt this boundary operation here so OSError can be translated or cleaned up under the
-    # repository contract.
+    # Disk usage can fail (e.g. an unreadable filesystem); treat it as best-effort like
+    # every other field in ResourceSummary rather than failing the whole capture.
     try:
         usage = shutil.disk_usage(repository_root)
         disk_total, disk_used, disk_free = usage.total, usage.used, usage.free
@@ -385,25 +375,25 @@ def write_evidence(
     """Write one JSON evidence document under the ignored artifacts directory."""
     root = repository_root.resolve()
     candidate = output_path if output_path.is_absolute() else root / output_path
-    # Evaluate `candidate.is_symlink()` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # Reject a symlink before resolving it: resolving would silently follow the link and
+    # write to wherever it points, defeating the repository-root containment check below.
     if candidate.is_symlink():
         raise ReproducibilityEvidenceError("evidence output must not be a symbolic link")
     resolved = candidate.resolve()
-    # Attempt this boundary operation here so ValueError can be translated or cleaned up under the
-    # repository contract.
+    # relative_to raises ValueError when resolved escapes root.
     try:
         relative = resolved.relative_to(root)
     except ValueError as error:
         raise ReproducibilityEvidenceError(
             "evidence output must stay within repository root"
         ) from error
-    # Evaluate `not relative.parts or relative.parts[0] != 'artifacts'` explicitly so invalid or
-    # alternate states follow the documented contract.
+    # Reproducibility evidence is pipeline-generated, matching this repository's
+    # directory contract for artifacts.
     if not relative.parts or relative.parts[0] != "artifacts":
         raise ReproducibilityEvidenceError("evidence output must be written under artifacts/")
-    # Evaluate `resolved.suffix != '.json' or not resolved.parent.is_dir()` explicitly so invalid or
-    # alternate states follow the documented contract.
+    # Combine the extension and parent-directory checks since both must hold before
+    # the write below can succeed, and either failing means the same "not ready to
+    # write" state.
     if resolved.suffix != ".json" or not resolved.parent.is_dir():
         raise ReproducibilityEvidenceError(
             "evidence output must be a JSON file with an existing parent directory"
@@ -412,37 +402,40 @@ def write_evidence(
 
 
 def _to_json(document: Any) -> str:
-    """Compute and return to json for the documented repository workflow.
+    """Serialize any of this module's frozen dataclasses to deterministic JSON.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    Shared by every to_json() method above so the same indent/sort_keys formatting is
+    guaranteed identical across all four document types.
 
     Args:
-        document: Parsed document whose schema and values are being checked.
+        document: One of EnvironmentSummary, RuntimeSummary, ResourceSummary, or
+            EvidenceManifest.
 
     Returns:
-        The value produced by the documented operation.
+        The document as a JSON string with sorted, deterministic key ordering.
     """
 
     return json.dumps(asdict(document), indent=2, sort_keys=True) + "\n"
 
 
 def _run_optional(command: tuple[str, ...], cwd: Path) -> str | None:
-    """Compute and return run optional for the documented repository workflow.
+    """Run a command and return its stripped stdout, or None if it failed or was empty.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    Used for evidence that's genuinely optional (git commit/branch, uv version): a
+    missing tool, non-Git checkout, or any other failure degrades to None rather than
+    aborting evidence capture entirely, since this module's whole purpose is
+    best-effort reproducibility evidence, not a hard requirement on host tooling.
 
     Args:
-        command: The command value supplied by the caller or surrounding test fixture.
-        cwd: The cwd value supplied by the caller or surrounding test fixture.
+        command: The argv to execute.
+        cwd: Working directory for the subprocess.
 
     Returns:
-        The value produced by the documented operation.
+        Stripped stdout, or None if the command failed or produced no output.
     """
 
-    # Attempt this boundary operation here so (OSError, subprocess.CalledProcessError) can be
-    # translated or cleaned up under the repository contract.
+    # Collapse "tool not installed" (OSError) and "command exited non-zero"
+    # (CalledProcessError, since check=True) into the same None result.
     try:
         # every call site below passes a fixed literal command tuple, not
         # runtime/user-constructed input.
@@ -455,21 +448,22 @@ def _run_optional(command: tuple[str, ...], cwd: Path) -> str | None:
 
 
 def _run_optional_allow_empty(command: tuple[str, ...], cwd: Path) -> str | None:
-    """Compute and return run optional allow empty for the documented repository workflow.
+    """Run a command and return its stripped stdout, treating empty output as valid.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    Same failure handling as _run_optional, but used for `git status --porcelain`,
+    where empty output is a meaningful, valid result (a clean working tree) rather
+    than "no data" -- _run_optional's `or None` would otherwise indistinguishably
+    collapse "clean" and "command failed" into the same None value.
 
     Args:
-        command: The command value supplied by the caller or surrounding test fixture.
-        cwd: The cwd value supplied by the caller or surrounding test fixture.
+        command: The argv to execute.
+        cwd: Working directory for the subprocess.
 
     Returns:
-        The value produced by the documented operation.
+        Stripped stdout (possibly empty), or None if the command itself failed.
     """
 
-    # Attempt this boundary operation here so (OSError, subprocess.CalledProcessError) can be
-    # translated or cleaned up under the repository contract.
+    # Same OSError/CalledProcessError collapsing as _run_optional above.
     try:
         # every call site below passes a fixed literal command tuple, not
         # runtime/user-constructed input.
@@ -482,30 +476,29 @@ def _run_optional_allow_empty(command: tuple[str, ...], cwd: Path) -> str | None
 
 
 def _capture_cpu_model() -> str | None:
-    """Capture cpu model according to the repository contract.
+    """Best-effort CPU model string, using a platform-specific lookup where available.
 
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    Falls back through three tiers: a macOS sysctl call, a Linux /proc/cpuinfo read,
+    then Python's own platform.processor() -- each tier is tried only if the platform
+    matches, and any failure at any tier degrades to None rather than raising, matching
+    every other field in ResourceSummary.
 
     Returns:
-        The value produced by the documented operation.
+        The CPU model string, or None if it couldn't be determined.
     """
 
-    # Evaluate `sys.platform == 'darwin'` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # macOS doesn't expose a CPU model string via /proc; sysctl is the standard tool.
     if sys.platform == "darwin":
         return _run_optional(("sysctl", "-n", "machdep.cpu.brand_string"), Path.cwd())
-    # Evaluate `sys.platform.startswith('linux')` explicitly so invalid or alternate states follow
-    # the documented contract.
+    # Linux exposes CPU info via the /proc/cpuinfo pseudo-file instead of a tool call.
     if sys.platform.startswith("linux"):
-        # Attempt this boundary operation here so OSError can be translated or cleaned up under the
-        # repository contract.
+        # /proc/cpuinfo may not exist or be readable in some sandboxed/containerized
+        # environments; degrade to None rather than raising.
         try:
-            # Iterate over `Path('/proc/cpuinfo').read_text(encoding='utf-8').splitlines()` one item
-            # at a time so ordering, validation, and failure attribution remain explicit.
+            # Scan every line for the first "model name" field; /proc/cpuinfo repeats
+            # this per logical core, so the first occurrence is sufficient.
             for line in Path("/proc/cpuinfo").read_text(encoding="utf-8").splitlines():
-                # Evaluate `line.lower().startswith('model name')` explicitly so invalid or
-                # alternate states follow the documented contract.
+                # Case-insensitive since the exact casing isn't guaranteed by /proc.
                 if line.lower().startswith("model name"):
                     return line.partition(":")[2].strip() or None
         except OSError:
@@ -514,36 +507,32 @@ def _capture_cpu_model() -> str | None:
 
 
 def _capture_memory_total() -> int | None:
-    """Capture memory total according to the repository contract.
+    """Best-effort total physical memory in bytes, using a platform-specific lookup.
 
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    Same platform-tiered fallback strategy as _capture_cpu_model: macOS via sysctl,
+    Linux via /proc/meminfo, otherwise None.
 
     Returns:
-        The value produced by the documented operation.
+        Total memory in bytes, or None if it couldn't be determined.
     """
 
-    # Evaluate `sys.platform == 'darwin'` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # macOS reports memory size via sysctl's hw.memsize key, in bytes already.
     if sys.platform == "darwin":
         value = _run_optional(("sysctl", "-n", "hw.memsize"), Path.cwd())
-        # Attempt this boundary operation here so ValueError can be translated or cleaned up under
-        # the repository contract.
+        # sysctl output should be a plain integer; a malformed value degrades to None.
         try:
             return int(value) if value else None
         except ValueError:
             return None
-    # Evaluate `sys.platform.startswith('linux')` explicitly so invalid or alternate states follow
-    # the documented contract.
+    # Linux exposes memory info via /proc/meminfo, in kibibytes; convert to bytes below.
     if sys.platform.startswith("linux"):
-        # Attempt this boundary operation here so (OSError, ValueError, IndexError) can be
-        # translated or cleaned up under the repository contract.
+        # /proc/meminfo may not exist, or its MemTotal line may be malformed, in some
+        # sandboxed/containerized environments; degrade to None rather than raising.
         try:
-            # Iterate over `Path('/proc/meminfo').read_text(encoding='utf-8').splitlines()` one item
-            # at a time so ordering, validation, and failure attribution remain explicit.
+            # Scan for the MemTotal line; /proc/meminfo lists many other fields this
+            # function doesn't need.
             for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
-                # Evaluate `line.startswith('MemTotal:')` explicitly so invalid or alternate states
-                # follow the documented contract.
+                # MemTotal is reported in kibibytes; convert to bytes on return above.
                 if line.startswith("MemTotal:"):
                     return int(line.split()[1]) * 1024
         except (OSError, ValueError, IndexError):
