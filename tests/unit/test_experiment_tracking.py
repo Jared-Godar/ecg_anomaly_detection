@@ -15,85 +15,50 @@ from ecg_anomaly_detection.experiment_tracking import (
 
 
 def test_constructor_rejects_empty_candidate_ids(tmp_path: Path) -> None:
-    """Verify that constructor rejects empty candidate ids.
+    """A tracker with zero candidates is rejected, since progress/finalize would be degenerate."""
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-    """
-
-    # Scope `pytest.raises(ExperimentTrackingError, match='must not be empty')` here so the expected
-    # failure and fixture cleanup stay scoped to this assertion.
+    # candidate_ids=[] is the empty case this constructor must reject.
     with pytest.raises(ExperimentTrackingError, match="must not be empty"):
         ExperimentTracker(tmp_path, [])
 
 
 def test_constructor_rejects_duplicate_candidate_ids(tmp_path: Path) -> None:
-    """Verify that constructor rejects duplicate candidate ids.
+    """Duplicate candidate IDs are rejected, since they'd make checkpoint lookups ambiguous."""
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-    """
-
-    # Scope `pytest.raises(ExperimentTrackingError, match='must be unique')` here so the expected
-    # failure and fixture cleanup stay scoped to this assertion.
+    # "a" appears twice in candidate_ids.
     with pytest.raises(ExperimentTrackingError, match="must be unique"):
         ExperimentTracker(tmp_path, ["a", "a"])
 
 
 @pytest.mark.parametrize("candidate_id", ["", "../evil", "a/b", "..", ".hidden", "trailing-"])
 def test_constructor_rejects_unsafe_candidate_ids(tmp_path: Path, candidate_id: str) -> None:
-    """Verify that constructor rejects unsafe candidate ids.
+    """Every filesystem-unsafe candidate ID shape is rejected by _CANDIDATE_ID_PATTERN.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        candidate_id: The candidate id value supplied by the caller or surrounding test fixture.
+    Covers path traversal ("../evil", ".."), path separators ("a/b"), hidden-file
+    dots (".hidden"), and a trailing non-alphanumeric character ("trailing-") in one
+    parametrized sweep, confirming the pattern rejects each independently.
     """
 
-    # Scope `pytest.raises(ExperimentTrackingError, match='filesystem-safe')` here so the expected
-    # failure and fixture cleanup stay scoped to this assertion.
+    # candidate_id is this test's parametrized unsafe value.
     with pytest.raises(ExperimentTrackingError, match="filesystem-safe"):
         ExperimentTracker(tmp_path, [candidate_id])
 
 
 def test_constructor_refuses_a_symlinked_checkpoint_directory(tmp_path: Path) -> None:
-    """Verify that constructor refuses a symlinked checkpoint directory.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-    """
+    """A checkpoint_directory that is itself a symlink is rejected, not silently followed."""
 
     real_target = tmp_path / "elsewhere"
     real_target.mkdir()
     checkpoint_link = tmp_path / "checkpoints"
     checkpoint_link.symlink_to(real_target, target_is_directory=True)
 
-    # Scope `pytest.raises(ExperimentTrackingError, match='symbolic link')` here so the expected
-    # failure and fixture cleanup stay scoped to this assertion.
+    # checkpoint_link is a symlink to real_target, not a regular directory.
     with pytest.raises(ExperimentTrackingError, match="symbolic link"):
         ExperimentTracker(checkpoint_link, ["a"])
 
 
 def test_new_tracker_has_no_completed_candidates(tmp_path: Path) -> None:
-    """Verify that new tracker has no completed candidates.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-    """
+    """A freshly constructed tracker (no prior checkpoints) reports zero progress."""
 
     tracker = ExperimentTracker(tmp_path, ["a", "b"])
 
@@ -108,19 +73,11 @@ def test_new_tracker_has_no_completed_candidates(tmp_path: Path) -> None:
 
 
 def test_track_persists_metrics_and_predictions_on_success(tmp_path: Path) -> None:
-    """Verify that track persists metrics and predictions on success.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-    """
+    """A successful track() block checkpoints both metrics and predictions to disk."""
 
     tracker = ExperimentTracker(tmp_path, ["a"])
 
-    # Scope `tracker.track('a')` here so the expected failure and fixture cleanup stay scoped to
-    # this assertion.
+    # Attach both metrics and predictions via the recorder before the block exits.
     with tracker.track("a") as recorder:
         recorder.set_metrics({"accuracy": 0.9})
         recorder.set_predictions(np.array([1, 0, 1]))
@@ -136,19 +93,11 @@ def test_track_persists_metrics_and_predictions_on_success(tmp_path: Path) -> No
 
 
 def test_track_without_predictions_leaves_predictions_unset(tmp_path: Path) -> None:
-    """Verify that track without predictions leaves predictions unset.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-    """
+    """A track() block that never calls set_predictions leaves predictions unset (None)."""
 
     tracker = ExperimentTracker(tmp_path, ["a"])
 
-    # Scope `tracker.track('a')` here so the expected failure and fixture cleanup stay scoped to
-    # this assertion.
+    # Only metrics are attached; set_predictions is deliberately never called.
     with tracker.track("a") as recorder:
         recorder.set_metrics({"accuracy": 0.5})
 
@@ -156,19 +105,15 @@ def test_track_without_predictions_leaves_predictions_unset(tmp_path: Path) -> N
 
 
 def test_track_does_not_persist_a_candidate_whose_body_raises(tmp_path: Path) -> None:
-    """Verify that track does not persist a candidate whose body raises.
+    """A raised exception inside track() leaves no checkpoint for that candidate.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    Protects the documented "nothing persisted if the body raises" guarantee: even
+    though set_metrics was called before the raise, no result file should end up on disk.
     """
 
     tracker = ExperimentTracker(tmp_path, ["a"])
 
-    # Scope `pytest.raises(RuntimeError, match='boom'), tracker.track('a')` here so the expected
-    # failure and fixture cleanup stay scoped to this assertion.
+    # The RuntimeError raised inside this block must prevent any checkpoint write.
     with pytest.raises(RuntimeError, match="boom"), tracker.track("a") as recorder:
         recorder.set_metrics({"accuracy": 0.5})
         raise RuntimeError("boom")
@@ -178,20 +123,11 @@ def test_track_does_not_persist_a_candidate_whose_body_raises(tmp_path: Path) ->
 
 
 def test_track_rejects_an_unknown_candidate_id(tmp_path: Path) -> None:
-    """Verify that track rejects an unknown candidate id.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-    """
+    """track() rejects a candidate ID outside the tracker's fixed candidate_ids set."""
 
     tracker = ExperimentTracker(tmp_path, ["a"])
 
-    # Scope `pytest.raises(ExperimentTrackingError, match='unknown candidate ID'),
-    # tracker.track('not-a-candidate')` here so the expected failure and fixture cleanup stay scoped
-    # to this assertion.
+    # "not-a-candidate" was never passed to ExperimentTracker's constructor.
     with (
         pytest.raises(ExperimentTrackingError, match="unknown candidate ID"),
         tracker.track("not-a-candidate"),
@@ -200,36 +136,25 @@ def test_track_rejects_an_unknown_candidate_id(tmp_path: Path) -> None:
 
 
 def test_load_result_raises_for_a_candidate_with_no_checkpoint(tmp_path: Path) -> None:
-    """Verify that load result raises for a candidate with no checkpoint.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-    """
+    """load_result raises a clear error for a candidate that was never tracked."""
 
     tracker = ExperimentTracker(tmp_path, ["a"])
 
-    # Scope `pytest.raises(ExperimentTrackingError, match='no checkpointed result')` here so the
-    # expected failure and fixture cleanup stay scoped to this assertion.
+    # "a" is a known candidate ID, but track() was never called for it.
     with pytest.raises(ExperimentTrackingError, match="no checkpointed result"):
         tracker.load_result("a")
 
 
 def test_a_new_tracker_instance_resumes_prior_completions_from_disk(tmp_path: Path) -> None:
-    """Verify that a new tracker instance resumes prior completions from disk.
+    """A second ExperimentTracker over the same directory sees the first instance's completions.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    This is the resume contract this module exists for: checkpoint state lives on
+    disk, not in the ExperimentTracker instance, so a fresh process re-running the same
+    checkpoint_directory picks up exactly where a prior, possibly-interrupted run left off.
     """
 
     first = ExperimentTracker(tmp_path, ["a", "b"])
-    # Scope `first.track('a')` here so the expected failure and fixture cleanup stay scoped to this
-    # assertion.
+    # Complete candidate "a" with the first tracker instance, then discard it.
     with first.track("a") as recorder:
         recorder.set_metrics({"accuracy": 0.8})
 
@@ -243,21 +168,19 @@ def test_a_new_tracker_instance_resumes_prior_completions_from_disk(tmp_path: Pa
 def test_progress_reports_average_and_estimated_remaining_after_a_completion(
     tmp_path: Path,
 ) -> None:
-    # Calls in order: constructor start, track() start, track() end, progress().
-    """Verify that progress reports average and estimated remaining after a completion.
+    """progress() computes a correct average duration and ETA from one completed candidate.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    The injected clock yields exactly the four monotonic() calls track() and the
+    constructor make, in order: tracker construction, track() entry, track() exit, and
+    the later progress() call reusing the same "now" as track()'s exit -- producing a
+    deterministic 3.0s measured duration.
     """
 
+    # Calls in order: constructor start, track() start, track() end, progress().
     clock = iter([0.0, 0.0, 3.0, 3.0])
     tracker = ExperimentTracker(tmp_path, ["a", "b"], monotonic=lambda: next(clock))
 
-    # Scope `tracker.track('a')` here so the expected failure and fixture cleanup stay scoped to
-    # this assertion.
+    # Complete candidate "a"; the injected clock reports a 3.0s duration for this block.
     with tracker.track("a") as recorder:
         recorder.set_metrics({"accuracy": 0.8})
 
@@ -270,43 +193,25 @@ def test_progress_reports_average_and_estimated_remaining_after_a_completion(
 
 
 def test_finalize_refuses_when_candidates_remain_incomplete(tmp_path: Path) -> None:
-    """Verify that finalize refuses when candidates remain incomplete.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-    """
+    """finalize() refuses to run while any candidate still lacks a checkpointed result."""
 
     tracker = ExperimentTracker(tmp_path, ["a", "b"])
-    # Scope `tracker.track('a')` here so the expected failure and fixture cleanup stay scoped to
-    # this assertion.
+    # Only "a" is completed; "b" is deliberately left untracked.
     with tracker.track("a") as recorder:
         recorder.set_metrics({"accuracy": 0.8})
 
-    # Scope `pytest.raises(ExperimentTrackingError, match='1 candidate.*not yet completed')` here so
-    # the expected failure and fixture cleanup stay scoped to this assertion.
+    # "b" has no checkpointed result yet.
     with pytest.raises(ExperimentTrackingError, match="1 candidate.*not yet completed"):
         tracker.finalize("accuracy")
 
 
 def test_finalize_sorts_descending_by_default_and_writes_final_results(tmp_path: Path) -> None:
-    """Verify that finalize sorts descending by default and writes final results.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-    """
+    """finalize() ranks by the given metric, highest first, by default."""
 
     tracker = ExperimentTracker(tmp_path, ["a", "b", "c"])
-    # Iterate over `(('a', 0.7), ('b', 0.95), ('c', 0.8))` one item at a time so ordering,
-    # validation, and failure attribution remain explicit.
+    # Complete every candidate with a distinct accuracy, deliberately out of rank order.
     for candidate_id, accuracy in (("a", 0.7), ("b", 0.95), ("c", 0.8)):
-        # Scope `tracker.track(candidate_id)` here so the expected failure and fixture cleanup stay
-        # scoped to this assertion.
+        # Record this candidate's metrics before track()'s block exits.
         with tracker.track(candidate_id) as recorder:
             recorder.set_metrics({"accuracy": accuracy})
 
@@ -321,21 +226,12 @@ def test_finalize_sorts_descending_by_default_and_writes_final_results(tmp_path:
 
 
 def test_finalize_sorts_ascending_when_lower_is_better(tmp_path: Path) -> None:
-    """Verify that finalize sorts ascending when lower is better.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-    """
+    """higher_is_better=False ranks by the given metric lowest first (e.g. for a loss metric)."""
 
     tracker = ExperimentTracker(tmp_path, ["a", "b"])
-    # Iterate over `(('a', 0.5), ('b', 0.1))` one item at a time so ordering, validation, and
-    # failure attribution remain explicit.
+    # Complete both candidates with distinct loss values, deliberately out of rank order.
     for candidate_id, loss in (("a", 0.5), ("b", 0.1)):
-        # Scope `tracker.track(candidate_id)` here so the expected failure and fixture cleanup stay
-        # scoped to this assertion.
+        # Record this candidate's metrics before track()'s block exits.
         with tracker.track(candidate_id) as recorder:
             recorder.set_metrics({"loss": loss})
 
@@ -346,18 +242,15 @@ def test_finalize_sorts_ascending_when_lower_is_better(tmp_path: Path) -> None:
 
 
 def test_no_leftover_temp_files_after_successful_writes(tmp_path: Path) -> None:
-    """Verify that no leftover temp files after successful writes.
+    """Successful checkpoint and finalize writes leave no `.tmp` files behind.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
+    Protects the atomic-write contract in _atomic_write_json/_atomic_write_npy: the
+    temp file used for the rename-into-place trick must always be gone after a
+    successful write, not merely after a crash-recovery cleanup.
     """
 
     tracker = ExperimentTracker(tmp_path, ["a"])
-    # Scope `tracker.track('a')` here so the expected failure and fixture cleanup stay scoped to
-    # this assertion.
+    # Complete the one candidate with both metrics and predictions attached.
     with tracker.track("a") as recorder:
         recorder.set_metrics({"accuracy": 0.9})
         recorder.set_predictions(np.array([1, 0]))
