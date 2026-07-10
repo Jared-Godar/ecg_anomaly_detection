@@ -15,14 +15,16 @@ from unittest.mock import patch
 
 import pytest
 
-# Centralize _SCRIPT_PATH so every caller shares the same documented invariant.
+# Locate the script relative to this test file, not the current working
+# directory, so the test suite works regardless of where pytest is invoked from.
 _SCRIPT_PATH = (
     Path(__file__).resolve().parents[2] / "scripts" / "github" / "validate_project_metadata.py"
 )
-# Centralize _SPEC so every caller shares the same documented invariant.
+# Load the script as a module by file path, since it's not installed as part of the
+# package (see this file's module docstring for why).
 _SPEC = importlib.util.spec_from_file_location("validate_project_metadata", _SCRIPT_PATH)
 assert _SPEC is not None and _SPEC.loader is not None
-# Construct vpm once so the module exposes one stable shared definition.
+# The module object every test in this file calls into (e.g. vpm.validate_pull_request).
 vpm = importlib.util.module_from_spec(_SPEC)
 # dataclasses resolves postponed (`from __future__ import annotations`) type hints via
 # sys.modules[cls.__module__], so the module must be registered there before exec_module
@@ -47,35 +49,26 @@ _SPEC.loader.exec_module(vpm)
     ],
 )
 def test_extract_closing_issue_numbers(body: str, expected: tuple[int, ...]) -> None:
-    """Verify that extract closing issue numbers.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    """GitHub's closing-keyword vocabulary (closes/fixes/resolves, any case) is matched,
+    "related to" is not, and an empty body yields no issue numbers at all.
 
     Args:
-        body: The body value supplied by the caller or surrounding test fixture.
-        expected: The expected value supplied by the caller or surrounding test fixture.
+        body: A PR body text to scan.
+        expected: The issue numbers extract_closing_issue_numbers must return, in
+            the order they appear in body.
     """
 
     assert vpm.extract_closing_issue_numbers(body) == expected
 
 
 def test_extract_closing_issue_numbers_deduplicates_preserving_order() -> None:
-    """Verify that extract closing issue numbers deduplicates preserving order.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """The same issue number closed twice in one body appears only once, at its first position."""
 
     assert vpm.extract_closing_issue_numbers("Closes #5. Also closes #5. Fixes #3.") == (5, 3)
 
 
 def test_extract_closing_issue_numbers_does_not_match_a_bare_reference() -> None:
-    """Verify that extract closing issue numbers does not match a bare reference.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """A bare "#38" with no closing keyword in front of it is not treated as a closing reference."""
 
     assert vpm.extract_closing_issue_numbers("See #38 for context.") == ()
 
@@ -84,11 +77,7 @@ def test_extract_closing_issue_numbers_does_not_match_a_bare_reference() -> None
 
 
 def test_complete_pull_request_has_no_violations() -> None:
-    """Verify that complete pull request has no violations.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """A PR with an assignee, milestone, type:/area: labels, and a closing reference passes cleanly."""
 
     pr = vpm.PullRequestMetadata(
         number=1,
@@ -101,10 +90,10 @@ def test_complete_pull_request_has_no_violations() -> None:
 
 
 def test_pull_request_missing_everything_reports_all_violations() -> None:
-    """Verify that pull request missing everything reports all violations.
+    """Every one of the five required PR fields being absent produces five distinct violations.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Confirms validate_pull_request checks each requirement independently
+    rather than short-circuiting on the first failure it finds.
     """
 
     pr = vpm.PullRequestMetadata(
@@ -120,10 +109,11 @@ def test_pull_request_missing_everything_reports_all_violations() -> None:
 
 
 def test_old_style_labels_without_a_space_are_recognized() -> None:
-    """Verify that old style labels without a space are recognized.
+    """ "type:modernization" (no space after the colon) still satisfies the type:* requirement.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    The label taxonomy's canonical spelling has a space ("type: modernization"),
+    but older labels created before that convention was adopted must still be
+    recognized so this check doesn't regress on pre-existing PRs.
     """
 
     pr = vpm.PullRequestMetadata(
@@ -137,10 +127,10 @@ def test_old_style_labels_without_a_space_are_recognized() -> None:
 
 
 def test_a_thematic_label_alone_does_not_satisfy_the_type_or_area_requirement() -> None:
-    """Verify that a thematic label alone does not satisfy the type or area requirement.
+    """A "portfolio: case-study" label does not stand in for a required type:* or area:* label.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Thematic labels and type/area labels are orthogonal categories; having one
+    must not mask the absence of the other.
     """
 
     pr = vpm.PullRequestMetadata(
@@ -156,10 +146,11 @@ def test_a_thematic_label_alone_does_not_satisfy_the_type_or_area_requirement() 
 
 
 def test_missing_milestone_passes_when_not_required() -> None:
-    """Verify that missing milestone passes when not required.
+    """With require_milestone=False, a PR with no milestone reports no milestone violation.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Milestone is only mandatory once a PR's closing issues determine it is
+    (see closing_issue_milestones_require_pr_milestone below); the flag lets
+    validate_pull_request be called either way.
     """
 
     pr = vpm.PullRequestMetadata(
@@ -174,11 +165,7 @@ def test_missing_milestone_passes_when_not_required() -> None:
 
 
 def test_missing_milestone_still_fails_when_required() -> None:
-    """Verify that missing milestone still fails when required.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """With require_milestone=True, a PR with no milestone reports the milestone violation."""
 
     pr = vpm.PullRequestMetadata(
         number=6,
@@ -195,41 +182,33 @@ def test_missing_milestone_still_fails_when_required() -> None:
 
 
 def test_milestone_required_when_no_closing_issues_are_known() -> None:
-    """Verify that milestone required when no closing issues are known.
+    """An empty tuple of closing-issue milestones defaults to requiring a PR milestone.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    With no closing issues to consult, there's no information suggesting the
+    milestone requirement can be relaxed, so the conservative default applies.
     """
 
     assert vpm.closing_issue_milestones_require_pr_milestone(()) is True
 
 
 def test_milestone_not_required_when_every_closing_issue_is_unmilestoned() -> None:
-    """Verify that milestone not required when every closing issue is unmilestoned.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """If every issue the PR closes is itself unmilestoned, the PR need not have one either."""
 
     assert vpm.closing_issue_milestones_require_pr_milestone((None, None)) is False
 
 
 def test_milestone_required_when_any_closing_issue_has_one() -> None:
-    """Verify that milestone required when any closing issue has one.
+    """A mix of one milestoned and one unmilestoned closing issue still requires a PR milestone.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Any milestoned closing issue is enough to trigger the requirement, even
+    when it's not unanimous.
     """
 
     assert vpm.closing_issue_milestones_require_pr_milestone((None, "M8")) is True
 
 
 def test_milestone_required_when_every_closing_issue_has_one() -> None:
-    """Verify that milestone required when every closing issue has one.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """When every closing issue shares the same milestone, the PR is still required to have one."""
 
     assert vpm.closing_issue_milestones_require_pr_milestone(("M5", "M5")) is True
 
@@ -238,17 +217,14 @@ def test_milestone_required_when_every_closing_issue_has_one() -> None:
 
 
 def _project_item(number: int, **fields: str) -> dict[str, object]:
-    """Compute and return project item for the documented repository workflow.
-
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    """Build a fake Project #5 item dict shaped like `gh project item-list`'s JSON output.
 
     Args:
-        number: The number value supplied by the caller or surrounding test fixture.
-        fields: The fields value supplied by the caller or surrounding test fixture.
+        number: The GitHub issue number this item represents.
+        fields: Project field name/value pairs to attach (e.g. status="Closed").
 
     Returns:
-        The value produced by the documented operation.
+        A dict with a nested "content" object of type "Issue" plus the given fields.
     """
 
     item: dict[str, object] = {"content": {"type": "Issue", "number": number}}
@@ -257,11 +233,7 @@ def _project_item(number: int, **fields: str) -> dict[str, object]:
 
 
 def test_issue_not_present_in_project_is_reported_as_a_non_member() -> None:
-    """Verify that issue not present in project is reported as a non member.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """An issue absent from the Project #5 item list is reported as a non-member, not as missing fields."""
 
     report = vpm.build_project_field_report(99, [])
     assert report.is_project_member is False
@@ -272,11 +244,7 @@ def test_issue_not_present_in_project_is_reported_as_a_non_member() -> None:
 
 
 def test_issue_with_all_required_fields_has_no_violations() -> None:
-    """Verify that issue with all required fields has no violations.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
+    """An issue carrying every one of the nine required Project #5 fields passes with no violations."""
 
     complete = _project_item(
         38,
@@ -297,10 +265,10 @@ def test_issue_with_all_required_fields_has_no_violations() -> None:
 
 
 def test_issue_missing_some_fields_is_reported_by_name() -> None:
-    """Verify that issue missing some fields is reported by name.
+    """Only the specific fields absent from the item (e.g. "Issue Type") are named as missing.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    "status" and "workstream" are present on the fixture item, so they must not
+    appear in missing_fields even though most other required fields are absent.
     """
 
     partial = _project_item(38, status="In Progress", workstream="Developer Experience")
@@ -315,10 +283,11 @@ def test_issue_missing_some_fields_is_reported_by_name() -> None:
 
 
 def test_a_matching_pull_request_item_is_not_mistaken_for_the_issue() -> None:
-    """Verify that a matching pull request item is not mistaken for the issue.
+    """A Project item with the same number but content.type "PullRequest" is not counted as the issue.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Issue and PR numbers share the same numbering space in a GitHub repo, so
+    matching must check content.type, not just the number, to avoid a false
+    membership match.
     """
 
     pr_item = {"content": {"type": "PullRequest", "number": 38}}
@@ -330,10 +299,10 @@ def test_a_matching_pull_request_item_is_not_mistaken_for_the_issue() -> None:
 
 
 def test_fetch_pull_request_parses_gh_output() -> None:
-    """Verify that fetch pull request parses gh output.
+    """fetch_pull_request converts `gh pr view`'s JSON shape into a flat PullRequestMetadata.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    Confirms the nested assignee/milestone/label objects in gh's JSON are
+    each reduced to the flat strings validate_pull_request expects.
     """
 
     fake_stdout = (
@@ -341,9 +310,7 @@ def test_fetch_pull_request_parses_gh_output() -> None:
         '"milestone": {"title": "M5"}, "labels": [{"name": "type: modernization"}], '
         '"body": "Closes #38"}'
     )
-    # Scope `patch.object(subprocess, 'run', return_value=subprocess.CompletedProcess([], 0,
-    # stdout=fake_stdout, stderr=''))` here so the expected failure and fixture cleanup stay scoped
-    # to this assertion.
+    # gh's real `pr view --json` output nests assignees/milestone/labels as objects.
     with patch.object(
         subprocess,
         "run",
@@ -357,16 +324,9 @@ def test_fetch_pull_request_parses_gh_output() -> None:
 
 
 def test_fetch_pull_request_raises_on_gh_failure() -> None:
-    """Verify that fetch pull request raises on gh failure.
+    """A failing `gh pr view` invocation is translated into MetadataValidationError with gh's stderr."""
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
-
-    # Scope `patch.object(subprocess, 'run', side_effect=subprocess.CalledProcessError(1, ['gh'],
-    # stderr='pull request not found')), pytest.raises(vpm.MetadataValidationError, match='pull
-    # request not found')` here so the expected failure and fixture cleanup stay scoped to this
-    # assertion.
+    # gh exits non-zero when the PR number doesn't exist.
     with (
         patch.object(
             subprocess,
@@ -379,15 +339,9 @@ def test_fetch_pull_request_raises_on_gh_failure() -> None:
 
 
 def test_fetch_issue_milestone_parses_gh_output_with_a_milestone() -> None:
-    """Verify that fetch issue milestone parses gh output with a milestone.
+    """fetch_issue_milestone extracts the milestone title from `gh issue view`'s JSON output."""
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
-
-    # Scope `patch.object(subprocess, 'run', return_value=subprocess.CompletedProcess([], 0,
-    # stdout='{"milestone": {"title": "M8"}...` here so the expected failure and fixture cleanup
-    # stay scoped to this assertion.
+    # gh's real `issue view --json milestone` output nests the title under "milestone".
     with patch.object(
         subprocess,
         "run",
@@ -399,15 +353,9 @@ def test_fetch_issue_milestone_parses_gh_output_with_a_milestone() -> None:
 
 
 def test_fetch_issue_milestone_returns_none_when_absent() -> None:
-    """Verify that fetch issue milestone returns none when absent.
+    """An issue with no milestone assigned returns None, not an error or an empty string."""
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
-
-    # Scope `patch.object(subprocess, 'run', return_value=subprocess.CompletedProcess([], 0,
-    # stdout='{"milestone": null}', stderr=...` here so the expected failure and fixture cleanup
-    # stay scoped to this assertion.
+    # gh reports a JSON null when the issue has no milestone set.
     with patch.object(
         subprocess,
         "run",
@@ -417,15 +365,9 @@ def test_fetch_issue_milestone_returns_none_when_absent() -> None:
 
 
 def test_fetch_issue_milestone_raises_on_gh_failure() -> None:
-    """Verify that fetch issue milestone raises on gh failure.
+    """A failing `gh issue view` invocation is translated into MetadataValidationError with gh's stderr."""
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-    """
-
-    # Scope `patch.object(subprocess, 'run', side_effect=subprocess.CalledProcessError(1, ['gh'],
-    # stderr='issue not found')), pytest.raises(vpm.MetadataValidationError, match='issue not
-    # found')` here so the expected failure and fixture cleanup stay scoped to this assertion.
+    # gh exits non-zero when the issue number doesn't exist.
     with (
         patch.object(
             subprocess,
@@ -438,15 +380,13 @@ def test_fetch_issue_milestone_raises_on_gh_failure() -> None:
 
 
 def test_fetch_project_items_raises_metadata_validation_error_on_failure() -> None:
-    """Verify that fetch project items raises metadata validation error on failure.
+    """A failing `gh project item-list` invocation is translated into MetadataValidationError.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
+    "insufficient scope" is a realistic failure here: reading Project #5
+    items requires a `gh` token with the `project` scope granted.
     """
 
-    # Scope `patch.object(subprocess, 'run', side_effect=subprocess.CalledProcessError(1, ['gh'],
-    # stderr='insufficient scope')), pytest.raises(vpm.MetadataValidationError, match='insufficient
-    # scope')` here so the expected failure and fixture cleanup stay scoped to this assertion.
+    # gh exits non-zero when the token lacks the project scope.
     with (
         patch.object(
             subprocess,
