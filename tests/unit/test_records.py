@@ -17,13 +17,10 @@ from ecg_anomaly_detection.records import (
 
 @pytest.fixture
 def dataset_config() -> DatasetConfig:
-    """Build or exercise the dataset config test fixture.
-
-    The helper keeps repeated test setup explicit without hiding the contract under
-    examination.
+    """A single-record synthetic dataset config matching the signal_record/annotations fixtures.
 
     Returns:
-        The value produced by the documented operation.
+        A DatasetConfig for one record ("100") at 360 Hz.
     """
 
     return DatasetConfig(
@@ -42,13 +39,10 @@ def dataset_config() -> DatasetConfig:
 
 @pytest.fixture
 def signal_record() -> SignalRecord:
-    """Build or exercise the signal record test fixture.
-
-    The helper keeps repeated test setup explicit without hiding the contract under
-    examination.
+    """A minimal valid 2-channel, 3-sample signal at 360 Hz.
 
     Returns:
-        The value produced by the documented operation.
+        A SignalRecord matching dataset_config's record ID and sample rate.
     """
 
     return SignalRecord(
@@ -62,13 +56,10 @@ def signal_record() -> SignalRecord:
 
 @pytest.fixture
 def annotations() -> AnnotationSet:
-    """Build or exercise the annotations test fixture.
-
-    The helper keeps repeated test setup explicit without hiding the contract under
-    examination.
+    """Two valid, in-bounds, ordered annotations matching signal_record's 3-sample signal.
 
     Returns:
-        The value produced by the documented operation.
+        An AnnotationSet with one "N" and one "V" symbol.
     """
 
     return AnnotationSet(
@@ -84,17 +75,7 @@ def test_valid_record_produces_machine_readable_report(
     signal_record: SignalRecord,
     annotations: AnnotationSet,
 ) -> None:
-    """Verify that valid record produces machine readable report.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        tmp_path: Temporary filesystem root supplied by pytest for isolated artifacts.
-        dataset_config: The dataset config value supplied by the caller or surrounding test fixture.
-        signal_record: The signal record value supplied by the caller or surrounding test fixture.
-        annotations: The annotations value supplied by the caller or surrounding test fixture.
-    """
+    """A fully valid record passes every check and produces a correct, writable report."""
 
     report = validate_record(dataset_config, signal_record, annotations)
     output_path = tmp_path / "report.json"
@@ -113,16 +94,7 @@ def test_validation_rejects_wrong_sample_rate(
     signal_record: SignalRecord,
     annotations: AnnotationSet,
 ) -> None:
-    """Verify that validation rejects wrong sample rate.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        dataset_config: The dataset config value supplied by the caller or surrounding test fixture.
-        signal_record: The signal record value supplied by the caller or surrounding test fixture.
-        annotations: The annotations value supplied by the caller or surrounding test fixture.
-    """
+    """A signal whose sample rate disagrees with the dataset config is rejected."""
 
     wrong_rate = SignalRecord(
         record_id=signal_record.record_id,
@@ -132,8 +104,7 @@ def test_validation_rejects_wrong_sample_rate(
         units=signal_record.units,
     )
 
-    # Scope `pytest.raises(RecordValidationError, match='sample rate mismatch')` here so the
-    # expected failure and fixture cleanup stay scoped to this assertion.
+    # 250.0 Hz does not match dataset_config's declared 360 Hz.
     with pytest.raises(RecordValidationError, match="sample rate mismatch"):
         validate_record(dataset_config, wrong_rate, annotations)
 
@@ -143,16 +114,7 @@ def test_validation_rejects_non_finite_signal(
     signal_record: SignalRecord,
     annotations: AnnotationSet,
 ) -> None:
-    """Verify that validation rejects non finite signal.
-
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        dataset_config: The dataset config value supplied by the caller or surrounding test fixture.
-        signal_record: The signal record value supplied by the caller or surrounding test fixture.
-        annotations: The annotations value supplied by the caller or surrounding test fixture.
-    """
+    """A signal containing a NaN sample is rejected before it could corrupt downstream windows."""
 
     invalid_signals = signal_record.signals.copy()
     invalid_signals[1, 0] = np.nan
@@ -164,8 +126,7 @@ def test_validation_rejects_non_finite_signal(
         units=signal_record.units,
     )
 
-    # Scope `pytest.raises(RecordValidationError, match='non-finite')` here so the expected failure
-    # and fixture cleanup stay scoped to this assertion.
+    # invalid_signals[1, 0] was set to NaN above.
     with pytest.raises(RecordValidationError, match="non-finite"):
         validate_record(dataset_config, non_finite, annotations)
 
@@ -184,16 +145,12 @@ def test_validation_rejects_invalid_annotation_locations(
     sample_indices: np.ndarray,
     message: str,
 ) -> None:
-    """Verify that validation rejects invalid annotation locations.
+    """Each of the three annotation-location invariants (negative, out-of-bounds, unordered)
+    is independently rejected.
 
-    This regression test makes the named behavior and its failure boundary visible to future
-    maintainers.
-
-    Args:
-        dataset_config: The dataset config value supplied by the caller or surrounding test fixture.
-        signal_record: The signal record value supplied by the caller or surrounding test fixture.
-        sample_indices: The sample indices value supplied by the caller or surrounding test fixture.
-        message: The message value supplied by the caller or surrounding test fixture.
+    One parametrized sweep covering every branch of validate_record's annotation-bounds
+    checks: a negative index, an index at/past the 3-sample signal's length, and two
+    indices out of ascending order.
     """
 
     invalid = AnnotationSet(
@@ -202,7 +159,6 @@ def test_validation_rejects_invalid_annotation_locations(
         symbols=tuple("N" for _ in sample_indices),
     )
 
-    # Scope `pytest.raises(RecordValidationError, match=message)` here so the expected failure and
-    # fixture cleanup stay scoped to this assertion.
+    # sample_indices is this test's parametrized invalid value.
     with pytest.raises(RecordValidationError, match=message):
         validate_record(dataset_config, signal_record, invalid)
