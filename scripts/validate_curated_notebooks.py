@@ -34,23 +34,31 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-# Centralize NOTEBOOKS so every caller shares the same documented invariant.
+# The three curated notebooks, in required execution order (00 generates artifacts
+# the later two read); this is the default `notebooks` argument to
+# validate_curated_notebooks, overridable in tests to exercise a subset.
 NOTEBOOKS: tuple[str, ...] = (
     "notebooks/00-environment-setup-and-artifact-generation.ipynb",
     "notebooks/01-narrative-walkthrough.ipynb",
     "notebooks/02-high-performing-gradient-boosting-validation.ipynb",
 )
 
-# Centralize SYNTHETIC_RECORD_IDS so every caller shares the same documented invariant.
+# Six record IDs (900-905), chosen outside the real MIT-BIH numbering range so a
+# synthetic record can never be mistaken for (or collide with) a real acquired one.
 SYNTHETIC_RECORD_IDS: tuple[str, ...] = ("900", "901", "902", "903", "904", "905")
-# Centralize SAMPLE_RATE_HZ so every caller shares the same documented invariant.
+# Matches the real MIT-BIH dataset's sample rate, since the dataset config asserts
+# this value and the curated notebooks assume it when reasoning about durations.
 SAMPLE_RATE_HZ = 360
-# Centralize RECORD_SECONDS so every caller shares the same documented invariant.
+# Short enough that six synthetic records generate and execute quickly, while still
+# long enough to fit every beat with its full pre/post window margin (see
+# BEAT_MARGIN_SAMPLES) without any beat falling outside the record.
 RECORD_SECONDS = 15
 # 3s pre/post window margin at 360 Hz is 1080 samples each side; keep beats
 # well clear of both record edges so none are excluded by boundary_policy.
 BEAT_MARGIN_SAMPLES = 1200
-# Centralize BEAT_SYMBOLS so every caller shares the same documented invariant.
+# One "N" (normal) and one "V" (ventricular ectopic) pair per record on average,
+# giving every synthetic record both target classes so the pipeline's binary
+# classification and split-quality class-coverage checks have real data to exercise.
 BEAT_SYMBOLS: tuple[str, ...] = ("N", "N", "V", "N", "V", "N")
 
 
@@ -168,14 +176,15 @@ def build_acquisition_manifest(files: Sequence[SyntheticFile], record_ids: Seque
 def _sha256_of(path: Path) -> SyntheticFile:
     """Calculate the SHA-256 digest of one local file.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    Used to build both the trimmed dataset config's expected_source_files and the
+    pre-seeded acquisition manifest, so both must agree with the actual bytes written
+    to disk for acquire_dataset's verify-and-reuse path to succeed.
 
     Args:
-        path: Filesystem path identifying the input or output under review.
+        path: Path to the synthetic WFDB companion file to hash.
 
     Returns:
-        The value produced by the documented operation.
+        The file's name, size, and SHA-256 digest.
     """
 
     data = path.read_bytes()
@@ -218,8 +227,8 @@ def generate_synthetic_records(
     directory: Path, record_ids: Sequence[str]
 ) -> tuple[SyntheticFile, ...]:
     """Write every synthetic record into `directory` and return their digests."""
-    # Iterate over `enumerate(record_ids)` one item at a time so ordering, validation, and failure
-    # attribution remain explicit.
+    # Vary the seed per record (100 + index) so records don't all generate identical
+    # noise, while keeping generation fully deterministic across runs.
     for index, record_id in enumerate(record_ids):
         write_synthetic_record(directory, record_id, seed=100 + index)
     return tuple(
@@ -231,16 +240,17 @@ def generate_synthetic_records(
 
 def seed_worktree(worktree: Path, record_ids: Sequence[str] = SYNTHETIC_RECORD_IDS) -> None:
     """Populate an isolated worktree copy with synthetic data and trimmed configs."""
-    # Scope `tempfile.TemporaryDirectory(prefix='ecg-synthetic-records-')` here so resource cleanup
-    # occurs on both success and failure paths.
+    # Generate into a scratch staging directory first, then copy into the worktree's
+    # real data/raw/ layout below, so a failure during generation never leaves a
+    # partially populated raw-data directory inside the worktree itself.
     with tempfile.TemporaryDirectory(prefix="ecg-synthetic-records-") as staging_name:
         staging = Path(staging_name)
         files = generate_synthetic_records(staging, record_ids)
 
         raw_dir = worktree / "data" / "raw" / "mitdb" / "1.0.0"
         raw_dir.mkdir(parents=True, exist_ok=True)
-        # Iterate over `files` one item at a time so ordering, validation, and failure attribution
-        # remain explicit.
+        # Copy every generated WFDB companion file into the worktree's real raw-data
+        # location, matching where acquire_dataset expects to find them.
         for item in files:
             shutil.copy2(staging / item.name, raw_dir / item.name)
 
@@ -263,20 +273,22 @@ def _run(
 ) -> subprocess.CompletedProcess[str]:
     """Run one fixed subprocess command and translate execution failures.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    check=False is deliberate: callers inspect result.returncode themselves and
+    raise NotebookValidationError with the captured stdout/stderr attached, giving a
+    more actionable error than a bare CalledProcessError would.
 
     Args:
-        command: The command value supplied by the caller or surrounding test fixture.
-        cwd: The cwd value supplied by the caller or surrounding test fixture.
-        timeout_seconds: The timeout seconds value supplied by the caller or surrounding test fixture.
+        command: The argv to execute.
+        cwd: Working directory for the subprocess.
+        timeout_seconds: Maximum time to wait before killing the subprocess.
 
     Returns:
-        The value produced by the documented operation.
+        The completed process, including captured stdout/stderr and return code.
     """
 
-    # Attempt this boundary operation here so subprocess.TimeoutExpired can be translated or cleaned
-    # up under the repository contract.
+    # A hung command (e.g. a notebook cell that never returns) would otherwise block
+    # this script indefinitely; translate the timeout into the same
+    # NotebookValidationError type every other failure mode in this module raises.
     try:
         # every call site below passes a fixed literal command list, not
         # runtime/user-constructed input.
@@ -295,14 +307,15 @@ def _run(
 
 
 def create_worktree(repository_root: Path, worktree: Path) -> None:
-    """Create worktree according to the repository contract.
+    """Create a detached-HEAD Git worktree, isolated from the real checkout.
 
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    --detach avoids creating or checking out a branch, since this worktree is
+    disposable scratch space for one validation run, not a location anyone should
+    commit to.
 
     Args:
-        repository_root: Repository root used to enforce path and trust boundaries.
-        worktree: The worktree value supplied by the caller or surrounding test fixture.
+        repository_root: The real repository to create the worktree from.
+        worktree: Path where the new worktree should be created.
     """
 
     result = _run(
@@ -310,25 +323,26 @@ def create_worktree(repository_root: Path, worktree: Path) -> None:
         cwd=repository_root,
         timeout_seconds=120,
     )
-    # Evaluate `result.returncode != 0` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # A failed worktree creation means every later step (seeding, notebook
+    # execution) has nowhere to run, so it must fail immediately here.
     if result.returncode != 0:
         raise NotebookValidationError(f"could not create worktree: {result.stderr}")
 
 
 def remove_worktree(repository_root: Path, worktree: Path) -> None:
-    # command is a fixed literal ("git", "worktree", "remove", "--force", <path>),
-    # not runtime/user-constructed input.
     """Remove the isolated validation worktree and unregister its Git metadata.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    check=False and no return-code check is deliberate: this runs from a `finally`
+    block (see validate_curated_notebooks) and must not raise over a cleanup failure
+    while an earlier, more meaningful exception may already be propagating.
 
     Args:
-        repository_root: Repository root used to enforce path and trust boundaries.
-        worktree: The worktree value supplied by the caller or surrounding test fixture.
+        repository_root: The real repository the worktree was created from.
+        worktree: Path to the worktree to remove.
     """
 
+    # command is a fixed literal ("git", "worktree", "remove", "--force", <path>),
+    # not runtime/user-constructed input.
     subprocess.run(  # noqa: S603
         ["git", "worktree", "remove", "--force", str(worktree)],  # noqa: S607
         cwd=repository_root,
@@ -339,14 +353,15 @@ def remove_worktree(repository_root: Path, worktree: Path) -> None:
 
 
 def sync_notebook_environment(worktree: Path, *, timeout_seconds: float) -> None:
-    """Synchronize sync notebook environment for the documented repository workflow.
+    """Install the notebooks and dev dependency groups inside the isolated worktree.
 
-    The helper isolates this step so its assumptions, outputs, and failure behavior remain
-    reviewable.
+    The worktree is a separate checkout with its own .venv; it must run `uv sync`
+    independently rather than reusing the real checkout's environment, since the
+    curated notebooks import this package and its notebook-only dependencies.
 
     Args:
-        worktree: The worktree value supplied by the caller or surrounding test fixture.
-        timeout_seconds: The timeout seconds value supplied by the caller or surrounding test fixture.
+        worktree: The isolated worktree to sync dependencies into.
+        timeout_seconds: Maximum time to wait for `uv sync` to complete.
     """
 
     result = _run(
@@ -354,8 +369,8 @@ def sync_notebook_environment(worktree: Path, *, timeout_seconds: float) -> None
         cwd=worktree,
         timeout_seconds=timeout_seconds,
     )
-    # Evaluate `result.returncode != 0` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # A failed sync means the worktree's environment isn't usable, so notebook
+    # execution would fail anyway (likely with a confusing import error); fail here instead.
     if result.returncode != 0:
         raise NotebookValidationError(
             f"uv sync failed in isolated worktree:\n{result.stdout}\n{result.stderr}"
@@ -389,8 +404,9 @@ def execute_notebook(
 ) -> None:
     """Execute one curated notebook in place, inside the isolated worktree."""
     notebook_path = worktree / notebook_relative_path
-    # Evaluate `not notebook_path.is_file()` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # A missing notebook means the caller passed a wrong relative path, or the
+    # worktree wasn't seeded correctly; either way, fail with a specific path rather
+    # than letting nbclient raise a less clear file-not-found error.
     if not notebook_path.is_file():
         raise NotebookValidationError(f"curated notebook not found: {notebook_path}")
     result = _run(
@@ -409,8 +425,10 @@ def execute_notebook(
         cwd=worktree,
         timeout_seconds=timeout_seconds + 60,
     )
-    # Evaluate `result.returncode != 0` explicitly so invalid or alternate states follow the
-    # documented contract.
+    # The subprocess's own timeout is notebook_timeout_seconds (passed to
+    # _NOTEBOOK_RUNNER as its nbclient execute() timeout); this outer _run timeout is
+    # padded by 60s so the *process* has time to report a clean nbclient timeout
+    # error before this script's own subprocess-level timeout would kill it instead.
     if result.returncode != 0:
         raise NotebookValidationError(
             f"{notebook_relative_path} failed to execute:\n"
@@ -431,18 +449,20 @@ def validate_curated_notebooks(
     Returns the worktree path (only meaningful when `keep_worktree` is True,
     for local debugging; the caller is responsible for removing it).
     """
-    # Scope `tempfile.TemporaryDirectory(prefix='ecg-notebook-validation-')` here so resource
-    # cleanup occurs on both success and failure paths.
+    # The temp parent directory holds only the worktree path itself; keeping it
+    # separate from the worktree's own removal (handled by `git worktree remove` in
+    # the `finally` block below) avoids the two cleanup mechanisms conflicting.
     with tempfile.TemporaryDirectory(prefix="ecg-notebook-validation-") as parent_name:
         worktree = Path(parent_name) / "worktree"
         create_worktree(repository_root, worktree)
-        # Attempt this boundary operation here so the declared boundary failures can be translated
-        # or cleaned up under the repository contract.
+        # The worktree must always be removed (via remove_worktree in `finally`)
+        # whether seeding, sync, or notebook execution succeeds or raises, so Git
+        # never accumulates orphaned worktree registrations from failed runs.
         try:
             seed_worktree(worktree)
             sync_notebook_environment(worktree, timeout_seconds=sync_timeout_seconds)
-            # Iterate over `notebooks` one item at a time so ordering, validation, and failure
-            # attribution remain explicit.
+            # Execute notebooks strictly in order (see NOTEBOOKS' own comment): 00
+            # generates artifacts 01 and 02 depend on.
             for notebook_relative_path in notebooks:
                 print(f"[validate-notebooks] executing {notebook_relative_path}...")
                 execute_notebook(
@@ -450,12 +470,13 @@ def validate_curated_notebooks(
                 )
                 print(f"[validate-notebooks] {notebook_relative_path} passed.")
         finally:
-            # Evaluate `keep_worktree` explicitly so invalid or alternate states follow the
-            # documented contract.
+            # --keep-worktree is an opt-in debugging aid: copy the worktree's final
+            # state somewhere durable before it's removed below, so a failure can be
+            # inspected after this script exits.
             if keep_worktree:
                 kept = repository_root / ".notebook-validation-worktree"
-                # Evaluate `kept.exists()` explicitly so invalid or alternate states follow the
-                # documented contract.
+                # Remove any previous kept copy first, since shutil.copytree refuses
+                # to write into an already-existing destination directory.
                 if kept.exists():
                     shutil.rmtree(kept)
                 shutil.copytree(worktree, kept)
@@ -465,16 +486,13 @@ def validate_curated_notebooks(
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse args according to the repository contract.
-
-    The helper centralizes validation and failure behavior so every caller follows the same
-    documented path.
+    """Parse command-line arguments for the curated-notebook validation entry point.
 
     Args:
         argv: Optional command-line arguments; defaults to the process arguments.
 
     Returns:
-        The value produced by the documented operation.
+        Parsed arguments: repository root and keep-worktree flag.
     """
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -507,8 +525,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
 
     args = parse_args(argv)
-    # Attempt this boundary operation here so NotebookValidationError can be translated or cleaned
-    # up under the repository contract.
+    # Every failure mode across worktree creation, seeding, sync, and notebook
+    # execution is collapsed into NotebookValidationError; catch it once here for
+    # uniform error reporting.
     try:
         validate_curated_notebooks(args.repository_root.resolve(), keep_worktree=args.keep_worktree)
     except NotebookValidationError as error:
@@ -518,7 +537,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-# Evaluate `__name__ == '__main__'` explicitly so invalid or alternate states follow the documented
-# contract.
+# Standard script entry-point guard: only run main() when executed directly, not when
+# imported (e.g. by this script's own test module).
 if __name__ == "__main__":
     raise SystemExit(main())
