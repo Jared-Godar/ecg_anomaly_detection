@@ -338,6 +338,74 @@ def test_fetch_pull_request_raises_on_gh_failure() -> None:
         vpm.fetch_pull_request(999999, repo=None)
 
 
+# --- _run_gh rate-limit classification and retry ------------------------------------
+
+
+def test_run_gh_fails_fast_on_primary_rate_limit_without_retrying() -> None:
+    """A primary (hours-long) rate limit is fatal immediately, with no retry attempt.
+
+    Retrying inside a single CI job's lifetime cannot help this failure mode
+    (it takes up to an hour to clear), so a retry would only waste time and
+    delay the same unavoidable failure.
+    """
+
+    # GitHub's real wording for this case, observed live against PR #155.
+    error = subprocess.CalledProcessError(
+        1, ["gh"], stderr="GraphQL: API rate limit already exceeded for user ID 16855088."
+    )
+    # subprocess.run always raises this same error, so a retry would just hit
+    # it again -- the assertions below confirm _run_gh doesn't bother trying.
+    with (
+        patch.object(subprocess, "run", side_effect=error) as mock_run,
+        patch.object(vpm.time, "sleep") as mock_sleep,
+        pytest.raises(vpm.MetadataValidationError, match="rate limit exhausted"),
+    ):
+        vpm._run_gh(["pr", "view", "155"])
+    # Exactly one attempt: no retry loop should have run for this error class.
+    assert mock_run.call_count == 1
+    mock_sleep.assert_not_called()
+
+
+def test_run_gh_retries_then_succeeds_on_secondary_rate_limit() -> None:
+    """A secondary (short-lived, abuse-detection) rate limit is retried and can recover."""
+
+    secondary_error = subprocess.CalledProcessError(
+        1, ["gh"], stderr="You have exceeded a secondary rate limit. Please wait."
+    )
+    success = subprocess.CompletedProcess([], 0, stdout='{"ok": true}', stderr="")
+    # Fails twice, then succeeds on the third attempt.
+    with (
+        patch.object(
+            subprocess, "run", side_effect=[secondary_error, secondary_error, success]
+        ) as mock_run,
+        patch.object(vpm.time, "sleep") as mock_sleep,
+    ):
+        result = vpm._run_gh(["pr", "view", "155"])
+    assert result == '{"ok": true}'
+    assert mock_run.call_count == 3
+    # First attempt has no delay; the two retries use the first two entries of
+    # the fixed backoff schedule.
+    assert [call.args[0] for call in mock_sleep.call_args_list] == [2, 5]
+
+
+def test_run_gh_raises_after_exhausting_secondary_rate_limit_retries() -> None:
+    """A secondary rate limit that never clears still fails, after using every retry slot."""
+
+    secondary_error = subprocess.CalledProcessError(
+        1, ["gh"], stderr="You have exceeded a secondary rate limit. Please wait."
+    )
+    # Every attempt fails the same way, so the retry schedule must exhaust
+    # completely before this raises.
+    with (
+        patch.object(subprocess, "run", side_effect=secondary_error) as mock_run,
+        patch.object(vpm.time, "sleep"),
+        pytest.raises(vpm.MetadataValidationError, match="secondary rate limit"),
+    ):
+        vpm._run_gh(["pr", "view", "155"])
+    # One initial attempt plus one retry per entry in the backoff schedule.
+    assert mock_run.call_count == 1 + len(vpm._SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS)
+
+
 def test_fetch_issue_milestone_parses_gh_output_with_a_milestone() -> None:
     """fetch_issue_milestone extracts the milestone title from `gh issue view`'s JSON output."""
 

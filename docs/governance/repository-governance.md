@@ -39,9 +39,14 @@ and merged topic branches should be deleted automatically.
 ## CI and review model
 
 Required CI checks provide the repeatable evidence needed before merge. A pull
-request must not merge while a required check is pending or failing. The exact
-required checks are selected in the `main` branch protection or ruleset settings
-and should match the checks emitted by the committed workflows.
+request must not merge while a required check is pending or failing, with one
+narrow, documented, audited exception for a failure independently proven to be
+pure infrastructure rather than a defect the pull request introduced — see
+"Current branch protection on `main`" below and [GitHub metadata
+automation](github-metadata-automation.md#maintainer-override-for-confirmed-infrastructure-failures).
+The exact required checks are selected in the `main` branch protection or
+ruleset settings and should match the checks emitted by the committed
+workflows.
 
 This is a single-maintainer repository. The maintainer is accountable for
 self-reviewing each pull request's diff, validation evidence, and documentation
@@ -88,7 +93,13 @@ Applied 2026-07-08 (#91), verified live against the API above:
   enforceable ceiling for a single-maintainer repository; self-review per
   the CI and review model above remains the actual review discipline.
 - **Enforced for administrators**: the repository owner is bound by the same
-  rules as any other contributor; there is no merge-button bypass.
+  rules as any other contributor; there is no merge-button bypass. A narrow,
+  documented, audited exception exists for a required check failure
+  independently proven to be pure infrastructure rather than a defect the
+  pull request introduced — see [GitHub metadata
+  automation](github-metadata-automation.md#maintainer-override-for-confirmed-infrastructure-failures)
+  (#157). `enforce_admins` returns to `true` immediately after each use; this
+  is not a standing bypass.
 - **Linear history is required.** Merge commits cannot be merged into
   `main`. In practice every merge to date has also been a squash merge
   (verified: `git log --merges` shows no two-parent commits on `main`), but

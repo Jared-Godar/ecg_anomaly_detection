@@ -76,7 +76,7 @@ skip_covered = true
 
 [tool.pyright]
 include = ["src", "tests"]
-exclude = ["archive", ".venv", "build", "dist"]
+exclude = ["archive", ".venv", "build", "dist", "**/node_modules", "**/__pycache__", "**/.*"]
 pythonVersion = "3.12"
 typeCheckingMode = "basic"
 useLibraryCodeForTypes = true

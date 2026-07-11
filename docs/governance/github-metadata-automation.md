@@ -198,6 +198,41 @@ linked-issue metadata` is one of the required status checks on `main` — see [r
 governance](repository-governance.md#current-branch-protection-on-main) for the current
 configuration.
 
+### Maintainer override for confirmed infrastructure failures
+
+`main`'s branch protection has `enforce_admins` enabled — see [repository
+governance](repository-governance.md#current-branch-protection-on-main) — so a required check
+blocks merge unconditionally, including for the repository owner. That is deliberate: it is the
+strongest available signal that the rules bind the maintainer too. It has one narrow, documented
+exception (#157), added after a live case where PR #155's `Validate PR and linked-issue metadata`
+check failed on `GraphQL: API rate limit already exceeded`, independently confirmed via
+`gh api rate_limit` to be a full point-budget exhaustion from unrelated same-session API usage —
+not a defect in that pull request.
+
+The exception applies only when a required check's failure is independently proven to be pure
+infrastructure, never merely suspected or convenient. When it applies:
+
+1. Record the proof (e.g. `gh api rate_limit` output, or equivalent independent evidence for a
+   different failure mode) in a pull request comment before doing anything else.
+2. Temporarily disable `enforce_admins`:
+
+   ```fish
+   gh api --method DELETE repos/Jared-Godar/ecg_anomaly_detection/branches/main/protection/enforce_admins
+   ```
+
+3. Merge the pull request.
+4. Immediately re-enable `enforce_admins`:
+
+   ```fish
+   gh api --method POST repos/Jared-Godar/ecg_anomaly_detection/branches/main/protection/enforce_admins
+   ```
+
+`enforce_admins` must return to `true` immediately after the merge — this is a one-time, audited
+exception per use, not a standing bypass. Softening the metadata gate itself (e.g. to a warning)
+is explicitly rejected as an alternative: the same gate caught three real metadata gaps on PR #155
+in the same session this exception was proposed, and a warning would blunt that protection for
+every future pull request, not just a rare confirmed-infrastructure case.
+
 ### Why issue creation is not blocked
 
 GitHub provides no rejection mechanism for issue creation comparable to a required pull-request
