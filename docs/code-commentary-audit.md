@@ -138,3 +138,62 @@ uv run python scripts/check_code_commentary.py
 Passing the checker establishes structural coverage, not permission to add low-value boilerplate.
 New code should explain domain meaning and design intent in the same terms used by the surrounding
 module, and reviewers should reject comments that merely restate syntax or drift from behavior.
+
+## Notebook coverage (issue #151)
+
+The audit above intentionally excluded the three curated, public-facing Jupyter notebooks under
+`notebooks/`: `scripts/check_code_commentary.py` only discovers `*.py` files, so notebook Python
+code cells were never in its scope. Issue #151 closed that gap and extended the same standard to
+notebook code cells.
+
+### Standard
+
+Identical to the standard above, scoped to notebook Python **code cells**: every function, async
+function, class, and nested callable defined inside a code cell needs a substantive docstring;
+every meaningful `if`/`for`/`while`/`try`/`with`/`match` block and module-level-style assignment
+needs a leading `#` comment explaining what it does and why. Markdown cells, `notebooks/local/`,
+and `archive/original_2022/` remain outside this policy, matching the repository-wide boundaries
+above.
+
+`scripts/check_notebook_commentary.py` extends the checker to notebook code cells without
+duplicating its AST/tokenizer logic: `check_code_commentary.py`'s former `audit_file(path)` was
+refactored into a reusable `audit_source(source, path, require_module_docstring)` that operates on
+in-memory source text, and the notebook checker calls it once per code cell, with each cell's
+source extracted through `nbformat` and never executed. `require_module_docstring=False` is passed
+for cell audits, since no single notebook code cell carries the notebook's own top-level narrative
+the way a standalone module's docstring does — markdown cells already do that, and stay out of
+scope. Cells using an IPython cell magic (`%%bash` in `00-environment-setup-and-artifact-generation.ipynb`)
+are not Python and are skipped, rather than misreported as invalid-Python violations.
+
+### Scope and baseline
+
+The pre-audit baseline recorded at issue intake was 3 curated notebooks, 31 Python code cells,
+1,939 source lines, 39 function/class definitions (0 undocumented — every existing definition
+already had a docstring), and 330 standalone comment lines. The completed audit contains the same
+31 code cells and 39 definitions (no definitions were added or removed), 2,261 source lines, and
+652 standalone comment lines.
+
+`notebooks/local/` and `archive/original_2022/` remain excluded from this policy, matching the
+repository-wide scope above. The protected held-out test partition was not opened, inspected, or
+scored during this audit, including within
+`02-high-performing-gradient-boosting-validation.ipynb`.
+
+### Audited inventory
+
+- `notebooks/00-environment-setup-and-artifact-generation.ipynb` (8 code cells)
+- `notebooks/01-narrative-walkthrough.ipynb` (11 code cells)
+- `notebooks/02-high-performing-gradient-boosting-validation.ipynb` (12 code cells)
+
+### Ongoing enforcement
+
+The local `notebook-commentary` pre-commit hook runs `scripts/check_notebook_commentary.py` against
+the three curated notebooks on every invocation, alongside the `code-commentary` hook above. Run it
+directly with:
+
+```fish
+uv run python scripts/check_notebook_commentary.py
+```
+
+The curated notebooks remain execution-tested in CI against synthetic data (see
+`notebooks/README.md` and `scripts/validate_curated_notebooks.py`); this checker is a separate,
+static, non-executing structural check layered on top of that existing coverage.
