@@ -4,10 +4,14 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from ecg_anomaly_detection.cli import main
 
 
-def test_create_run_manifest_command_records_local_evidence(tmp_path: Path) -> None:
+def test_create_run_manifest_command_records_local_evidence(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """`ecg-data create-run-manifest` assembles git, dependency-lock, dataset, split, and config
     evidence into one run manifest file, through the real CLI and a real git repository.
 
@@ -18,6 +22,8 @@ def test_create_run_manifest_command_records_local_evidence(tmp_path: Path) -> N
     Args:
         tmp_path: Pytest's per-test isolated temporary directory, used as
             both the fixture repository root and a real git working tree.
+        capsys: Used to capture stdout and confirm the command's progress
+            banners (#61).
     """
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
@@ -109,6 +115,7 @@ def test_create_run_manifest_command_records_local_evidence(tmp_path: Path) -> N
         ]
     )
 
+    captured_output = capsys.readouterr().out
     manifest = json.loads(output.read_text(encoding="utf-8"))
     assert exit_code == 0
     assert len(manifest["git"]["revision"]) == 40
@@ -117,3 +124,5 @@ def test_create_run_manifest_command_records_local_evidence(tmp_path: Path) -> N
     assert manifest["dependency_lock"]["path"] == "uv.lock"
     assert manifest["split"]["total_record_count"] == 3
     assert manifest["configuration_files"][0]["path"] == "config.toml"
+    assert "[1/1] create-run-manifest: starting" in captured_output
+    assert "[1/1] create-run-manifest: complete in" in captured_output

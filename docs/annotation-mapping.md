@@ -54,6 +54,10 @@ The generated JSON report records:
 Reports under `artifacts/` remain ignored. The mapped arrays retain record ID, source sample index,
 original source symbol, and integer target value for downstream window generation.
 
+`map-annotations` prints a `[1/1] map-annotations: starting` banner, its existing completion
+message, and a `[1/1] map-annotations: complete in MM:SS` banner (or `failed after MM:SS`) to
+stdout, matching [`run-pipeline`'s progress output](pipeline-orchestration.md#progress-output).
+
 The next supported stage uses these fields for
 [boundary-safe window extraction](window-extraction.md).
 

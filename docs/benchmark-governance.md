@@ -18,6 +18,11 @@ loading a model, or generating metrics:
 uv run ecg-data validate-benchmark-policy --policy configs/benchmark-policy-v1.toml
 ```
 
+`validate-benchmark-policy` prints a `[1/1] validate-benchmark-policy: starting` banner, its
+existing completion message, and a `[1/1] validate-benchmark-policy: complete in MM:SS` banner (or
+`failed after MM:SS`) to stdout, matching
+[`run-pipeline`'s progress output](pipeline-orchestration.md#progress-output).
+
 ## Eligibility
 
 A candidate is eligible only after training and model selection are complete. The candidate model,
@@ -63,6 +68,11 @@ uv run ecg-data record-benchmark-approval \
   --approval <path-to-approval-input>.toml \
   --output artifacts/runs/<run-id>/benchmark_approval.json
 ```
+
+`record-benchmark-approval` prints a `[1/1] record-benchmark-approval: starting` banner, its
+existing completion message, and a `[1/1] record-benchmark-approval: complete in MM:SS` banner (or
+`failed after MM:SS`) to stdout, matching
+[`run-pipeline`'s progress output](pipeline-orchestration.md#progress-output).
 
 Steps 3-5 — a separately reviewed execution command, the single run against the protected
 partition, and archival before publication — remain future, gated work tracked by a dependent

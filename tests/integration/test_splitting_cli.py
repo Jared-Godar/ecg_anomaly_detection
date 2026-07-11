@@ -4,11 +4,14 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from ecg_anomaly_detection.cli import main
 
 
-def test_split_windows_writes_auditable_manifest(tmp_path: Path) -> None:
+def test_split_windows_writes_auditable_manifest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """`ecg-data split-windows` produces a manifest that keeps subjects "100"/"101" (same subject)
     in one partition, records every partition's subject_ids, and writes a "passed" quality summary.
 
@@ -18,6 +21,8 @@ def test_split_windows_writes_auditable_manifest(tmp_path: Path) -> None:
 
     Args:
         tmp_path: Pytest's per-test isolated temporary directory.
+        capsys: Used to capture stdout and confirm the command's progress
+            banners (#61).
     """
 
     config_path = tmp_path / "split.toml"
@@ -66,6 +71,7 @@ test = 0.25
         ]
     )
 
+    output = capsys.readouterr().out
     manifest = json.loads(output_path.read_text(encoding="utf-8"))
     quality = json.loads((tmp_path / "split_quality_summary.json").read_text(encoding="utf-8"))
     assert exit_code == 0
@@ -73,6 +79,8 @@ test = 0.25
     assert manifest["total_subject_count"] == 3
     assert manifest["total_window_count"] == 5
     assert set(manifest["partitions"]) == {"train", "validation", "test"}
+    assert "[1/1] split-windows: starting" in output
+    assert "[1/1] split-windows: complete in" in output
     partitions = manifest["partitions"]
     record_partitions = {
         record_id: name

@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from ecg_anomaly_detection.cli import main
 from ecg_anomaly_detection.run_manifest import (
     DatasetEvidence,
@@ -119,12 +121,40 @@ def _approval_text() -> str:
     )
 
 
-def test_record_benchmark_approval_command_records_approval_evidence(tmp_path: Path) -> None:
+def test_validate_benchmark_policy_command_reports_policy_identity(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`ecg-data validate-benchmark-policy` validates the repository's real, committed benchmark
+    policy and prints its policy ID and version alongside its progress banners (#61).
+
+    Args:
+        tmp_path: Pytest's per-test isolated temporary directory.
+        capsys: Used to capture stdout and confirm both the existing
+            completion message and the new progress banners.
+    """
+
+    policy_path = tmp_path / "policy.toml"
+    policy_path.write_text(_policy_text(), encoding="utf-8")
+
+    exit_code = main(["validate-benchmark-policy", "--policy", str(policy_path)])
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "validated benchmark policy benchmark-governance-v1" in output
+    assert "[1/1] validate-benchmark-policy: starting" in output
+    assert "[1/1] validate-benchmark-policy: complete in" in output
+
+
+def test_record_benchmark_approval_command_records_approval_evidence(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """`ecg-data record-benchmark-approval` with a matching manifest and approval writes an
     approval record carrying the run ID and the policy's own ID.
 
     Args:
         tmp_path: Pytest's per-test isolated temporary directory.
+        capsys: Used to capture stdout and confirm the command's progress
+            banners (#61).
     """
 
     (tmp_path / "artifacts").mkdir()
@@ -152,11 +182,14 @@ def test_record_benchmark_approval_command_records_approval_evidence(tmp_path: P
         ]
     )
 
+    captured_output = capsys.readouterr().out
     assert exit_code == 0
     record = json.loads(output_path.read_text(encoding="utf-8"))
     assert record["candidate_run_id"] == RUN_ID
     assert record["run_manifest_reference"] == RUN_ID
     assert record["policy_id"] == "benchmark-governance-v1"
+    assert "[1/1] record-benchmark-approval: starting" in captured_output
+    assert "[1/1] record-benchmark-approval: complete in" in captured_output
 
 
 def test_record_benchmark_approval_command_fails_closed_on_candidate_mismatch(

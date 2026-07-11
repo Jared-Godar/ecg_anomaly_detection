@@ -26,6 +26,11 @@ uv run ecg-data validate-record \
 The command returns a nonzero status when required files cannot be loaded or a validation rule
 fails. Validation reports belong under `artifacts/` and remain excluded from Git.
 
+`validate-record` prints a `[1/1] validate-record: starting` banner, its existing completion
+message, and a `[1/1] validate-record: complete in MM:SS` banner (or `failed after MM:SS`) to
+stdout, matching [`run-pipeline`'s progress output](pipeline-orchestration.md#progress-output).
+This is purely observational and never changes the command's exit code or the written report.
+
 ## Implemented checks
 
 - record ID is present in the versioned dataset configuration;

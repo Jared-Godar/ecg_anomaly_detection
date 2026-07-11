@@ -31,6 +31,11 @@ Repeat `--evidence` and `--artifact` for additional files. All inputs and the ou
 within the repository boundary. Symbolic links, duplicate paths, malformed inventory or split
 manifests, and output paths outside the repository are rejected.
 
+`create-run-manifest` prints a `[1/1] create-run-manifest: starting` banner, its existing
+completion message, and a `[1/1] create-run-manifest: complete in MM:SS` banner (or
+`failed after MM:SS`) to stdout, matching
+[`run-pipeline`'s progress output](pipeline-orchestration.md#progress-output).
+
 ## Schema contents
 
 Schema version 1 records:

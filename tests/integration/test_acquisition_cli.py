@@ -11,7 +11,9 @@ from ecg_anomaly_detection.acquisition import TransferResult
 from ecg_anomaly_detection.cli import main
 
 
-def test_acquire_command_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_acquire_command_is_idempotent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Running `ecg-data acquire` twice fetches each of the three files only once in total.
 
     The second invocation must recognize the first run's already-downloaded,
@@ -22,6 +24,8 @@ def test_acquire_command_is_idempotent(tmp_path: Path, monkeypatch: pytest.Monke
     Args:
         tmp_path: Pytest's per-test isolated temporary directory.
         monkeypatch: Used to substitute a fake HTTPS fetcher for the real one.
+        capsys: Used to capture stdout and confirm the progress banners
+            DX-001-style standalone subcommands print (see #61).
     """
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
@@ -84,6 +88,7 @@ expected_source_files = [
     ]
 
     first_exit_code = main(arguments)
+    output = capsys.readouterr().out
     second_exit_code = main(arguments)
 
     document = json.loads((tmp_path / "artifacts" / "acquisition.json").read_text())
@@ -92,3 +97,7 @@ expected_source_files = [
     assert len(calls) == 3
     assert document["dataset_slug"] == "synthetic"
     assert len(document["files"]) == 3
+    # The first invocation's own captured stdout carries both progress banners
+    # around its original completion message (#61).
+    assert "[1/1] acquire: starting" in output
+    assert "[1/1] acquire: complete in" in output

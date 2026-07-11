@@ -62,6 +62,10 @@ rather than silently producing an empty index. The orchestration command (`run-p
 builds its shard list automatically and is unaffected by this — directory discovery only applies to
 this standalone command's `--input` argument.
 
+`index-dataset` prints a `[1/1] index-dataset: starting` banner, its existing completion message,
+and a `[1/1] index-dataset: complete in MM:SS` banner (or `failed after MM:SS`) to stdout, matching
+[`run-pipeline`'s progress output](pipeline-orchestration.md#progress-output).
+
 ## Validation contract
 
 Before writing the index, the stage verifies:
