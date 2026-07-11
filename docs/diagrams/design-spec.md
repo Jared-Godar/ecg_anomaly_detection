@@ -6,36 +6,66 @@ workflow). It exists so that any contributor or agent session can produce or rev
 the diagrams without access to the original visual references, and so the visual
 system stays consistent across all four assets.
 
+**Diagram 3 (Governance Status Lifecycle) is the maintainer-approved reference
+implementation.** It was built, iterated, and signed off on 2026-07-11 through
+several corrected rounds (see "History" at the end of this document for what was
+tried and rejected, and why). Diagrams 1, 2, and 4 must follow its pattern exactly
+unless a specific reason requires deviating -- state the reason if so.
+
 ## Positioning constraints (non-negotiable)
 
 - This repository is an educational data-engineering portfolio case study, not a
   clinical, diagnostic, or production system. Diagram text must never introduce
   clinical, benchmark, or production-readiness claims.
-- The diagrams mimic the *visual language* of AWS-documentation-style architecture
-  art (rounded cards, dashed stage containers, numbered step badges, restrained
-  palette) but must not use literal AWS service iconography (S3, CodePipeline,
-  Lambda, etc.). No cloud infrastructure exists in this project
-  (`docs/pipeline-design.md`: "It does not implement final test evaluation, cloud
-  infrastructure, or distributed processing").
+- No cloud infrastructure exists in this project (`docs/pipeline-design.md`: "It
+  does not implement final test evaluation, cloud infrastructure, or distributed
+  processing"). Do not use literal AWS or other vendor service iconography
+  anywhere -- icons are generic primitives only.
 - Diagram wording must match the host document's current terminology exactly.
   Each diagram mirrors *its own* host section, not a shared vocabulary: the README
   overview says `acquire`; the pipeline-design flow says
   `acquire + verify checksums`. Preserve those differences.
+- **Never use an internal numeric ID as if it were a meaningful name.** "Project
+  #5" (the raw GitHub Project board number) is exactly the kind of placeholder
+  this forbids -- confirmed live (2026-07-11) when the maintainer caught it in
+  diagram 3's subtitle: "Always use meaningful descriptive names not bullshit
+  numeric placeholders with no value." Use the board's actual name, **ECG
+  Pipeline Modernization**, or omit the reference and describe the thing
+  generically ("the project board") if a proper noun would be clunkier than
+  useful. This applies to every diagram, not just diagram 3 -- diagram 4's own
+  semantics section below already needed the same fix.
 
 ## Title and explanatory framing (required, durable standard)
 
-Every diagram, wherever it is embedded or viewed, must tell the reader what they are
-looking at through a **title, a one-paragraph explanation, and enough general
-context to stand alone** -- confirmed as a hard requirement by the maintainer
-(2026-07-11) after reviewing a bare, unframed diagram render.
+Every diagram, wherever it is embedded or viewed -- in its host doc, in a review
+gallery, or opened as a bare image file with no surrounding context -- must tell
+the reader what they are looking at on its own, without relying on the viewer
+already having the host document open.
 
-**How this is satisfied: markdown framing in the host document, not text baked into
-the diagram artwork.** Every diagram embed in a host doc must be preceded by its own
-heading and a short explanatory paragraph, followed by the image, followed by an
-italicized caption line -- matching how the AWS documentation references actually
-present their diagrams (under a page heading, not with a title rendered as part of
-the graphic) and how this repository already presents other figures. Concretely,
-for each of the four diagrams:
+**How this is satisfied: the title and a one-line subtitle are rendered as part of
+the diagram image itself**, at the top, using the graph's own title/label
+mechanism (see Toolchain below) -- not markdown text floating separately, and not
+a separate un-attached shape positioned by coordinate guessing. This was reached
+only after two rejected approaches, in order:
+
+1. **Markdown-only framing** (heading + paragraph in the host doc, nothing in the
+   image) was the first standard written here and was **wrong** -- it was
+   silently substituted for the maintainer's actual request the first time an
+   in-image title proved hard to render correctly, and the maintainer explicitly
+   rejected the substitution: "you spent a bunch of tokens/time on a workaround
+   that changes WHERE the explanation would eventually live, but you never
+   actually delivered ANY visible title/explanation in what I'm looking at right
+   now." The lesson: when the technically-easy path stops matching the request,
+   say so and ask, don't quietly redefine the deliverable.
+2. **In-image title via D2** was then attempted and also failed, for genuine
+   technical reasons documented in Toolchain below (not a style choice) -- this
+   is why the diagrams are Graphviz now, not D2.
+
+The markdown-level heading and caption in the host doc (see the embed pattern
+below) still matter, but as a *second*, complementary layer for page navigation
+and accessibility -- not a substitute for the in-image title.
+
+Host-doc embed pattern for all four diagrams:
 
 ```markdown
 ### <Diagram title>
@@ -44,104 +74,163 @@ for each of the four diagrams:
 
 ![<alt text from this spec>](../diagrams/exports/<file>.svg)
 
-*<caption from this spec>*
+*<caption from this spec>* — generated from
+[`<file>.dot`](../diagrams/src/<file>.dot) via Graphviz (see
+[`docs/diagrams/design-spec.md`](design-spec.md)).
 ```
 
-**Do not attempt to render a title/subtitle as part of the D2 diagram itself.**
-This was tried and reverted during round 1 of the Governance Status Lifecycle
-diagram: a markdown-text D2 shape renders via SVG `foreignObject`, which
-`rsvg-convert` (this project's PNG-fallback tool) does not support -- the title
-silently vanishes from the PNG every time, with no error. A plain-text
-`shape: text` fallback was also tried and reverted: nesting it inside a
-`near`-positioned or `direction: down` container fought D2/elk's layout engine
-(stray auto-generated container labels, overlapping text, and in one attempt the
-whole flow collapsing from horizontal to vertical). Markdown framing achieves the
-identical communicative goal with zero cross-tool rendering risk and is the
-standard from here forward for all four diagrams.
-
-The per-diagram caption and alt text already specified below in this document are
-exactly the "explanation" and "general info" this section requires -- use them
-verbatim in the host-doc embed shown above; do not write new ones.
+That trailing source link is deliberate, not decorative: the maintainer explicitly
+asked (2026-07-11) that the programmatic, reproducible generation of these
+diagrams be a **visible portfolio signal** -- proof that even the documentation
+art is code, versioned, and regenerable, consistent with this project's
+reproducibility framing -- even though that's not the usual call for a project
+about the pipeline rather than the portfolio. Don't bury the source reference;
+surface it in every embed.
 
 ## Visual system
 
-Direction confirmed by the maintainer (2026-07-11): **blues and grays, editorial
-restraint** — slate ink and gray connectors from the editorial spec drafted in the
-issue #103 comments, applied to the AWS-documentation layout language (dashed stage
-containers, numbered circular badges, gray pipeline lane) from the visual
-references. No purple/lavender. Warm amber appears in exactly one place: the
-`Blocked` state and other warning-semantic elements.
+**Direction confirmed by the maintainer (2026-07-11), replacing an earlier,
+never-actually-validated "blues and grays" direction**: dark navy ground with a
+glowing cyan accent, extracted directly from this repository's own existing
+documentation banners (`docs/assets/ecg-*-banner.png`) via pixel sampling --
+*not* eyeballed from a screenshot. Those banners were the maintainer's actual
+style reference the whole time; an earlier round of this spec was written and
+"user-confirmed" against a different, lighter palette that turned out never to
+have been checked against the real reference material. Lesson generalized in
+`feedback_deconfliction`-adjacent territory: if a *different* Claude Code session
+saw style-defining reference material, that context does not propagate here on
+its own -- it has to land in this repo (this file, an issue, a memory) or get
+re-supplied. Don't assume a "confirmed" direction is actually confirmed against
+the right thing without evidence.
 
 ### Palette
 
+Extracted from `docs/assets/ecg-development-workflow-banner.png` and
+`ecg-contributing-banner.png` by sampling actual pixel values, then adapted for
+diagram cards (see `governance-status-lifecycle.dot` for the reference
+implementation):
+
 | Role | Fill | Stroke | Notes |
 |---|---|---|---|
-| Ink (titles, card text) | — | — | `#0F172A` font color everywhere |
-| Muted text (annotations, captions) | — | — | `#475569` |
-| Standard step card | `#EAF2FB` | `#7096C4` | rounded corners (radius 8), stroke width 2 |
-| Emphasis/terminal card (outputs, manifests) | `#FFFFFF` | `#7096C4` | white card variant, as in the reference action cards |
-| Stage / zone container | `#F4F8FD` | `#8FAFD4` dashed | bold title, dash pattern ~3 |
-| Pipeline lane (super-container) | `#F1F5F9` | `#CBD5E1` | radius 12, the "gray cylinder" analogue |
-| Primary flow connector | — | `#3E6DB5` | stroke width 2, triangle arrowhead |
-| Secondary/output connector | — | `#64748B` | side outputs, feedback edges |
-| Numbered step badge | `#DBE8F8` | `#3E6DB5` | small circle, bold `#0F172A` numeral, sits *on* the flow line (chain the edge through the circle) |
-| Blocked / warning | `#FEF3C7` | `#B45309` | the only warm accent in the system |
-| Merged (lifecycle) | `#C7DBF5` | `#3E6DB5` | deeper blue than standard cards |
-| Closed (lifecycle) | `#E2E8F0` | `#64748B` | neutral gray terminal state |
+| Canvas background | `#000C1E` | — | near-black navy, sampled directly from the banners |
+| Title text | — | `#FFFFFF` | bold, ~18pt |
+| Subtitle text | — | `#00D4E8` | ~13pt, one line, no internal IDs (see above) |
+| Standard state/step card | `#0A1B33` | `#00D4E8` | rounded box, stroke width 2 |
+| Merged / success-terminal card | `#00506B` | `#00E5FF` | brighter fill and stroke than standard -- deliberately the most saturated card in the system |
+| Closed / neutral-terminal card | `#122238` | `#4A6584` | muted text (`#B9C7DA`), reads as "done, no longer active" |
+| Blocked / warning card | `#2A1F0A` | `#F5A623` | the only warm accent in the system |
+| Primary flow connector | — | `#00D4E8` | stroke width 2 |
+| Secondary/branch connector (e.g. Blocked) | — | `#F5A623` | dashed, matches the Blocked card's warm accent |
+| Edge label text | — | `#8FE3F0` | ~11pt, **must** sit on an HTML `<TABLE>` cell with `BGCOLOR="#000C1E"` behind it -- see Toolchain; a plain label lets the connector line visibly cut through the text |
+
+The bright pure-cyan (`#00FFFF`) seen at the brightest points in the source
+banners is a glow/bloom highlight, not the base accent color -- use `#00D4E8` (or
+`#00E5FF` for the one deliberately-more-saturated Merged card) as the working
+accent, not the highlight extreme.
+
+**Glow approximation**: neither Graphviz nor D2 render a true CSS-style colored
+glow/blur. A bright, moderately thick cyan stroke is the approved approximation
+(maintainer, 2026-07-11: "glow approximation workaround seems fine") -- do not
+spend effort trying to fake a real blur filter in SVG for this.
 
 ### Type and iconography
 
-- D2's default embedded font (Source Sans Pro subset) — clean sans-serif matching
-  the references. No custom font loading.
-- Small neutral glyph icons (single-color line style, `#3E6DB5` or `#475569`,
-  24×24 viewBox, stroke width 2, round caps) hand-authored as SVGs in
-  `docs/diagrams/icons/`: database cylinder (dataset source), document/checklist
-  (manifests, reports), folder (data zones), ECG waveform (window extraction —
-  the one domain-flavored glyph), branch/split, table grid (index), bar chart
-  (metrics/evaluation), shield-check (validation/gates), tag (labels/annotations),
-  kanban board (Project #5), person (maintainer).
-- Icons are generic primitives. Nothing resembling a specific vendor's service
-  icon set.
+- Graphviz's default `Helvetica,Arial,sans-serif` font stack -- no custom font
+  loading, matches the banners' clean sans-serif.
+- **Edge/transition labels are Title Case** ("Linked PR", "Tests, Docs, Metadata,
+  Evidence"), confirmed explicitly by the maintainer (2026-07-11), not sentence
+  case or lowercase.
+- Icons, where a diagram calls for them (diagram 3 needed none -- a pure state
+  machine reads fine as labeled cards alone): simple line-style glyphs in
+  `#00D4E8` or `#FFFFFF`, 24×24, stroke width 2, round caps, generic primitives
+  only (database cylinder, document, folder, branch/split, shield-check, tag,
+  kanban board, person). Hand-author as SVGs in `docs/diagrams/icons/` if a
+  diagram's content genuinely needs one -- don't add icons just because the
+  original plan listed them if the actual content reads fine without.
 
 ### Layout language
 
-- Main flows read left-to-right; long flows wrap into rows (use transparent
-  un-labeled containers per row so the layout engine stacks them) rather than
-  producing an unreadably wide single strip. Target rendered aspect ratios that
-  stay legible at GitHub's ~830 px content width.
-- Stage groupings and storage zones are dashed-border containers with bold titles,
-  exactly like the reference "Source Stage" / "Prod Stage" panels.
-- Numbered circular badges mark the ordered steps of a flow. Implementation trick:
-  break the connector at a small circle node (`a -- badge; badge -> b`) so the
-  badge sits on the line, as in the reference architecture diagram.
-- Freestanding annotations (e.g. the test-partition footnote) are plain gray
-  italic text, not boxed callouts.
-- Automated versus manual distinction (diagram 4 only): solid connectors for
-  automated transitions, dashed connectors for maintainer-judgment steps, plus a
-  small legend.
+- **Aspect ratio rule: not too wide for markdown embedding is the standard --
+  literal squareness is not the goal.** Confirmed explicitly by the maintainer
+  (2026-07-11) after two overcorrections in the other direction: a first draft
+  came out ~7.8:1 (unreadable without horizontal scrolling), a "fix" then
+  overcorrected to ~0.5:1 (too tall, sparse). The approved diagram 3 render lands
+  at roughly 2.3:1 (985×424pt before padding) -- treat that as the working target
+  band, not an exact number.
+- Wrap long flows into multiple rows using Graphviz `{ rank=same; A; B; C }`
+  groups (see Toolchain) rather than a single wide strip.
+- Pill/rounded-box cards throughout; no dashed zone containers or numbered
+  circular badges were needed for diagram 3's content, but diagram 1 (nine
+  sequential stages) and diagram 4 (multi-source automation overlay) may
+  legitimately need them -- badges and containers are still permitted where the
+  content's own structure calls for them, they're just not mandatory decoration.
+- Give the diagram generous background padding on all four sides via
+  `pad_svg.py` (see Toolchain) -- confirmed explicitly required by the
+  maintainer after an early render clipped card borders right at the canvas
+  edge.
 
 ## Toolchain
 
-- **D2 v0.7.1 for all four diagrams** with the bundled `elk` layout engine
-  (`--layout elk`). Graphviz was evaluated and not selected: reproducing this
-  card/container/badge system in DOT requires HTML-like labels and manual
-  spacing tuning, and D2's SVG output has cleaner typography. A single tool also
-  keeps the regeneration workflow one-step.
-- SVG is the primary committed asset. PNG fallback rendered from the SVG via
-  `rsvg-convert` at 2× scale.
-- Sources live in `docs/diagrams/src/*.d2`, shared styles in
-  `docs/diagrams/src/_theme.d2` (spread-imported), icons in
-  `docs/diagrams/icons/`, rendered assets in `docs/diagrams/exports/`.
+**Graphviz (`dot`), not D2.** D2 with the bundled `elk` layout engine was the
+original toolchain decision and is what diagram 3's first several rounds used --
+it was abandoned after `elk` proved unable to support this diagram's actual
+requirements, confirmed by direct, reproducible failures, not a style preference:
+
+- `elk` **does not support locked/explicit node positions at all** -- a direct
+  compile error ("layout engine \"elk\" does not support locked positions") the
+  moment `top`/`left` were set on any shape.
+- Four different D2 positioning mechanisms were tried, in order, for the
+  in-image title and the multi-row wrap, and each hit a real, reproducible
+  limitation: markdown-text shapes render via SVG `foreignObject`, which
+  `rsvg-convert` silently fails to render into the PNG; a `near`-positioned
+  plain-text container produced a stray auto-generated label and overlapping
+  text; an unconnected top-level container's own `direction:` setting was
+  silently overridden once it became graph-connected to anything else (the
+  entire flow collapsed from horizontal to vertical); and `grid-columns`/
+  `grid-rows` fills **column-major**, not row-major, which is easy to get wrong
+  and produced a confusing zigzag layout with overlapping edge labels on the
+  first attempt.
+- Graphviz's `{ rank=same; ... }` grouping is well-documented, predictable, and
+  solved the multi-row wrap correctly on the first real attempt.
+
+**Rendering pipeline (three steps, Fish syntax):**
+
+```fish
+dot -Tsvg docs/diagrams/src/<name>.dot -o docs/diagrams/exports/<name>.svg
+python3 docs/diagrams/pad_svg.py docs/diagrams/exports/<name>.svg
+rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/<name>.png docs/diagrams/exports/<name>.svg
+```
+
+- **`pad_svg.py` (`docs/diagrams/pad_svg.py`) is a required step, not optional
+  polish.** Graphviz's own `margin` graph attribute stops reliably expanding the
+  background polygon once HTML-like (`<TABLE>`-based) edge labels are present in
+  the graph -- confirmed by inspecting the actual rendered background polygon's
+  coordinates, which collapsed to ~4pt of margin regardless of a 0.75in `margin`
+  attribute the moment edge labels were switched to HTML tables. Rather than
+  keep chasing Graphviz's internal bounding-box computation, this script pads
+  the already-rendered SVG directly and deterministically, independent of
+  whatever content changes triggered the regression. Run it on every diagram,
+  every render, after `dot` and before `rsvg-convert`.
+- SVG is the primary committed asset; PNG is the fallback for viewers without
+  SVG support, rendered from the *padded* SVG.
+- **In-image title/subtitle**: set via the graph's own `label`, `labelloc=t`,
+  `labeljust=c` attributes (title bold, subtitle a `<FONT COLOR="#00D4E8"
+  POINT-SIZE="13">` run within the same label) -- this renders as native SVG
+  text, not `foreignObject`, so it survives the PNG conversion correctly.
+- **Edge labels needing breathing room from the connector line**: wrap the label
+  text in an HTML-like label,
+  `label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#8FE3F0" POINT-SIZE="11">Label Text</FONT></TD></TR></TABLE>>`
+  -- the matching-background table cell visually "erases" the connector line
+  where it would otherwise run straight through the text.
+- Sources live in `docs/diagrams/src/*.dot`, the padding script at
+  `docs/diagrams/pad_svg.py`, icons (where used) in `docs/diagrams/icons/`,
+  rendered assets in `docs/diagrams/exports/`.
 - Rendered assets are deliberately **not** placed in `reports/figures/`: that
   directory is the gitignored output zone for pipeline-generated figures, and
   diagram exports are documentation assets, not run outputs.
-
-Render commands (Fish syntax, matching repository convention):
-
-```fish
-d2 --layout elk docs/diagrams/src/implemented-pipeline-overview.d2 docs/diagrams/exports/implemented-pipeline-overview.svg
-rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/implemented-pipeline-overview.png docs/diagrams/exports/implemented-pipeline-overview.svg
-```
+- Both sources and the padding script are committed and intended to be
+  publicly discoverable -- see the reproducibility note under "Title and
+  explanatory framing" above.
 
 ## Diagram 1 — Implemented Pipeline Overview
 
@@ -153,13 +242,12 @@ rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/implemented-pi
   `subject-aware split -> dataset index`, then
   `training -> validation-only evaluation`, terminating in
   `auditable run manifest`.
-- **Layout**: source card (database glyph, white card) above or left of a gray
-  pipeline lane titled to reflect the README prose ("local and sequential"
-  supported workflow). Inside the lane, three wrapped rows matching the ASCII's
-  three tiers; numbered badges 1–9 on the flow. `auditable run manifest` as a
-  white terminal card with document glyph.
-- **Footnote annotation** (gray italic, from README prose): the indexed test
-  partition remains unopened and unreported in the supported workflow.
+- **Layout**: follow diagram 3's pattern -- title/subtitle baked in, wrap into
+  `rank=same` rows to stay within the ~2:1-3:1 aspect band, not a single wide
+  strip of nine cards.
+- **Footnote annotation** (from README prose): the indexed test partition
+  remains unopened and unreported in the supported workflow. Render as plain
+  muted (`#8FE3F0` or dimmer) text, not a boxed callout.
 - **Caption**: "The implemented local pipeline: sequential stages from PhysioNet
   acquisition through validation-only evaluation, ending in an auditable run
   manifest."
@@ -180,13 +268,9 @@ rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/implemented-pi
   ignored)` and side output `split manifest`;
   → `train + evaluate` → `artifacts/ (ignored)` with three sub-outputs:
   `run manifest`, `machine-readable metrics`, `generated figures`.
-- **Layout**: vertical main flow (like the reference vertical pipeline), process
-  cards in the center; the four storage zones (`data/raw/`, `data/interim/`,
-  `data/processed/`, `artifacts/`) as dashed zone containers or folder-glyph
-  cards on the right; side-output documents (validation report, split manifest)
-  branching right with secondary gray connectors. Preserve each zone's
-  parenthetical qualifier — the immutable/rebuildable/model-ready/ignored
-  wording is a real directory contract.
+- **Layout**: follow diagram 3's pattern. Preserve each zone's parenthetical
+  qualifier — the immutable/rebuildable/model-ready/ignored wording is a real
+  directory contract, not decoration.
 - **Caption**: "Target local flow: each transformation writes into a gitignored
   data zone, with validation and split evidence emitted alongside the artifacts."
 - **Alt text**: "Vertical flow diagram. PhysioNet MIT-BIH v1.0.0 flows through
@@ -197,24 +281,26 @@ rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/implemented-pi
   a run manifest, machine-readable metrics, and generated figures. All zones are
   gitignored."
 
-## Diagram 3 — Governance Status Lifecycle
+## Diagram 3 — Governance Status Lifecycle (reference implementation, approved)
 
 - **Host**: `docs/governance/github-project.md`, `## Status lifecycle` section.
-- **Semantics** (match the ASCII): linear progression
+- **Semantics**: linear progression
   `Backlog -> Ready -> In Progress -> Validation -> Review -> Merged -> Closed`,
-  with `Blocked` branching off `In Progress` (and returning — draw the return
-  edge, the board treats Blocked as a temporary lane).
-- **Transition labels** (from the section's bullets, abbreviated on the arrows):
-  linked implementation PR (Ready → In Progress); tests, documentation,
-  metadata, and evidence checks (In Progress → Validation); ready for maintainer
-  review (Validation → Review); PR merged (Review → Merged); issue closed
-  (Merged → Closed).
-- **Layout**: horizontal pill-shaped state cards (high border-radius), standard
-  blue cards for active states, `Merged` in the deeper blue, `Closed` in
-  terminal gray, `Blocked` in the amber warning style hanging below
-  `In Progress` with a two-way pair of gray connectors.
-- **Caption**: "Project #5 status lifecycle: the progression every work item
-  follows, with Blocked as a temporary excursion from In Progress."
+  with `Blocked` branching off `In Progress` and returning (bidirectional dashed
+  amber edge).
+- **Transition labels** (Title Case, boxed against the connector line): "Linked
+  PR" (Ready → In Progress); "Tests, Docs, Metadata, Evidence" (In Progress →
+  Validation); "Ready for Review" (Validation → Review); "PR Merged" (Review →
+  Merged); "Issue Closed" (Merged → Closed).
+- **Subtitle** (verbatim, maintainer-specified 2026-07-11): "Modernization work
+  item progression".
+- **Layout**: three Graphviz `rank=same` rows -- `{Backlog, Ready, In Progress}`,
+  `{Blocked, Validation, Review}`, `{Merged, Closed}` -- approved final aspect
+  ratio ~2.3:1 before padding. Source: `docs/diagrams/src/governance-status-lifecycle.dot`.
+- **Caption**: "The Project #5 status lifecycle" ~~-- no, do not use this~~.
+  Use: "The ECG Pipeline Modernization board's status lifecycle: the progression
+  every work item follows, with Blocked as a temporary excursion from In
+  Progress."
 - **Alt text**: "State diagram of seven statuses in order: Backlog, Ready, In
   Progress, Validation, Review, Merged, Closed. A Blocked state branches from In
   Progress and returns to it. Arrow labels name the trigger for each transition,
@@ -241,28 +327,58 @@ rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/implemented-pi
      membership, all required fields populated).
   4. Include the post-merge status sync (`project-status-sync.yml` force-sets
      Status to Merged after merge) as the fourth automated touchpoint.
-- **Layout**: reference-architecture style. A large thin-bordered container for
-  GitHub, holding two inner containers: the repository (issues, PRs, labels,
-  milestones) and Project #5 (board + planning fields). Automation components as
-  cards outside/below with numbered badges on their flow lines into the
+- **Layout**: reference-architecture style, following diagram 3's palette/type
+  rules. A large thin-bordered container for GitHub, holding two inner
+  containers: the repository (issues, PRs, labels, milestones) and the **ECG
+  Pipeline Modernization board** (board + planning fields) -- not "Project #5."
+  Automation components as cards outside/below with flow lines into the
   containers. Solid connectors = automated actions; dashed connectors = manual
   maintainer steps (catalog review, web-UI view configuration, maintainer
-  review); include the small legend.
+  review); include a small legend.
 - **Caption**: "Where automation touches governance: idempotent issue creation,
-  Project V2 field updates with read-back validation, the per-PR metadata gate,
-  and post-merge status sync — with maintainer judgment left in the loop."
+  project board field updates with read-back validation, the per-PR metadata
+  gate, and post-merge status sync — with maintainer judgment left in the loop."
 - **Alt text**: "Architecture-style diagram of governance automation. Four
-  automated flows touch a GitHub container holding the repository and Project
-  number 5: issue creation that skips exact-title matches, field updates that
-  preserve curated values, a pull-request metadata gate validating labels,
-  milestone, closing references, and project fields, and a post-merge job that
-  sets status to Merged. Dashed lines mark manual maintainer steps such as
-  catalog review and view configuration."
+  automated flows touch a GitHub container holding the repository and the ECG
+  Pipeline Modernization project board: issue creation that skips exact-title
+  matches, field updates that preserve curated values, a pull-request metadata
+  gate validating labels, milestone, closing references, and project fields, and
+  a post-merge job that sets status to Merged. Dashed lines mark manual
+  maintainer steps such as catalog review and view configuration."
 
 ## Review workflow
 
 Drafts are iterated on this branch with rendered previews shared for maintainer
 review. **No pull request is opened until the maintainer has explicitly approved
-the image quality of the complete four-diagram set.** Doc integration (swapping
-the ASCII blocks for image references with captions and alt text) happens in this
-same branch once approval is given.
+the image quality of the complete four-diagram set.** Diagram 3 has that
+approval as of 2026-07-11; diagrams 1, 2, and 4 do not yet. Doc integration
+(swapping the ASCII blocks for image references with captions and alt text)
+happens in this same branch once full-set approval is given.
+
+## History: what was tried and rejected on diagram 3, and why
+
+Kept here so a future session doesn't re-attempt any of these:
+
+1. Markdown-only title framing (no in-image title) -- rejected by the
+   maintainer as not actually meeting the "tell the user what they're looking
+   at" requirement when the diagram is viewed standalone.
+2. D2 markdown-text title shape -- silently fails to render in the
+   `rsvg-convert` PNG fallback (`foreignObject` unsupported).
+3. D2 plain-text title in a `near`-positioned container -- stray auto-label,
+   overlapping heading/subheading text.
+4. D2 plain-text title in an unconnected `direction: down` top-level container
+   next to the flow -- same overlap bug, plus the flow's own `direction: right`
+   got silently overridden once graph-connected, collapsing to one vertical
+   column.
+5. D2 explicit `top`/`left` positioning -- `elk` layout engine does not support
+   locked positions at all; hard compile error.
+6. D2 `grid-columns`/`grid-rows` -- fills column-major, not row-major; produced
+   a zigzag reading order and overlapping edge labels.
+7. **Switched to Graphviz.** `{ rank=same }` rows worked correctly on the first
+   real attempt. In-image title via `label`/`labelloc`/`labeljust` worked
+   immediately (native SVG text, not `foreignObject`).
+8. Graphviz `margin` attribute for canvas padding -- worked initially, then
+   silently stopped working (collapsed to ~4pt) once edge labels were switched
+   to HTML `<TABLE>` labels for line-breathing-room. Replaced with the
+   deterministic `pad_svg.py` post-process, which is now the permanent,
+   required step regardless of what else changes.

@@ -1,0 +1,32 @@
+digraph governance_status_lifecycle {
+  bgcolor="#000C1E"
+  rankdir=TB
+  fontname="Helvetica,Arial,sans-serif"
+  labelloc=t
+  labeljust=c
+  fontsize=18
+  fontcolor="#FFFFFF"
+  margin="0.75,0.7"
+  label=<<B>GOVERNANCE STATUS LIFECYCLE</B><BR/><BR/><FONT COLOR="#00D4E8" POINT-SIZE="13">Modernization work item progression</FONT><BR/><BR/><BR/>>
+  nodesep=0.5
+  ranksep=0.7
+
+  node [shape=box style="rounded,filled" fontname="Helvetica,Arial,sans-serif" fontcolor="#FFFFFF" color="#00D4E8" fillcolor="#0A1B33" penwidth=2 margin="0.3,0.2" fontsize=13]
+  edge [color="#00D4E8" fontcolor="#8FE3F0" fontname="Helvetica,Arial,sans-serif" fontsize=11 penwidth=1.5]
+
+  Blocked [color="#F5A623" fillcolor="#2A1F0A"]
+  Merged [color="#00E5FF" fillcolor="#00506B" penwidth=3]
+  Closed [color="#4A6584" fillcolor="#122238" fontcolor="#B9C7DA"]
+
+  { rank=same; Backlog; Ready; "In Progress" }
+  { rank=same; Blocked; Validation; Review }
+  { rank=same; Merged; Closed }
+
+  Backlog -> Ready
+  Ready -> "In Progress" [label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#8FE3F0" POINT-SIZE="11">Linked PR</FONT></TD></TR></TABLE>>]
+  "In Progress" -> Blocked [color="#F5A623" fontcolor="#F5A623" style=dashed dir=both]
+  "In Progress" -> Validation [label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#8FE3F0" POINT-SIZE="11">Tests, Docs, Metadata, Evidence</FONT></TD></TR></TABLE>>]
+  Validation -> Review [label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#8FE3F0" POINT-SIZE="11">Ready for Review</FONT></TD></TR></TABLE>>]
+  Review -> Merged [label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#8FE3F0" POINT-SIZE="11">PR Merged</FONT></TD></TR></TABLE>>]
+  Merged -> Closed [label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#8FE3F0" POINT-SIZE="11">Issue Closed</FONT></TD></TR></TABLE>>]
+}
