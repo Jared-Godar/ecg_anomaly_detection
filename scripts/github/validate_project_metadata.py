@@ -28,6 +28,13 @@ and skips the Project field checks rather than crashing -- unless
 failure. This lets the PR-level checks (assignee, milestone, labels, closing
 reference) enforce immediately while Project field enforcement is opted into
 once a suitably scoped token is configured.
+
+While the PR itself is open, this script also observationally checks whether any
+issue it closes was already closed by a non-merge event (a direct manual close,
+not a merged commit/PR referencing it) -- see issue #158. This never fails the
+run; it is printed as a separate, non-blocking warning, since an issue closed
+independently of its fixing PR is an anomaly worth a human's attention, not
+proof that this particular PR's own metadata is incomplete.
 """
 
 from __future__ import annotations
@@ -87,6 +94,7 @@ class PullRequestMetadata:
     milestone: str | None
     labels: tuple[str, ...]
     body: str
+    state: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -310,7 +318,13 @@ def _run_gh(args: list[str]) -> str:
 
 def fetch_pull_request(pr_number: int, repo: str | None) -> PullRequestMetadata:
     """Fetch a pull request's metadata via the gh CLI."""
-    args = ["pr", "view", str(pr_number), "--json", "number,assignees,milestone,labels,body"]
+    args = [
+        "pr",
+        "view",
+        str(pr_number),
+        "--json",
+        "number,assignees,milestone,labels,body,state",
+    ]
     # repo is optional; omitting --repo lets gh infer it from the current
     # directory's Git remote, matching gh's own default behavior.
     if repo:
@@ -323,6 +337,7 @@ def fetch_pull_request(pr_number: int, repo: str | None) -> PullRequestMetadata:
         milestone=milestone.get("title") if milestone else None,
         labels=tuple(label["name"] for label in payload.get("labels", [])),
         body=payload.get("body") or "",
+        state=payload["state"],
     )
 
 
@@ -340,6 +355,93 @@ def fetch_issue_milestone(issue_number: int, repo: str | None) -> str | None:
     payload = json.loads(_run_gh(args))
     milestone = payload.get("milestone")
     return milestone.get("title") if milestone else None
+
+
+@dataclass(frozen=True, slots=True)
+class IssueClosureState:
+    """Whether a closing issue is closed, and if so, whether via a merge-linked commit.
+
+    See find_prematurely_closed_issues and issue #158 for why this distinction
+    matters: an issue closed independently of the PR that is supposed to fix it
+    can be left stuck (e.g. its Project #5 Status field never advances past
+    "In Progress", since the merge-triggered status-sync automation never runs
+    for a closure it didn't cause) -- confirmed live for issue #154 against PR #155.
+    """
+
+    issue_number: int
+    is_closed: bool
+    closed_via_commit: bool
+
+
+def fetch_issue_closure_state(issue_number: int, repo: str | None) -> IssueClosureState:
+    """Fetch whether an issue is closed, and if closed, whether that closure is commit-linked.
+
+    A GitHub issue timeline's `closed` event carries a `commit_id` only when the
+    closure was caused by a merged commit/PR referencing the issue (e.g. "Closes
+    #N"); a direct manual close (via the UI, API, or `gh issue close`) always
+    leaves `commit_id` null -- the exact signal observed live for issue #154's
+    2026-07-11T03:41:41Z manual closure while PR #155 (its `Closes #154` PR) was
+    still open. The issue's own state is checked first so an issue that's still
+    open never needs the additional timeline lookup.
+
+    Args:
+        issue_number: The issue to check.
+        repo: Optional GitHub OWNER/REPO; None lets gh infer it from the current
+            directory's Git remote, matching this module's other fetch functions.
+
+    Returns:
+        The issue's closure state.
+    """
+
+    state_args = ["issue", "view", str(issue_number), "--json", "state"]
+    # repo is optional; omitting --repo lets gh infer it from the current
+    # directory's Git remote, matching this module's other fetch functions.
+    if repo:
+        state_args.extend(["--repo", repo])
+    state_payload = json.loads(_run_gh(state_args))
+    # An open issue was never closed by anything, merge or otherwise, so there's
+    # no timeline event to inspect -- skip the extra gh call entirely.
+    if state_payload.get("state") != "CLOSED":
+        return IssueClosureState(issue_number, is_closed=False, closed_via_commit=False)
+
+    # gh api has no --repo flag; an explicit repo is embedded directly in the
+    # endpoint path, while the literal "{owner}/{repo}" placeholders (kept
+    # unexpanded via f-string brace-escaping) let gh resolve them itself from
+    # the current directory's Git remote when repo is None.
+    endpoint = (
+        f"repos/{repo}/issues/{issue_number}/timeline"
+        if repo
+        else f"repos/{{owner}}/{{repo}}/issues/{issue_number}/timeline"
+    )
+    # --paginate --slurp wraps every page of timeline events into one JSON
+    # array of pages, so a long-lived issue's full history is scanned rather
+    # than only its first page of events.
+    pages = json.loads(_run_gh(["api", endpoint, "--paginate", "--slurp"]))
+    events = [event for page in pages for event in page]
+    # An issue can be closed and reopened more than once; the most recent
+    # "closed" event describes how it reached its current closed state.
+    closed_events = [event for event in events if event.get("event") == "closed"]
+    closed_via_commit = bool(closed_events) and closed_events[-1].get("commit_id") is not None
+    return IssueClosureState(issue_number, is_closed=True, closed_via_commit=closed_via_commit)
+
+
+def find_prematurely_closed_issues(
+    closure_states: Sequence[IssueClosureState],
+) -> tuple[str, ...]:
+    """Return warnings for closing issues closed by a non-merge event while the PR stays open.
+
+    Purely observational (see issue #158 and this module's own docstring): an
+    issue closed independently of its fixing PR does not mean the PR itself is
+    metadata-incomplete, so these are reported as warnings only, never folded
+    into validate_pull_request's violations tuple.
+    """
+
+    return tuple(
+        f"issue #{state.issue_number} was closed by a non-merge event while this "
+        "pull request remains open"
+        for state in closure_states
+        if state.is_closed and not state.closed_via_commit
+    )
 
 
 def fetch_project_items(owner: str, project_number: int) -> list[dict[str, Any]]:
@@ -430,6 +532,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         require_milestone = closing_issue_milestones_require_pr_milestone(closing_milestones)
 
+    warnings: list[str] = []
+    # The premature-closure check (issue #158) only makes sense while this PR is
+    # still open: once merged, GitHub's own automation is expected to have
+    # closed the issue anyway, and once the PR itself is closed/abandoned there
+    # is no longer an open fix in flight for the check to protect.
+    if closing_issues and pr.state == "OPEN":
+        # A failure here must never fail the whole run (see this check's own
+        # non-blocking, observational design in issue #158) -- print a warning
+        # and continue rather than propagating like the hard-failing fetches above.
+        try:
+            closure_states = tuple(
+                fetch_issue_closure_state(number, args.repo) for number in closing_issues
+            )
+        except MetadataValidationError as error:
+            print(
+                f"warning: could not check closing-issue closure state: {error}",
+                file=sys.stderr,
+            )
+        else:
+            warnings.extend(find_prematurely_closed_issues(closure_states))
+
     violations = list(validate_pull_request(pr, require_milestone=require_milestone))
 
     # Project field checks only make sense when there's at least one closing issue
@@ -461,6 +584,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             for issue_number in closing_issues:
                 report = build_project_field_report(issue_number, items)
                 violations.extend(validate_project_membership(report))
+
+    # Observational warnings (issue #158) are printed unconditionally, separately
+    # from violations, and never affect the exit code -- they exist to surface an
+    # anomaly for human review, not to gate this or any other PR's merge.
+    if warnings:
+        print("Observational warnings (non-blocking):", file=sys.stderr)
+        # List every warning, mirroring the violations list below, so a reviewer
+        # sees every flagged anomaly in one pass rather than one at a time.
+        for warning in warnings:
+            print(f"  - {warning}", file=sys.stderr)
 
     # A non-empty violations list means at least one PR-level or issue-level
     # requirement failed; report every one explicitly and exit non-zero so this can

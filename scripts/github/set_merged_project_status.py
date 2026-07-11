@@ -21,6 +21,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -37,8 +38,43 @@ class StatusField:
     merged_option_id: str
 
 
+# Short, fixed backoff schedule for GitHub's *secondary* rate limit (its
+# short-lived abuse-detection throttle, distinct from the hours-long primary
+# point-budget limit below). These delays are deliberately small: the secondary
+# limit is documented to clear within seconds, so there is no benefit to a long
+# or exponential schedule, only to workflow wall-clock time spent waiting.
+_SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS: tuple[int, ...] = (2, 5, 10)
+
+
+def _is_primary_rate_limit_error(message: str) -> bool:
+    """True when gh's error text is GitHub's primary (points/hour) rate limit.
+
+    Distinguished from the secondary/abuse-detection limit below because this
+    one takes up to an hour to clear -- no retry within a single CI job's
+    lifetime can help, so callers should fail fast instead of waiting.
+    """
+
+    # GitHub's own wording for this case always includes "rate limit" without
+    # the word "secondary"; checking for the absence of "secondary" is what
+    # separates this from _is_secondary_rate_limit_error below, since both
+    # messages otherwise share the substring "rate limit".
+    lowered = message.lower()
+    return "rate limit" in lowered and "secondary" not in lowered
+
+
+def _is_secondary_rate_limit_error(message: str) -> bool:
+    """True when gh's error text is GitHub's transient secondary/abuse-detection throttle."""
+
+    return "secondary rate limit" in message.lower()
+
+
 def _run_gh(args: list[str]) -> str:
     """Run one fixed GitHub CLI command and return its captured output.
+
+    Retries a bounded number of times, with short fixed delays, when gh
+    reports GitHub's transient secondary rate limit -- but never for the
+    primary (hours-long) rate limit, where retrying inside one CI job cannot
+    help and would only waste its runtime.
 
     Args:
         args: The `gh` subcommand and its arguments (without the leading "gh" itself).
@@ -47,25 +83,56 @@ def _run_gh(args: list[str]) -> str:
         The command's captured stdout.
     """
 
-    # Collapse "gh not installed" (FileNotFoundError) and "gh exited non-zero"
-    # (CalledProcessError, since check=True) into one ProjectStatusSyncError, so
-    # main()'s error handling only needs to catch this module's own exception type.
-    try:
-        # command is a fixed literal ("gh", *args) built from this module's own
-        # subcommand arguments, not runtime/user-constructed input.
-        result = subprocess.run(  # noqa: S603
-            ["gh", *args],  # noqa: S607
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except FileNotFoundError as error:
-        raise ProjectStatusSyncError("gh CLI is not installed or not on PATH") from error
-    except subprocess.CalledProcessError as error:
-        raise ProjectStatusSyncError(
-            f"gh {' '.join(args)} failed: {error.stderr.strip() or error.stdout.strip()}"
-        ) from error
-    return result.stdout
+    # The first attempt has no delay; each retry after a secondary-rate-limit
+    # failure waits progressively longer per _SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS.
+    delays = (0, *_SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS)
+    # Walk the fixed attempt schedule rather than recursing, so the bound on
+    # total attempts is visible directly from `delays` with no separate counter.
+    for attempt_index, delay in enumerate(delays):
+        # Only a retry (attempt_index > 0) has a delay; the first attempt runs
+        # immediately.
+        if delay:
+            time.sleep(delay)
+        # Collapse "gh not installed" (FileNotFoundError) and "gh exited
+        # non-zero" (CalledProcessError, since check=True) into one
+        # ProjectStatusSyncError, so callers only need to catch this module's
+        # own exception type.
+        try:
+            # command is a fixed literal ("gh", *args) built from this module's own
+            # subcommand arguments, not runtime/user-constructed input.
+            result = subprocess.run(  # noqa: S603
+                ["gh", *args],  # noqa: S607
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError as error:
+            raise ProjectStatusSyncError("gh CLI is not installed or not on PATH") from error
+        except subprocess.CalledProcessError as error:
+            message = error.stderr.strip() or error.stdout.strip()
+            is_last_attempt = attempt_index == len(delays) - 1
+            # A genuine metadata defect and an hours-long token-budget
+            # exhaustion must never look the same in CI output, or a human
+            # will waste time "fixing" a PR that was never the problem -- so
+            # this case fails immediately, without spending any retry.
+            if _is_primary_rate_limit_error(message):
+                raise ProjectStatusSyncError(
+                    "GitHub API rate limit exhausted -- this is a transient "
+                    f"infrastructure condition, not a metadata defect: gh {' '.join(args)} "
+                    f"failed: {message}"
+                ) from error
+            # Transient and documented to clear within seconds; loop around to
+            # the next (longer) delay instead of failing, unless this was
+            # already the last scheduled attempt.
+            if _is_secondary_rate_limit_error(message) and not is_last_attempt:
+                continue
+            raise ProjectStatusSyncError(f"gh {' '.join(args)} failed: {message}") from error
+        else:
+            return result.stdout
+    # Unreachable: `delays` is a fixed non-empty literal, so every iteration of
+    # the loop above either returns on success or raises on failure. Kept only
+    # so a static checker can see every code path produces or raises a value.
+    raise AssertionError("unreachable: _run_gh's retry loop always returns or raises")
 
 
 def fetch_project_id(owner: str, project_number: int) -> str:
