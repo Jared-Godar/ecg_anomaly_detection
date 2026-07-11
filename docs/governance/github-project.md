@@ -27,6 +27,41 @@ Every issue and pull request added to the project must populate these fields:
 Use the most specific defensible value. Leave uncertain metadata blank and request maintainer
 review instead of manufacturing precision.
 
+### Bundling pull requests
+
+A pull request commonly closes more than one issue (e.g. PR #160 closing #158 and #159). When its
+closing issues disagree on a field's value, apply this convention rather than deciding it fresh
+per PR:
+
+- **Milestone** tracks the pull request's own shipping vehicle, not any individual closing issue's
+  categorization. A milestone is a delivery commitment, not a topic
+  (`docs/governance/issue-workflow.md`) -- an issue bucketed under a broad `Target Release` like
+  Stewardship is still milestoned once it concretely ships as part of milestoned work. Confirmed
+  live: #158, #159, #161, and #162 all carry milestone `v1.1.0 -- Second Portfolio Release` because
+  all four ship through the same PR cluster, regardless of how each issue was individually
+  triaged.
+- **Target Release** (the Project field) likewise tracks the pull request's actual shipping
+  vehicle rather than being copied from a closing issue's value. Precedent: PR #160 set Target
+  Release to `Portfolio Release`, matching its own `v1.1.0` milestone, rather than inheriting
+  #158's own `Stewardship` value -- the PR's release timing is concretely known at merge time in a
+  way an individual issue's own bucket isn't.
+- **Workstream**, **Issue Type**, and **Portfolio Signal** are single-select fields, so a bundling
+  PR can only carry one value each -- there is no structural way to union them across disagreeing
+  closing issues the way a multi-valued label could. Use the closing issue that represents the
+  PR's primary or largest piece of work, judged first by relative Size (the larger-Size issue
+  wins), falling back to which issue the PR's own title and summary substantively center on when
+  Size is equal or one issue isn't yet sized.
+  - Not "first-listed closing issue wins": the order `Closes #N` references appear in a PR body is
+    a typing artifact, not a substantive signal, and using it would make the outcome depend on
+    which issue the author happened to reference first rather than which one the PR is actually
+    mostly about.
+  - Not "majority of closing issues wins": bundling PRs in this repo often pair several small,
+    narrowly-scoped issues with one larger piece of work, and counting occurrences would let three
+    XS issues outvote the one L issue that represents the bulk of the change.
+
+This convention governs future bundling PRs; it does not retroactively correct the already-merged
+field values of PR #155 or PR #160 (see #162).
+
 ## Status lifecycle
 
 Use this progression for new work:
