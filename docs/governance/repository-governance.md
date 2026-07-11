@@ -39,9 +39,14 @@ and merged topic branches should be deleted automatically.
 ## CI and review model
 
 Required CI checks provide the repeatable evidence needed before merge. A pull
-request must not merge while a required check is pending or failing. The exact
-required checks are selected in the `main` branch protection or ruleset settings
-and should match the checks emitted by the committed workflows.
+request must not merge while a required check is pending or failing, with one
+narrow, documented, audited exception for a failure independently proven to be
+pure infrastructure rather than a defect the pull request introduced — see
+"Current branch protection on `main`" below and [GitHub metadata
+automation](github-metadata-automation.md#maintainer-override-for-confirmed-infrastructure-failures).
+The exact required checks are selected in the `main` branch protection or
+ruleset settings and should match the checks emitted by the committed
+workflows.
 
 This is a single-maintainer repository. The maintainer is accountable for
 self-reviewing each pull request's diff, validation evidence, and documentation
