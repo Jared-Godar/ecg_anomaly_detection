@@ -27,6 +27,11 @@ uv run ecg-data acquire \
 The command retrieves only the 144 configured `.atr`, `.dat`, and `.hea` files. It does not fetch
 extra website content, historical alternates, or documentation files.
 
+`acquire` prints a `[1/1] acquire: starting` banner, its existing completion message, and a
+`[1/1] acquire: complete in MM:SS` banner (or `failed after MM:SS` if it raises) to stdout, matching
+[the orchestrated `run-pipeline` command's progress output](pipeline-orchestration.md#progress-output).
+This is purely observational and never changes the command's exit code or the acquired files.
+
 ## Safety and recovery behavior
 
 Acquisition applies the following controls:

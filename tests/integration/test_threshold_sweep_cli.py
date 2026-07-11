@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from ecg_anomaly_detection.cli import main
 
@@ -22,12 +23,16 @@ _CONFIG = (
 )
 
 
-def test_evaluate_threshold_sweep_command_writes_metrics(tmp_path: Path) -> None:
+def test_evaluate_threshold_sweep_command_writes_metrics(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """`ecg-data evaluate-threshold-sweep` writes a metrics file with the sweep's own name,
     partition, threshold count, and never references a "test"-partition shard path.
 
     Args:
         tmp_path: Pytest's per-test isolated temporary directory.
+        capsys: Used to capture stdout and confirm the command's progress
+            banners (#61).
     """
 
     paths = _repository(tmp_path)
@@ -55,12 +60,15 @@ def test_evaluate_threshold_sweep_command_writes_metrics(tmp_path: Path) -> None
         ]
     )
 
+    output = capsys.readouterr().out
     assert exit_code == 0
     metrics = json.loads(output_path.read_text(encoding="utf-8"))
     assert metrics["sweep_name"] == "cli-fixture-sweep"
     assert metrics["partition"] == "validation"
     assert len(metrics["thresholds"]) == 2
     assert all("test" not in item["path"] for item in metrics["validation_shards"])
+    assert "[1/1] evaluate-threshold-sweep: starting" in output
+    assert "[1/1] evaluate-threshold-sweep: complete in" in output
 
 
 def test_evaluate_threshold_sweep_command_fails_closed_on_digest_mismatch(tmp_path: Path) -> None:

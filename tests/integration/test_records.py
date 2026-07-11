@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 import wfdb
 
 from ecg_anomaly_detection.cli import main
@@ -38,12 +39,16 @@ def test_load_and_validate_synthetic_wfdb_record(tmp_path: Path) -> None:
     assert report.annotation_symbol_counts == {"N": 2, "V": 1}
 
 
-def test_validate_record_cli_writes_report(tmp_path: Path) -> None:
+def test_validate_record_cli_writes_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """`ecg-data validate-record` run against a synthetic WFDB record writes a validation report
     with the correct 16-sample count.
 
     Args:
         tmp_path: Pytest's per-test isolated temporary directory.
+        capsys: Used to capture stdout and confirm the command's progress
+            banners (#61).
     """
 
     data_dir = tmp_path / "raw"
@@ -70,16 +75,23 @@ def test_validate_record_cli_writes_report(tmp_path: Path) -> None:
         ]
     )
 
+    output = capsys.readouterr().out
     assert exit_code == 0
     assert '"sample_count": 16' in output_path.read_text(encoding="utf-8")
+    assert "[1/1] validate-record: starting" in output
+    assert "[1/1] validate-record: complete in" in output
 
 
-def test_map_annotations_cli_writes_audit_report(tmp_path: Path) -> None:
+def test_map_annotations_cli_writes_audit_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """`ecg-data map-annotations` run against a synthetic record writes an audit report with the
     correct included-count and per-target tally.
 
     Args:
         tmp_path: Pytest's per-test isolated temporary directory.
+        capsys: Used to capture stdout and confirm the command's progress
+            banners (#61).
     """
 
     data_dir = tmp_path / "raw"
@@ -129,18 +141,25 @@ symbols = ["!"]
         ]
     )
 
+    output = capsys.readouterr().out
     assert exit_code == 0
     report = output_path.read_text(encoding="utf-8")
     assert '"included_annotation_count": 3' in report
     assert '"selected_other": 1' in report
+    assert "[1/1] map-annotations: starting" in output
+    assert "[1/1] map-annotations: complete in" in output
 
 
-def test_extract_windows_cli_writes_npz_and_report(tmp_path: Path) -> None:
+def test_extract_windows_cli_writes_npz_and_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """`ecg-data extract-windows` run end-to-end against a synthetic record writes a window NPZ
     shard and a matching report with the correct shape, record IDs, and emitted-window count.
 
     Args:
         tmp_path: Pytest's per-test isolated temporary directory.
+        capsys: Used to capture stdout and confirm the command's progress
+            banners (#61).
     """
 
     data_dir = tmp_path / "raw"
@@ -187,12 +206,15 @@ boundary_policy = "exclude"
         ]
     )
 
+    output = capsys.readouterr().out
     assert exit_code == 0
     # The window NPZ artifact was just written by the CLI invocation above.
     with np.load(output_path, allow_pickle=False) as artifact:
         assert artifact["windows"].shape == (3, 2)
         assert artifact["record_ids"].tolist() == ["100", "100", "100"]
     assert '"emitted_window_count": 3' in report_path.read_text(encoding="utf-8")
+    assert "[1/1] extract-windows: starting" in output
+    assert "[1/1] extract-windows: complete in" in output
 
 
 def _write_synthetic_record(data_dir: Path) -> None:

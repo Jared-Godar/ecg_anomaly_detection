@@ -107,6 +107,12 @@ This is distinct from the three curated public notebooks' own execution check, w
 every cell (against synthetic data, never the real dataset) — see
 [notebook validation](../notebooks/README.md#validation).
 
+`check-local-notebooks` prints a `[1/1] check-local-notebooks: starting` banner and a
+`[1/1] check-local-notebooks: complete in MM:SS` banner (or `failed after MM:SS`) to **stderr**,
+not stdout — matching [`run-pipeline`'s progress
+output](pipeline-orchestration.md#progress-output) but routed differently so `--json`'s stdout
+stays a pure, machine-parseable JSON blob in every mode.
+
 ## Clean up local pipeline runs
 
 `list-runs` and `purge-run` reclaim disk space from local `run-pipeline` output without touching

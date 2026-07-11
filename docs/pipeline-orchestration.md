@@ -58,8 +58,13 @@ A stage that raises prints `failed after MM:SS` instead of `complete in MM:SS`; 
 error still propagates and the command still returns a nonzero status. This output is purely
 observational: it never affects run identity, evidence contents, or artifact schemas, and the
 existing `runtime_summary.json` per-stage timings (see below) remain the authoritative timing
-evidence. Other subcommands (`acquire`, `inventory`, `split-windows`, and so on) are unchanged and
-continue to print a single completion line.
+evidence.
+
+Every other standalone subcommand except `list-runs` and `purge-run` prints the same shape of
+banner around its own single-stage body: a `[1/1] <command>: starting` line, its existing
+completion message, then a `[1/1] <command>: complete in MM:SS` (or `failed after MM:SS`) line.
+See each stage's own documentation page for its exact output. `list-runs` and `purge-run` are
+near-instantaneous local filesystem operations and do not print progress banners.
 
 Every line is flushed as it is written. Python fully block-buffers stdout when it is not a
 terminal, which is exactly the case for `notebooks/00-environment-setup-and-artifact-generation.ipynb`'s

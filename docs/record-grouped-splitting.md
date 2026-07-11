@@ -46,6 +46,11 @@ uv run ecg-data split-windows \
 Input NPZ files retain row-level record IDs, target values, mapping identity, and window
 configuration identity. A record appearing in multiple artifacts is rejected.
 
+`split-windows` prints a `[1/1] split-windows: starting` banner, its existing completion message,
+and a `[1/1] split-windows: complete in MM:SS` banner (or `failed after MM:SS`) to stdout, matching
+[`run-pipeline`'s progress output](pipeline-orchestration.md#progress-output). Warning-severity
+quality violations still print to stderr as before, independent of these banners.
+
 ## Manifest and validation contract
 
 Schema v2 records the split policy, source artifacts, total subject/record/window counts, and these

@@ -47,6 +47,10 @@ uv run ecg-data extract-windows \
 
 Both output locations are ignored by Git.
 
+`extract-windows` prints a `[1/1] extract-windows: starting` banner, its existing completion
+message, and a `[1/1] extract-windows: complete in MM:SS` banner (or `failed after MM:SS`) to
+stdout, matching [`run-pipeline`'s progress output](pipeline-orchestration.md#progress-output).
+
 ## NPZ artifact contract
 
 The artifact uses NumPy arrays that can be opened with `allow_pickle=False`. It contains:

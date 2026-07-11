@@ -340,6 +340,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
     """Run the CLI and return a process exit code."""
     parser = build_parser()
     options = parser.parse_args(arguments)
+    # Shared by every standalone subcommand's single start/completion banner below;
+    # run-pipeline builds its own multi-stage reporter separately further down.
+    reporter = ProgressReporter(stream=sys.stdout)
 
     # Every stage module's own error type funnels here into one shared exit-code path:
     # print a one-line message to stderr and return 1, rather than a raw traceback --
@@ -358,17 +361,29 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
             # notebook_quality.py's own exception type isn't in the shared tuple below
             # (it's a local, deliberately narrow import), so it needs its own handler.
+            # This command's progress banners route to stderr rather than the shared
+            # stdout reporter above, since --json below must keep stdout as a pure,
+            # machine-parseable JSON blob in every mode, not just when --json is passed.
             try:
-                notebook_paths = tuple(options.notebook) or discover_local_notebooks(
-                    options.repository_root,
-                    include_narrative=options.include_narrative,
-                )
-                summary = check_notebooks(
-                    options.repository_root,
-                    notebook_paths,
-                    format_notebooks=options.format_notebooks,
-                    strip_outputs=options.strip_outputs,
-                )
+                # Single stage covering discovery through validation, so a start banner
+                # appears before either step and a completion (or failure) banner after.
+                with ProgressReporter(stream=sys.stderr).stage(
+                    "check-local-notebooks", 1, 1
+                ) as stage:
+                    notebook_paths = tuple(options.notebook) or discover_local_notebooks(
+                        options.repository_root,
+                        include_narrative=options.include_narrative,
+                    )
+                    summary = check_notebooks(
+                        options.repository_root,
+                        notebook_paths,
+                        format_notebooks=options.format_notebooks,
+                        strip_outputs=options.strip_outputs,
+                    )
+                    stage.detail(
+                        f"checked {len(summary.notebooks)} notebooks; "
+                        f"changed {summary.changed_count}"
+                    )
             except NotebookQualityError as error:
                 print(f"error: {error}", file=sys.stderr)
                 return 1
@@ -403,54 +418,66 @@ def main(arguments: Sequence[str] | None = None) -> int:
         # validate-benchmark-policy only checks governance config shape/consistency;
         # it deliberately never opens a run manifest or the protected test partition.
         if options.command == "validate-benchmark-policy":
-            policy = load_benchmark_policy(options.policy)
-            print(f"validated benchmark policy {policy.policy_id} version {policy.version}")
+            # Single-stage progress banner (#61): this command's whole body is one
+            # unit of work, unlike run-pipeline's multi-stage sequence above.
+            with reporter.stage("validate-benchmark-policy", 1, 1):
+                policy = load_benchmark_policy(options.policy)
+                print(f"validated benchmark policy {policy.policy_id} version {policy.version}")
             return 0
         # Approval evidence is recorded independently of running the benchmark itself;
         # this command only verifies the eligibility/approval/lineage chain.
         if options.command == "record-benchmark-approval":
-            record = record_benchmark_approval(
-                options.repository_root,
-                options.policy,
-                options.run_manifest,
-                options.approval,
-                options.output,
-            )
-            print(
-                f"recorded benchmark approval for candidate {record.candidate_run_id} "
-                f"in {options.output}"
-            )
+            # Single-stage progress banner (#61): this command's whole body is one
+            # unit of work.
+            with reporter.stage("record-benchmark-approval", 1, 1):
+                record = record_benchmark_approval(
+                    options.repository_root,
+                    options.policy,
+                    options.run_manifest,
+                    options.approval,
+                    options.output,
+                )
+                print(
+                    f"recorded benchmark approval for candidate {record.candidate_run_id} "
+                    f"in {options.output}"
+                )
             return 0
         # This sweep runs exclusively over the indexed validation partition (see
         # evaluation.py's SUPPORTED_PARTITION); it never opens the protected test data.
         if options.command == "evaluate-threshold-sweep":
-            sweep_config = load_threshold_sweep_config(options.config)
-            result = evaluate_threshold_sweep_from_index(
-                options.repository_root,
-                options.dataset_index,
-                options.model,
-                options.training_metadata,
-                sweep_config,
-                options.output,
-            )
-            print(
-                f"swept {len(sweep_config.thresholds)} thresholds over "
-                f"{result.window_count} validation windows in {options.output}"
-            )
+            # Single-stage progress banner (#61): this command's whole body is one
+            # unit of work.
+            with reporter.stage("evaluate-threshold-sweep", 1, 1):
+                sweep_config = load_threshold_sweep_config(options.config)
+                result = evaluate_threshold_sweep_from_index(
+                    options.repository_root,
+                    options.dataset_index,
+                    options.model,
+                    options.training_metadata,
+                    sweep_config,
+                    options.output,
+                )
+                print(
+                    f"swept {len(sweep_config.thresholds)} thresholds over "
+                    f"{result.window_count} validation windows in {options.output}"
+                )
             return 0
         # Indexing joins window shards to split membership; --input accepts either
         # files or directories, expanded via _resolve_input_paths.
         if options.command == "index-dataset":
-            index = create_dataset_index(
-                options.repository_root,
-                options.split_manifest,
-                _resolve_input_paths(options.input),
-            )
-            write_dataset_index(index, options.repository_root, options.output)
-            print(
-                f"indexed {index.total_record_count} records and "
-                f"{index.total_window_count} windows in {options.output}"
-            )
+            # Single-stage progress banner (#61): this command's whole body is one
+            # unit of work.
+            with reporter.stage("index-dataset", 1, 1):
+                index = create_dataset_index(
+                    options.repository_root,
+                    options.split_manifest,
+                    _resolve_input_paths(options.input),
+                )
+                write_dataset_index(index, options.repository_root, options.output)
+                print(
+                    f"indexed {index.total_record_count} records and "
+                    f"{index.total_window_count} windows in {options.output}"
+                )
             return 0
         # run-pipeline is the composite command chaining every stage in order; it gets
         # its own wall-clock timer and progress reporter since it's the longest-running
@@ -476,16 +503,19 @@ def main(arguments: Sequence[str] | None = None) -> int:
         # Ties inventory/split evidence, configs, and named artifacts together into
         # one auditable manifest, independent of run-pipeline's own composite flow.
         if options.command == "create-run-manifest":
-            manifest = create_run_manifest(
-                options.repository_root,
-                options.inventory_manifest,
-                options.split_manifest,
-                options.config,
-                options.evidence,
-                options.artifact,
-            )
-            write_run_manifest(manifest, options.repository_root, options.output)
-            print(f"recorded run {manifest.run_id} in {options.output}")
+            # Single-stage progress banner (#61): this command's whole body is one
+            # unit of work.
+            with reporter.stage("create-run-manifest", 1, 1):
+                manifest = create_run_manifest(
+                    options.repository_root,
+                    options.inventory_manifest,
+                    options.split_manifest,
+                    options.config,
+                    options.evidence,
+                    options.artifact,
+                )
+                write_run_manifest(manifest, options.repository_root, options.output)
+                print(f"recorded run {manifest.run_id} in {options.output}")
             return 0
         # Reads only local artifact directory state (sizes, manifest presence); never
         # touches dataset or model content.
@@ -539,29 +569,32 @@ def main(arguments: Sequence[str] | None = None) -> int:
         # split-windows only needs the split config and window artifacts -- unlike
         # most other commands here, it doesn't load a dataset config at all.
         if options.command == "split-windows":
-            split_config = load_split_config(options.split_config)
-            metadata = load_window_metadata(_resolve_input_paths(options.input))
-            manifest = create_split_manifest(split_config, metadata)
-            write_split_manifest(manifest, options.output)
-            quality_path = options.quality_output or options.output.with_name(
-                "split_quality_summary.json"
-            )
-            quality = create_split_quality_summary(split_config, manifest, metadata)
-            write_split_quality_summary(quality, quality_path)
-            # Surface warning-severity violations on stderr immediately, even though
-            # enforce_split_quality below only raises on failure-severity ones -- a
-            # warning is informational and shouldn't block the command, but shouldn't
-            # be silent either.
-            for violation in quality.violations:
-                # Only warning-severity violations print here; failures propagate via
-                # the enforce_split_quality() call below instead.
-                if violation.severity == "warning":
-                    print(f"warning: {violation.message}", file=sys.stderr)
-            enforce_split_quality(quality)
-            print(
-                f"assigned {manifest.total_record_count} records "
-                f"across 3 partitions in {options.output}; quality {quality.status} in {quality_path}"
-            )
+            # Single-stage progress banner (#61): this command's whole body is one
+            # unit of work.
+            with reporter.stage("split-windows", 1, 1):
+                split_config = load_split_config(options.split_config)
+                metadata = load_window_metadata(_resolve_input_paths(options.input))
+                manifest = create_split_manifest(split_config, metadata)
+                write_split_manifest(manifest, options.output)
+                quality_path = options.quality_output or options.output.with_name(
+                    "split_quality_summary.json"
+                )
+                quality = create_split_quality_summary(split_config, manifest, metadata)
+                write_split_quality_summary(quality, quality_path)
+                # Surface warning-severity violations on stderr immediately, even though
+                # enforce_split_quality below only raises on failure-severity ones -- a
+                # warning is informational and shouldn't block the command, but shouldn't
+                # be silent either.
+                for violation in quality.violations:
+                    # Only warning-severity violations print here; failures propagate via
+                    # the enforce_split_quality() call below instead.
+                    if violation.severity == "warning":
+                        print(f"warning: {violation.message}", file=sys.stderr)
+                enforce_split_quality(quality)
+                print(
+                    f"assigned {manifest.total_record_count} records across 3 partitions "
+                    f"in {options.output}; quality {quality.status} in {quality_path}"
+                )
             return 0
         config = load_dataset_config(options.config)
         # The remaining commands (acquire, inventory, verify, validate-record,
@@ -569,46 +602,66 @@ def main(arguments: Sequence[str] | None = None) -> int:
         # and are mutually exclusive per invocation, so an elif chain (rather than
         # separate early-return ifs like the commands above) is appropriate here.
         if options.command == "acquire":
-            result = acquire_dataset(
-                config,
-                options.repository_root,
-                options.data_dir,
-                options.output,
-            )
-            print(
-                f"acquired {result.downloaded_file_count} and reused "
-                f"{result.reused_file_count} files in {options.data_dir}"
-            )
+            # Single-stage progress banner (#61): this command's whole body is one
+            # unit of work.
+            with reporter.stage("acquire", 1, 1):
+                result = acquire_dataset(
+                    config,
+                    options.repository_root,
+                    options.data_dir,
+                    options.output,
+                )
+                print(
+                    f"acquired {result.downloaded_file_count} and reused "
+                    f"{result.reused_file_count} files in {options.data_dir}"
+                )
         elif options.command == "inventory":
-            manifest = create_inventory(config, options.data_dir)
-            write_manifest(manifest, options.output)
-            print(f"inventoried {len(manifest.files)} files in {options.output}")
+            # Single-stage progress banner (#61): this command's whole body is one
+            # unit of work.
+            with reporter.stage("inventory", 1, 1):
+                manifest = create_inventory(config, options.data_dir)
+                write_manifest(manifest, options.output)
+                print(f"inventoried {len(manifest.files)} files in {options.output}")
         elif options.command == "verify":
-            manifest = read_manifest(options.manifest)
-            verify_inventory(config, options.data_dir, manifest)
-            print(f"verified {len(manifest.files)} files against {options.manifest}")
+            # Single-stage progress banner (#61): this command's whole body is one
+            # unit of work.
+            with reporter.stage("verify", 1, 1):
+                manifest = read_manifest(options.manifest)
+                verify_inventory(config, options.data_dir, manifest)
+                print(f"verified {len(manifest.files)} files against {options.manifest}")
         elif options.command == "validate-record":
-            record = load_wfdb_record(config, options.data_dir, options.record_id)
-            report = validate_record(config, record.signal, record.annotations)
-            write_validation_report(report, options.output)
-            print(f"validated record {options.record_id} in {options.output}")
+            # Single-stage progress banner (#61): this command's whole body is one
+            # unit of work.
+            with reporter.stage("validate-record", 1, 1):
+                record = load_wfdb_record(config, options.data_dir, options.record_id)
+                report = validate_record(config, record.signal, record.annotations)
+                write_validation_report(report, options.output)
+                print(f"validated record {options.record_id} in {options.output}")
         elif options.command == "map-annotations":
-            record = load_wfdb_record(config, options.data_dir, options.record_id)
-            validate_record(config, record.signal, record.annotations)
-            mapping = load_annotation_mapping(options.mapping_config)
-            result = map_annotations(mapping, record.annotations)
-            write_mapping_report(result.report, options.output)
-            print(f"mapped annotations for record {options.record_id} in {options.output}")
+            # Single-stage progress banner (#61): this command's whole body is one
+            # unit of work.
+            with reporter.stage("map-annotations", 1, 1):
+                record = load_wfdb_record(config, options.data_dir, options.record_id)
+                validate_record(config, record.signal, record.annotations)
+                mapping = load_annotation_mapping(options.mapping_config)
+                result = map_annotations(mapping, record.annotations)
+                write_mapping_report(result.report, options.output)
+                print(f"mapped annotations for record {options.record_id} in {options.output}")
         elif options.command == "extract-windows":
-            record = load_wfdb_record(config, options.data_dir, options.record_id)
-            validate_record(config, record.signal, record.annotations)
-            mapping = load_annotation_mapping(options.mapping_config)
-            mapped = map_annotations(mapping, record.annotations)
-            window_config = load_window_config(options.window_config)
-            extracted = extract_windows(window_config, mapping, record.signal, mapped)
-            write_window_artifact(extracted.window_set, options.output)
-            write_window_report(extracted.report, options.report)
-            print(f"extracted {extracted.report.emitted_window_count} windows in {options.output}")
+            # Single-stage progress banner (#61): this command's whole body is one
+            # unit of work.
+            with reporter.stage("extract-windows", 1, 1):
+                record = load_wfdb_record(config, options.data_dir, options.record_id)
+                validate_record(config, record.signal, record.annotations)
+                mapping = load_annotation_mapping(options.mapping_config)
+                mapped = map_annotations(mapping, record.annotations)
+                window_config = load_window_config(options.window_config)
+                extracted = extract_windows(window_config, mapping, record.signal, mapped)
+                write_window_artifact(extracted.window_set, options.output)
+                write_window_report(extracted.report, options.report)
+                print(
+                    f"extracted {extracted.report.emitted_window_count} windows in {options.output}"
+                )
     except (
         AcquisitionError,
         AnnotationMappingError,

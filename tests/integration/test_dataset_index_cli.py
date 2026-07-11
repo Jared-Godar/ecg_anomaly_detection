@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from ecg_anomaly_detection.cli import main
 
@@ -86,12 +87,16 @@ def _write_split_manifest(
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def test_index_dataset_accepts_a_directory_of_shards(tmp_path: Path) -> None:
+def test_index_dataset_accepts_a_directory_of_shards(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """`ecg-data index-dataset --input <directory>` discovers every shard in that directory and
     builds a dataset index with the correct total record/window counts.
 
     Args:
         tmp_path: Pytest's per-test isolated temporary directory.
+        capsys: Used to capture stdout and confirm the command's progress
+            banners (#61).
     """
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
@@ -126,10 +131,13 @@ def test_index_dataset_accepts_a_directory_of_shards(tmp_path: Path) -> None:
         ]
     )
 
+    output = capsys.readouterr().out
     index = json.loads(output_path.read_text(encoding="utf-8"))
     assert exit_code == 0
     assert index["total_record_count"] == 3
     assert index["total_window_count"] == 6
+    assert "[1/1] index-dataset: starting" in output
+    assert "[1/1] index-dataset: complete in" in output
 
 
 def test_index_dataset_reports_a_nonexistent_input_path(tmp_path: Path) -> None:

@@ -34,6 +34,11 @@ the committed expected size or digest. The output records the observed
 dataset identity, UTC creation time, relative file name, byte size, and SHA-256 digest. The manifest
 is generated evidence and remains ignored by Git under `artifacts/`.
 
+`inventory` prints a `[1/1] inventory: starting` banner, its existing completion message, and a
+`[1/1] inventory: complete in MM:SS` banner (or `failed after MM:SS`) to stdout, matching
+[`run-pipeline`'s progress output](pipeline-orchestration.md#progress-output). This is purely
+observational and never changes the command's exit code or the written manifest.
+
 ## Verify files later
 
 ```fish
@@ -45,6 +50,9 @@ uv run ecg-data verify \
 
 Verification fails when the configured dataset identity or required file set differs, a required
 file is missing, or a file's size or SHA-256 digest changed.
+
+`verify` prints the same shape of `[1/1] verify: starting` / `[1/1] verify: complete in MM:SS`
+progress banners as `inventory` above, around its own existing completion message.
 
 ## Trust boundary
 

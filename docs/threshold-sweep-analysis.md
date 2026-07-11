@@ -56,6 +56,11 @@ exactly identify the current dataset index and frozen model, every resolved vali
 match its indexed digest, and the deterministic JSON output is only ever written after all
 verification, prediction, and metric calculation succeeds in memory.
 
+`evaluate-threshold-sweep` prints a `[1/1] evaluate-threshold-sweep: starting` banner, its existing
+completion message, and a `[1/1] evaluate-threshold-sweep: complete in MM:SS` banner (or
+`failed after MM:SS`) to stdout, matching
+[`run-pipeline`'s progress output](pipeline-orchestration.md#progress-output).
+
 ## Output
 
 For each configured threshold, `threshold-sweep-metrics.json` reports the covered-window count
