@@ -88,7 +88,13 @@ Applied 2026-07-08 (#91), verified live against the API above:
   enforceable ceiling for a single-maintainer repository; self-review per
   the CI and review model above remains the actual review discipline.
 - **Enforced for administrators**: the repository owner is bound by the same
-  rules as any other contributor; there is no merge-button bypass.
+  rules as any other contributor; there is no merge-button bypass. A narrow,
+  documented, audited exception exists for a required check failure
+  independently proven to be pure infrastructure rather than a defect the
+  pull request introduced — see [GitHub metadata
+  automation](github-metadata-automation.md#maintainer-override-for-confirmed-infrastructure-failures)
+  (#157). `enforce_admins` returns to `true` immediately after each use; this
+  is not a standing bypass.
 - **Linear history is required.** Merge commits cannot be merged into
   `main`. In practice every merge to date has also been a squash merge
   (verified: `git log --merges` shows no two-parent commits on `main`), but
