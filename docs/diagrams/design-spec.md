@@ -22,6 +22,47 @@ system stays consistent across all four assets.
   overview says `acquire`; the pipeline-design flow says
   `acquire + verify checksums`. Preserve those differences.
 
+## Title and explanatory framing (required, durable standard)
+
+Every diagram, wherever it is embedded or viewed, must tell the reader what they are
+looking at through a **title, a one-paragraph explanation, and enough general
+context to stand alone** -- confirmed as a hard requirement by the maintainer
+(2026-07-11) after reviewing a bare, unframed diagram render.
+
+**How this is satisfied: markdown framing in the host document, not text baked into
+the diagram artwork.** Every diagram embed in a host doc must be preceded by its own
+heading and a short explanatory paragraph, followed by the image, followed by an
+italicized caption line -- matching how the AWS documentation references actually
+present their diagrams (under a page heading, not with a title rendered as part of
+the graphic) and how this repository already presents other figures. Concretely,
+for each of the four diagrams:
+
+```markdown
+### <Diagram title>
+
+<One to two sentences of context: what this shows and why it matters here.>
+
+![<alt text from this spec>](../diagrams/exports/<file>.svg)
+
+*<caption from this spec>*
+```
+
+**Do not attempt to render a title/subtitle as part of the D2 diagram itself.**
+This was tried and reverted during round 1 of the Governance Status Lifecycle
+diagram: a markdown-text D2 shape renders via SVG `foreignObject`, which
+`rsvg-convert` (this project's PNG-fallback tool) does not support -- the title
+silently vanishes from the PNG every time, with no error. A plain-text
+`shape: text` fallback was also tried and reverted: nesting it inside a
+`near`-positioned or `direction: down` container fought D2/elk's layout engine
+(stray auto-generated container labels, overlapping text, and in one attempt the
+whole flow collapsing from horizontal to vertical). Markdown framing achieves the
+identical communicative goal with zero cross-tool rendering risk and is the
+standard from here forward for all four diagrams.
+
+The per-diagram caption and alt text already specified below in this document are
+exactly the "explanation" and "general info" this section requires -- use them
+verbatim in the host-doc embed shown above; do not write new ones.
+
 ## Visual system
 
 Direction confirmed by the maintainer (2026-07-11): **blues and grays, editorial
