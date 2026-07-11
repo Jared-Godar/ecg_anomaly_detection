@@ -16,7 +16,7 @@ import nbformat
 # The one package-backed notebook outside notebooks/local/ this module will check when
 # explicitly asked (include_narrative=True); it's excluded by default because it's a
 # curated, reviewed artifact rather than disposable local experimentation.
-NARRATIVE_NOTEBOOK = Path("notebooks/narrative-walkthrough.ipynb")
+NARRATIVE_NOTEBOOK = Path("notebooks/01-narrative-walkthrough.ipynb")
 # The gitignored sandbox directory this module discovers notebooks from by default.
 LOCAL_NOTEBOOK_DIRECTORY = Path("notebooks/local")
 # Matches an absolute filesystem path (macOS/Linux /Users or /home, or a Windows drive

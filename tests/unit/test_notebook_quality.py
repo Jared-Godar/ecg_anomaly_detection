@@ -9,6 +9,7 @@ import nbformat
 import pytest
 
 from ecg_anomaly_detection.notebook_quality import (
+    NARRATIVE_NOTEBOOK,
     NotebookQualityError,
     check_notebooks,
     discover_local_notebooks,
@@ -129,20 +130,37 @@ def test_output_stripping_is_deterministic(tmp_path: Path) -> None:
 
 
 def test_discovery_excludes_narrative_by_default(tmp_path: Path) -> None:
-    """discover_local_notebooks finds only notebooks/local/ by default, and includes narrative-*
-    notebooks only when explicitly asked.
+    """discover_local_notebooks finds only notebooks/local/ by default, and includes the
+    curated narrative notebook only when explicitly asked.
 
     Args:
         tmp_path: Pytest's per-test isolated temporary directory.
     """
 
     local = tmp_path / "notebooks/local/local.ipynb"
-    narrative = tmp_path / "notebooks/narrative-walkthrough.ipynb"
+    # Matches NARRATIVE_NOTEBOOK's actual filename so this test would fail if that
+    # constant drifted from the real curated notebook again (regression for #152,
+    # where a stale constant silently matched nothing without the test noticing).
+    narrative = tmp_path / "notebooks/01-narrative-walkthrough.ipynb"
     _write_notebook(local)
     _write_notebook(narrative)
 
     assert discover_local_notebooks(tmp_path) == (local,)
     assert discover_local_notebooks(tmp_path, include_narrative=True) == (local, narrative)
+
+
+def test_narrative_notebook_constant_matches_real_repository_file() -> None:
+    """NARRATIVE_NOTEBOOK must point at a file that actually exists in this checkout.
+
+    A synthetic tmp_path fixture can't catch the constant drifting from the real
+    curated notebook's filename (see #152); this test exercises the real repository
+    root instead, so a rename of notebooks/01-narrative-walkthrough.ipynb without a
+    matching constant update fails here.
+    """
+
+    repository_root = Path(__file__).resolve().parents[2]
+
+    assert (repository_root / NARRATIVE_NOTEBOOK).is_file()
 
 
 def test_repository_boundary_rejects_non_notebook_path(tmp_path: Path) -> None:

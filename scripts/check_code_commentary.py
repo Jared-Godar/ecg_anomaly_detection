@@ -11,12 +11,17 @@ an adjacent comment describing the object or constant it creates.
 The immutable historical archive and generated or third-party code are outside this
 policy. The caller supplies explicit roots, which default to the supported ``src``,
 ``scripts``, and ``tests`` trees.
+
+The audit logic itself operates on in-memory source text through ``audit_source``, so
+``scripts/check_notebook_commentary.py`` can reuse it against extracted notebook cell
+source without duplicating the AST/tokenizer implementation.
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
+import io
 import sys
 import tokenize
 from dataclasses import dataclass
@@ -60,22 +65,22 @@ class CommentaryViolation:
         return f"{self.path.as_posix()}:{self.line}: {self.message}"
 
 
-def _comment_only_lines(path: Path) -> set[int]:
-    """Return line numbers containing standalone comments in one Python source file.
+def _comment_only_lines(source: str) -> set[int]:
+    """Return line numbers containing standalone comments in one Python source text.
 
     Inline comments are intentionally excluded because a trailing note cannot orient a
     reviewer before the implementation block begins. Tokenization is used instead of
-    string matching so ``#`` characters inside strings are never misclassified.
+    string matching so ``#`` characters inside strings are never misclassified. This
+    operates on in-memory source text (rather than a filesystem path) so it can audit
+    both whole files and individually extracted notebook cell sources.
     """
 
     comment_lines: set[int] = set()
-    # Bound the binary source handle to tokenization so it closes on every path.
-    with path.open("rb") as source:
-        # Inspect lexical tokens so comments remain distinguishable from string data.
-        for token in tokenize.tokenize(source.readline):
-            # Require the comment to be the first non-whitespace content on its line.
-            if token.type == tokenize.COMMENT and token.line[: token.start[1]].strip() == "":
-                comment_lines.add(token.start[0])
+    # Inspect lexical tokens so comments remain distinguishable from string data.
+    for token in tokenize.generate_tokens(io.StringIO(source).readline):
+        # Require the comment to be the first non-whitespace content on its line.
+        if token.type == tokenize.COMMENT and token.line[: token.start[1]].strip() == "":
+            comment_lines.add(token.start[0])
     return comment_lines
 
 
@@ -106,10 +111,29 @@ def _is_elif(lines: list[str], node: ast.If) -> bool:
     return lines[node.lineno - 1].lstrip().startswith("elif ")
 
 
-def audit_file(path: Path) -> tuple[CommentaryViolation, ...]:
-    """Audit one supported Python file for exhaustive docstrings and guide comments."""
+def audit_source(
+    source: str, *, path: Path, require_module_docstring: bool = True
+) -> tuple[CommentaryViolation, ...]:
+    """Audit one block of in-memory Python source for exhaustive docstrings and guide comments.
 
-    source = path.read_text(encoding="utf-8")
+    Operating on source text rather than reading from ``path`` directly lets this
+    function audit content that was never its own file on disk, such as one extracted
+    notebook code cell's source alongside the rest of the notebook's cells.
+
+    Args:
+        source: The Python source text to audit.
+        path: The location this source is reported against; for a whole file this is
+            the file's own path, and for a notebook cell it is a synthetic location
+            (e.g. ``notebook.ipynb::cell:3``) identifying the cell within its notebook.
+        require_module_docstring: Whether a missing leading docstring is reportable.
+            A standalone file's absent module docstring is a real gap; an individual
+            notebook cell has no equivalent convention, so callers auditing cells pass
+            ``False`` to avoid a diagnostic no notebook author could satisfy.
+
+    Returns:
+        Every commentary policy violation found in this source, in stable report order.
+    """
+
     lines = source.splitlines()
     # Convert syntax failures into policy diagnostics instead of uncaught tracebacks.
     try:
@@ -126,10 +150,12 @@ def audit_file(path: Path) -> tuple[CommentaryViolation, ...]:
 
     violations: list[CommentaryViolation] = []
     # A module docstring gives every file an immediate purpose and boundary statement.
-    if ast.get_docstring(tree, clean=False) is None:
+    # Notebook cells opt out (see require_module_docstring above) since no single cell
+    # is expected to carry the notebook's own narrative -- markdown cells do that.
+    if require_module_docstring and ast.get_docstring(tree, clean=False) is None:
         violations.append(CommentaryViolation(path, 1, "module is missing a docstring"))
 
-    comment_lines = _comment_only_lines(path)
+    comment_lines = _comment_only_lines(source)
     # Walk nested definitions and blocks so no private or inner implementation escapes.
     for node in ast.walk(tree):
         # Require substantive placement first; qualitative review remains file-by-file.
@@ -186,6 +212,12 @@ def audit_file(path: Path) -> tuple[CommentaryViolation, ...]:
             ),
         )
     )
+
+
+def audit_file(path: Path) -> tuple[CommentaryViolation, ...]:
+    """Audit one supported Python file for exhaustive docstrings and guide comments."""
+
+    return audit_source(path.read_text(encoding="utf-8"), path=path)
 
 
 def discover_python_files(roots: tuple[Path, ...]) -> tuple[Path, ...]:

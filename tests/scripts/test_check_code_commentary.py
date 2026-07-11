@@ -21,6 +21,9 @@ _SPEC.loader.exec_module(commentary)
 
 # Bind the public script functions locally so individual tests read like ordinary unit tests.
 audit_file = commentary.audit_file
+# Expose the in-memory audit core separately so notebook-cell-style callers (no file on
+# disk, no module docstring expectation) can be exercised without writing a temp file.
+audit_source = commentary.audit_source
 # Expose discovery separately because its deterministic path handling has an isolated contract.
 discover_python_files = commentary.discover_python_files
 # Expose the command entry point so tests can verify process-status behavior without a subprocess.
@@ -96,6 +99,36 @@ def test_audit_reaches_nested_callables(tmp_path: Path) -> None:
 
     # Pin the diagnostic to the inner definition so a shallow tree walk cannot pass this test.
     assert [item.message for item in violations] == ["function 'inner' is missing a docstring"]
+
+
+def test_audit_source_requires_module_docstring_by_default() -> None:
+    """Verify audit_source's default matches audit_file's whole-file expectation."""
+
+    violations = audit_source("def undocumented():\n    return 1\n", path=Path("<memory>"))
+
+    assert [item.message for item in violations] == [
+        "module is missing a docstring",
+        "function 'undocumented' is missing a docstring",
+    ]
+
+
+def test_audit_source_skips_module_docstring_when_not_required() -> None:
+    """Verify require_module_docstring=False suits a notebook cell, which has no
+    file-level docstring convention of its own -- only its own definitions/blocks
+    are held to the standard.
+    """
+
+    violations = audit_source(
+        "def undocumented():\n    return 1\n",
+        path=Path("<memory>"),
+        require_module_docstring=False,
+    )
+
+    # Only the function's own missing docstring remains; the whole-file expectation
+    # audit_file always applies is opted out of here.
+    assert [item.message for item in violations] == [
+        "function 'undocumented' is missing a docstring"
+    ]
 
 
 def test_discovery_is_recursive_unique_and_sorted(tmp_path: Path) -> None:
