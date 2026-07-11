@@ -73,6 +73,27 @@ def test_extract_closing_issue_numbers_does_not_match_a_bare_reference() -> None
     assert vpm.extract_closing_issue_numbers("See #38 for context.") == ()
 
 
+def test_extract_closing_issue_numbers_ignores_a_backtick_quoted_keyword() -> None:
+    """A closing keyword quoted as inline-code prose (e.g. describing another PR's body) is not
+    treated as this PR's own closing directive.
+
+    Reproduces the live false positive from issue #161: PR #160's body quoted
+    `` `Closes #154` `` as prose describing PR #155's content, and the unguarded regex
+    matched it as a real directive for PR #160 itself.
+    """
+
+    body = "This PR's body quotes `Closes #154` as an example of PR #155's own wording."
+    assert vpm.extract_closing_issue_numbers(body) == ()
+
+
+def test_extract_closing_issue_numbers_ignores_a_fenced_code_block() -> None:
+    """A closing keyword inside a fenced Markdown code block is not treated as a closing
+    directive, matching the inline-code-span case but for a multi-line quoted example."""
+
+    body = "Real text.\n```text\nCloses #154\n```\nMore real text.\nCloses #38."
+    assert vpm.extract_closing_issue_numbers(body) == (38,)
+
+
 # --- validate_pull_request ---------------------------------------------------------
 
 

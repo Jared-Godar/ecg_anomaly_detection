@@ -80,6 +80,18 @@ _CLOSING_KEYWORD_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Matches a fenced Markdown code block (```...```), including the language-tag line, so a closing
+# keyword quoted inside one -- e.g. a PR body demonstrating another PR's output -- is stripped
+# before keyword matching runs. Matched first, before inline spans, so a fenced block's own triple
+# backticks aren't mistaken for three single-backtick inline spans.
+_FENCED_CODE_BLOCK_PATTERN = re.compile(r"```.*?```", re.DOTALL)
+
+# Matches a Markdown inline code span (`...`), so a closing keyword quoted as prose -- e.g.
+# `` `Closes #154` `` describing a *different* PR's body -- is stripped before keyword matching
+# runs. Confined to a single line: GitHub's own inline-code-span rules don't let a span cross a
+# newline either.
+_INLINE_CODE_SPAN_PATTERN = re.compile(r"`[^`\n]*`")
+
 
 class MetadataValidationError(RuntimeError):
     """Raised when required PR or Project data cannot be read from GitHub."""
@@ -106,13 +118,37 @@ class ProjectFieldReport:
     missing_fields: tuple[str, ...]
 
 
+def _strip_markdown_code(text: str) -> str:
+    """Blank out fenced code blocks and inline code spans so quoted text within them can't
+    be mistaken for a real Markdown directive.
+
+    Replaces each match with a single space rather than deleting it, so a keyword
+    immediately before and a reference immediately after a stripped span don't get
+    spliced into a new, unintended match.
+
+    Args:
+        text: Raw Markdown text (e.g. a PR body).
+
+    Returns:
+        text with fenced code blocks and inline code spans replaced by spaces.
+    """
+
+    text = _FENCED_CODE_BLOCK_PATTERN.sub(" ", text)
+    return _INLINE_CODE_SPAN_PATTERN.sub(" ", text)
+
+
 def extract_closing_issue_numbers(body: str) -> tuple[int, ...]:
-    """Return issue numbers referenced by a GitHub closing keyword, in order, deduplicated."""
+    """Return issue numbers referenced by a GitHub closing keyword, in order, deduplicated.
+
+    Fenced code blocks and inline code spans are stripped before matching, so a closing
+    keyword quoted as prose or example text (e.g. `` `Closes #154` `` describing a
+    *different* PR) isn't mistaken for a real closing directive in this PR's own body.
+    """
     seen: dict[int, None] = {}
     # dict.setdefault preserves first-occurrence order while deduplicating, so a PR
     # body referencing the same issue with two different closing keywords still
     # yields that issue number exactly once.
-    for match in _CLOSING_KEYWORD_PATTERN.finditer(body or ""):
+    for match in _CLOSING_KEYWORD_PATTERN.finditer(_strip_markdown_code(body or "")):
         seen.setdefault(int(match.group(1)), None)
     return tuple(seen)
 
