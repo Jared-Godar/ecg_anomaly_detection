@@ -85,6 +85,7 @@ def test_complete_pull_request_has_no_violations() -> None:
         milestone="M5",
         labels=("type: modernization", "area: cli"),
         body="Closes #38",
+        state="OPEN",
     )
     assert vpm.validate_pull_request(pr) == ()
 
@@ -97,7 +98,7 @@ def test_pull_request_missing_everything_reports_all_violations() -> None:
     """
 
     pr = vpm.PullRequestMetadata(
-        number=2, assignees=(), milestone=None, labels=(), body="no reference"
+        number=2, assignees=(), milestone=None, labels=(), body="no reference", state="OPEN"
     )
     violations = vpm.validate_pull_request(pr)
     assert len(violations) == 5
@@ -122,6 +123,7 @@ def test_old_style_labels_without_a_space_are_recognized() -> None:
         milestone="M5",
         labels=("type:modernization", "area:cli"),
         body="Closes #1",
+        state="OPEN",
     )
     assert vpm.validate_pull_request(pr) == ()
 
@@ -139,6 +141,7 @@ def test_a_thematic_label_alone_does_not_satisfy_the_type_or_area_requirement() 
         milestone="M5",
         labels=("portfolio: case-study",),
         body="Closes #1",
+        state="OPEN",
     )
     violations = vpm.validate_pull_request(pr)
     assert "pull request is missing a type:* label" in violations
@@ -159,6 +162,7 @@ def test_missing_milestone_passes_when_not_required() -> None:
         milestone=None,
         labels=("type: documentation", "area: documentation"),
         body="Closes #78",
+        state="OPEN",
     )
     violations = vpm.validate_pull_request(pr, require_milestone=False)
     assert "pull request has no milestone" not in violations
@@ -173,6 +177,7 @@ def test_missing_milestone_still_fails_when_required() -> None:
         milestone=None,
         labels=("type: documentation", "area: documentation"),
         body="Closes #78",
+        state="OPEN",
     )
     violations = vpm.validate_pull_request(pr, require_milestone=True)
     assert "pull request has no milestone" in violations
@@ -295,6 +300,50 @@ def test_a_matching_pull_request_item_is_not_mistaken_for_the_issue() -> None:
     assert report.is_project_member is False
 
 
+# --- find_prematurely_closed_issues (issue #158) ------------------------------------
+
+
+def test_find_prematurely_closed_issues_flags_a_non_merge_closure() -> None:
+    """An issue closed by a non-merge event produces a warning naming that issue."""
+
+    state = vpm.IssueClosureState(154, is_closed=True, closed_via_commit=False)
+    warnings = vpm.find_prematurely_closed_issues((state,))
+    assert len(warnings) == 1
+    assert "issue #154" in warnings[0]
+    assert "non-merge event" in warnings[0]
+
+
+def test_find_prematurely_closed_issues_does_not_flag_a_merge_linked_closure() -> None:
+    """An issue closed via a merged commit/PR reference is not flagged; that's the expected path."""
+
+    state = vpm.IssueClosureState(38, is_closed=True, closed_via_commit=True)
+    assert vpm.find_prematurely_closed_issues((state,)) == ()
+
+
+def test_find_prematurely_closed_issues_does_not_flag_an_open_issue() -> None:
+    """An issue that is still open is never flagged, regardless of closed_via_commit's value.
+
+    closed_via_commit is meaningless for an open issue (fetch_issue_closure_state
+    always returns False for it); is_closed is the gating condition.
+    """
+
+    state = vpm.IssueClosureState(38, is_closed=False, closed_via_commit=False)
+    assert vpm.find_prematurely_closed_issues((state,)) == ()
+
+
+def test_find_prematurely_closed_issues_reports_only_the_flagged_ones() -> None:
+    """Given a mix of closure states, only the non-merge-closed issue is named in the output."""
+
+    states = (
+        vpm.IssueClosureState(1, is_closed=False, closed_via_commit=False),
+        vpm.IssueClosureState(2, is_closed=True, closed_via_commit=True),
+        vpm.IssueClosureState(3, is_closed=True, closed_via_commit=False),
+    )
+    warnings = vpm.find_prematurely_closed_issues(states)
+    assert len(warnings) == 1
+    assert "issue #3" in warnings[0]
+
+
 # --- I/O boundary (mocked subprocess) -----------------------------------------------
 
 
@@ -308,7 +357,7 @@ def test_fetch_pull_request_parses_gh_output() -> None:
     fake_stdout = (
         '{"number": 65, "assignees": [{"login": "Jared-Godar"}], '
         '"milestone": {"title": "M5"}, "labels": [{"name": "type: modernization"}], '
-        '"body": "Closes #38"}'
+        '"body": "Closes #38", "state": "OPEN"}'
     )
     # gh's real `pr view --json` output nests assignees/milestone/labels as objects.
     with patch.object(
@@ -321,6 +370,7 @@ def test_fetch_pull_request_parses_gh_output() -> None:
     assert pr.assignees == ("Jared-Godar",)
     assert pr.milestone == "M5"
     assert pr.labels == ("type: modernization",)
+    assert pr.state == "OPEN"
 
 
 def test_fetch_pull_request_raises_on_gh_failure() -> None:
@@ -464,3 +514,132 @@ def test_fetch_project_items_raises_metadata_validation_error_on_failure() -> No
         pytest.raises(vpm.MetadataValidationError, match="insufficient scope"),
     ):
         vpm.fetch_project_items("Jared-Godar", 5)
+
+
+# --- fetch_issue_closure_state (issue #158) -----------------------------------------
+
+
+def _timeline_pages(events: list[dict[str, object]]) -> str:
+    """Build a fake `gh api ... --paginate --slurp` JSON payload of one timeline page.
+
+    Args:
+        events: The timeline event objects to include on that single page.
+
+    Returns:
+        JSON text matching gh's --paginate --slurp output shape: an array of pages,
+        each page itself an array of event objects.
+    """
+
+    import json
+
+    return json.dumps([events])
+
+
+def test_fetch_issue_closure_state_returns_not_closed_for_an_open_issue() -> None:
+    """An open issue is reported as not closed, with no timeline lookup performed.
+
+    Only one gh invocation (the state check) should happen; fetching the
+    timeline for an issue that isn't even closed would be wasted work.
+    """
+
+    # gh reports state "OPEN" for an issue that has never been closed.
+    with patch.object(
+        subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess([], 0, stdout='{"state": "OPEN"}', stderr=""),
+    ) as mock_run:
+        state = vpm.fetch_issue_closure_state(38, repo=None)
+    assert state == vpm.IssueClosureState(38, is_closed=False, closed_via_commit=False)
+    assert mock_run.call_count == 1
+
+
+def test_fetch_issue_closure_state_detects_a_merge_linked_closure() -> None:
+    """A closed timeline event carrying a commit_id is recognized as a merge-linked closure."""
+
+    state_response = subprocess.CompletedProcess([], 0, stdout='{"state": "CLOSED"}', stderr="")
+    timeline_response = subprocess.CompletedProcess(
+        [], 0, stdout=_timeline_pages([{"event": "closed", "commit_id": "abc123"}]), stderr=""
+    )
+    # First gh call checks state; second fetches the timeline once state is CLOSED.
+    with patch.object(subprocess, "run", side_effect=[state_response, timeline_response]):
+        state = vpm.fetch_issue_closure_state(38, repo=None)
+    assert state == vpm.IssueClosureState(38, is_closed=True, closed_via_commit=True)
+
+
+def test_fetch_issue_closure_state_detects_a_non_merge_closure() -> None:
+    """A closed timeline event with commit_id null is recognized as a direct, manual closure.
+
+    Mirrors the real, live evidence behind issue #158: issue #154's timeline
+    showed exactly this shape (a closed event with no commit_id) while its
+    fixing PR #155 was still open.
+    """
+
+    state_response = subprocess.CompletedProcess([], 0, stdout='{"state": "CLOSED"}', stderr="")
+    timeline_response = subprocess.CompletedProcess(
+        [], 0, stdout=_timeline_pages([{"event": "closed", "commit_id": None}]), stderr=""
+    )
+    # First gh call checks state; second fetches the timeline once state is CLOSED.
+    with patch.object(subprocess, "run", side_effect=[state_response, timeline_response]):
+        state = vpm.fetch_issue_closure_state(154, repo=None)
+    assert state == vpm.IssueClosureState(154, is_closed=True, closed_via_commit=False)
+
+
+def test_fetch_issue_closure_state_uses_the_most_recent_closed_event() -> None:
+    """When an issue was closed, reopened, and closed again, only the latest closure counts.
+
+    The first closure here is merge-linked but the issue was later reopened and
+    then closed a second time manually; the manual (most recent) closure must be
+    the one that determines closed_via_commit, not the earlier merge-linked one.
+    """
+
+    state_response = subprocess.CompletedProcess([], 0, stdout='{"state": "CLOSED"}', stderr="")
+    timeline_response = subprocess.CompletedProcess(
+        [],
+        0,
+        stdout=_timeline_pages(
+            [
+                {"event": "closed", "commit_id": "abc123"},
+                {"event": "reopened"},
+                {"event": "closed", "commit_id": None},
+            ]
+        ),
+        stderr="",
+    )
+    # Same two-call sequence as the other fetch_issue_closure_state tests: state
+    # check first, then the timeline once state is confirmed CLOSED.
+    with patch.object(subprocess, "run", side_effect=[state_response, timeline_response]):
+        state = vpm.fetch_issue_closure_state(38, repo=None)
+    assert state.closed_via_commit is False
+
+
+def test_fetch_issue_closure_state_passes_explicit_repo_directly_in_the_endpoint() -> None:
+    """With an explicit repo, the timeline endpoint embeds it directly (gh api has no --repo flag)."""
+
+    state_response = subprocess.CompletedProcess([], 0, stdout='{"state": "CLOSED"}', stderr="")
+    timeline_response = subprocess.CompletedProcess(
+        [], 0, stdout=_timeline_pages([{"event": "closed", "commit_id": "abc123"}]), stderr=""
+    )
+    # Capture the actual gh invocations to inspect the timeline call's endpoint below.
+    with patch.object(
+        subprocess, "run", side_effect=[state_response, timeline_response]
+    ) as mock_run:
+        vpm.fetch_issue_closure_state(38, repo="Jared-Godar/ecg_anomaly_detection")
+    timeline_call_args = mock_run.call_args_list[1].args[0]
+    assert "repos/Jared-Godar/ecg_anomaly_detection/issues/38/timeline" in timeline_call_args
+    assert "--paginate" in timeline_call_args
+    assert "--slurp" in timeline_call_args
+
+
+def test_fetch_issue_closure_state_raises_on_gh_failure() -> None:
+    """A failing `gh issue view` state check is translated into MetadataValidationError."""
+
+    # gh exits non-zero when the issue number doesn't exist.
+    with (
+        patch.object(
+            subprocess,
+            "run",
+            side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="issue not found"),
+        ),
+        pytest.raises(vpm.MetadataValidationError, match="issue not found"),
+    ):
+        vpm.fetch_issue_closure_state(999999, repo=None)
