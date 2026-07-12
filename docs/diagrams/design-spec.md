@@ -6,11 +6,15 @@ workflow). It exists so that any contributor or agent session can produce or rev
 the diagrams without access to the original visual references, and so the visual
 system stays consistent across all four assets.
 
-**Diagram 3 (Governance Status Lifecycle) is the maintainer-approved reference
-implementation.** It was built, iterated, and signed off on 2026-07-11 through
-several corrected rounds (see "History" at the end of this document for what was
-tried and rejected, and why). Diagrams 1, 2, and 4 must follow its pattern exactly
-unless a specific reason requires deviating -- state the reason if so.
+**Diagrams 2 (Local Flow and Artifact Zones) and 3 (Governance Status Lifecycle)
+are the maintainer-approved reference implementations** (both signed off
+2026-07-11): diagram 3 for the card/connector/title visual system, diagram 2 for
+the legend/caption/compose architecture, and diagram 3 again for retrofitting
+that architecture onto an already-approved layout without disturbing it. They
+were built through several corrected rounds each (see "History" at the end of
+this document for what was tried and rejected, and why). Diagrams 1 and 4 must
+follow their pattern exactly unless a specific reason requires deviating --
+state the reason if so.
 
 ## Positioning constraints (non-negotiable)
 
@@ -169,6 +173,53 @@ spend effort trying to fake a real blur filter in SVG for this.
   maintainer after an early render clipped card borders right at the canvas
   edge.
 
+## Legend and caption (required, durable standard)
+
+Finalized 2026-07-11 with the maintainer's approval of diagrams 2 and 3; every
+diagram carries both of these, rendered as part of the image itself.
+
+**Legend.** Every color or line-style distinction used in a diagram exists for a
+reason, and that reason must be stated explicitly in a legend -- not implied.
+The legend is a single HTML `<TABLE>` node in its **own standalone `.dot` file**
+(`<name>-legend.dot`), never a node inside the main graph: sharing the main
+graph's rank system makes the whole rank band (and the `ranksep` gaps around it)
+grow to the legend's height, distorting the flow's approved spacing. Structure
+(see `local-flow-artifact-zones-legend.dot` and
+`governance-status-lifecycle-legend.dot`): bordered `#0A1B33` panel on
+`#4A6584`, bold 11pt white "Legend" header, 9pt Title Case entries, 22x12 color
+swatch cells, arrow-glyph cells for connector styles. Where a swatch's fill is
+too dark to read against the panel (`#0A1B33`, `#122238`), give the swatch a
+1px border in the card style's stroke color, as diagram 3's legend does.
+
+**Caption.** A plain-language figure caption in **non-technical language**,
+separate from the legend: white box (`BGCOLOR="#FFFFFF"`, `#8A8F98` border),
+black 11pt sans-serif text, bold lead-in phrase naming the diagram,
+left-justified lines, sized to its own content rather than spanning the image
+width (maintainer, verbatim: "I am okay with the white inset box over the
+previous clarification for it spanning the entire image"). Two attachment
+variants, both approved:
+
+- **Baked-in node** (diagram 2): a `shape=none` HTML-table node inside the main
+  graph, positioned by `style=invis` edges from the last rank. Use when this
+  does not disturb the layout or canvas.
+- **Separate composited graph** (diagram 3, `<name>-caption.dot`): required
+  when the caption-as-node damages the approved layout -- hanging it off a
+  right-heavy bottom rank widened diagram 3's canvas by ~126pt, and adding more
+  invisible positioning edges fed the crossing-minimization pass, which
+  **mirrored the entire graph**. When that happens, keep the main `.dot`
+  untouched and splice the caption in with the compositor.
+
+**Placement is a per-diagram visual-harmony judgment, not canon** (maintainer,
+verbatim: "Where exactly the legend goes is not canonical, but depends on the
+overall visual layout on a per workflow basis to have the best overall
+harmony"). The constants: never extend the canvas into a mostly-empty new
+column ("dont orphan the legend and make it unnecessarily wide - use your space
+efficiently"); prefer the diagram's own existing empty space; center the piece
+in a band bounded by real neighboring content edges; and **measure those bounds
+from actual SVG coordinates -- never eyeball them**. The approved placements and
+their exact inset values are recorded in each diagram's section below so every
+render is reproducible.
+
 ## Toolchain
 
 **Graphviz (`dot`), not D2.** D2 with the bundled `elk` layout engine was the
@@ -193,13 +244,32 @@ requirements, confirmed by direct, reproducible failures, not a style preference
 - Graphviz's `{ rank=same; ... }` grouping is well-documented, predictable, and
   solved the multi-row wrap correctly on the first real attempt.
 
-**Rendering pipeline (three steps, Fish syntax):**
+**Rendering pipeline (Fish syntax):** render each graph with `dot`, splice the
+legend (and, for the separate-caption variant, the caption) into the main SVG
+with `compose_inset.py`, then pad and convert. The compose step's inset values
+are per-diagram measured constants recorded in each diagram's section below.
 
 ```fish
-dot -Tsvg docs/diagrams/src/<name>.dot -o docs/diagrams/exports/<name>.svg
+dot -Tsvg docs/diagrams/src/<name>.dot -o /tmp/<name>.svg
+dot -Tsvg docs/diagrams/src/<name>-legend.dot -o /tmp/<name>-legend.svg
+python3 docs/diagrams/compose_inset.py /tmp/<name>.svg /tmp/<name>-legend.svg \
+    docs/diagrams/exports/<name>.svg --<left|right>-inset <pt> --top-inset <pt>
 python3 docs/diagrams/pad_svg.py docs/diagrams/exports/<name>.svg
 rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/<name>.png docs/diagrams/exports/<name>.svg
 ```
+
+- **`compose_inset.py` (`docs/diagrams/compose_inset.py`)** splices a
+  standalone-rendered graph (legend, caption box) into a base SVG as a plain
+  transformed `<g>` group in the base's own coordinate system. It exists
+  because the two obvious alternatives both fail, confirmed empirically:
+  nesting `<svg>` viewports trips an rsvg-convert bug that visibly clips the
+  inset's text in the combined render even though the inset renders perfectly
+  alone, and putting the inset in the main graph's rank system distorts the
+  approved layout (see the Legend/caption section above). Insets are placed by
+  measured offsets from the base background polygon's edges; an inset placed
+  beyond an edge (diagram 3's caption, below the graph) expands the canvas,
+  background, and viewBox just enough to cover it. Base and output may be the
+  same path, so several insets can be stacked in sequence.
 
 - **`pad_svg.py` (`docs/diagrams/pad_svg.py`) is a required step, not optional
   polish.** Graphviz's own `margin` graph attribute stops reliably expanding the
@@ -222,9 +292,11 @@ rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/<name>.png doc
   `label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#8FE3F0" POINT-SIZE="11">Label Text</FONT></TD></TR></TABLE>>`
   -- the matching-background table cell visually "erases" the connector line
   where it would otherwise run straight through the text.
-- Sources live in `docs/diagrams/src/*.dot`, the padding script at
-  `docs/diagrams/pad_svg.py`, icons (where used) in `docs/diagrams/icons/`,
-  rendered assets in `docs/diagrams/exports/`.
+- Sources live in `docs/diagrams/src/*.dot` (main graph plus its `-legend.dot`
+  and, where used, `-caption.dot` companions), the compose and padding scripts
+  at `docs/diagrams/compose_inset.py` and `docs/diagrams/pad_svg.py`, icons
+  (where used) in `docs/diagrams/icons/`, rendered assets in
+  `docs/diagrams/exports/`.
 - Rendered assets are deliberately **not** placed in `reports/figures/`: that
   directory is the gitignored output zone for pipeline-generated figures, and
   diagram exports are documentation assets, not run outputs.
@@ -257,9 +329,14 @@ rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/<name>.png doc
   and validation-only evaluation, which produces an auditable run manifest. A
   note states the indexed test partition remains unopened."
 
-## Diagram 2 — Local Flow and Artifact Zones
+## Diagram 2 — Local Flow and Artifact Zones (approved 2026-07-11)
 
 - **Host**: `docs/pipeline-design.md`, `## Target local flow` section.
+- **Files**: `src/local-flow-artifact-zones.dot` (flow, with baked-in caption
+  node) + `src/local-flow-artifact-zones-legend.dot`.
+- **Approved compose placement**: legend inset upper-right, vertically centered
+  between the subtitle's bottom edge and the top of the `data/processed/` block
+  (maintainer-directed): `--right-inset 4 --top-inset 174.27`.
 - **Semantics** (match the ASCII): `PhysioNet MIT-BIH v1.0.0` →
   `acquire + verify checksums` → `data/raw/ (immutable, ignored)`;
   → `validate records + annotations` → side output `validation report`;
@@ -281,9 +358,19 @@ rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/<name>.png doc
   a run manifest, machine-readable metrics, and generated figures. All zones are
   gitignored."
 
-## Diagram 3 — Governance Status Lifecycle (reference implementation, approved)
+## Diagram 3 — Governance Status Lifecycle (reference implementation, approved; legend/caption retrofit approved 2026-07-11)
 
 - **Host**: `docs/governance/github-project.md`, `## Status lifecycle` section.
+- **Files**: `src/governance-status-lifecycle.dot` (graph only -- kept exactly
+  as originally approved, no caption node; see the Legend/caption section for
+  why) + `src/governance-status-lifecycle-legend.dot` +
+  `src/governance-status-lifecycle-caption.dot`.
+- **Approved compose placement** (two splices, caption first):
+  caption centered under the heading, one ranksep below the `Merged`/`Closed`
+  row: `--left-inset 206.98 --top-inset 417.9`; legend centered in the
+  rectangle bounded by the `Backlog`/`Ready` row's bottom, the caption's top,
+  the padded image's left edge, and the `Blocked` box's left edge
+  (maintainer-directed): `--left-inset 64.63 --top-inset 203.6`.
 - **Semantics**: linear progression
   `Backlog -> Ready -> In Progress -> Validation -> Review -> Merged -> Closed`,
   with `Blocked` branching off `In Progress` and returning (bidirectional dashed
@@ -350,10 +437,11 @@ rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/<name>.png doc
 
 Drafts are iterated on this branch with rendered previews shared for maintainer
 review. **No pull request is opened until the maintainer has explicitly approved
-the image quality of the complete four-diagram set.** Diagram 3 has that
-approval as of 2026-07-11; diagrams 1, 2, and 4 do not yet. Doc integration
-(swapping the ASCII blocks for image references with captions and alt text)
-happens in this same branch once full-set approval is given.
+the image quality of the complete four-diagram set.** Diagrams 2 and 3
+(including diagram 3's legend/caption retrofit) have that approval as of
+2026-07-11; diagrams 1 and 4 do not yet. Doc integration (swapping the ASCII
+blocks for image references with captions and alt text) happens in this same
+branch once full-set approval is given.
 
 ## History: what was tried and rejected on diagram 3, and why
 
@@ -382,3 +470,23 @@ Kept here so a future session doesn't re-attempt any of these:
    to HTML `<TABLE>` labels for line-breathing-room. Replaced with the
    deterministic `pad_svg.py` post-process, which is now the permanent,
    required step regardless of what else changes.
+
+And on the legend/caption compose architecture (diagrams 2 and 3, 2026-07-11):
+
+1. Legend as a node in the main graph's rank system -- an entire rank band and
+   its `ranksep` gaps grew to the legend's height, distorting the flow's
+   approved vertical spacing. Split into a standalone legend graph.
+2. Nested-`<svg>`-in-`<svg>` composition of the two renders -- rsvg-convert
+    visibly clips the inset's text in the combined render even though the
+    legend renders perfectly on its own. Replaced by splicing the inset's root
+    `<g>` as a plain transformed group (`compose_inset.py`).
+3. Side-by-side composition into a new full-height column -- rejected by the
+    maintainer ("dont orphan the legend and make it unnecessarily wide - use
+    your space efficiently"): the legend filled ~20% of a column that cost
+    ~30% extra canvas width. Insets go inside the diagram's own empty space.
+4. Diagram 3's caption as an in-graph node -- invisible edges from
+    `Merged`/`Closed` hung it bottom-right and widened the canvas ~126pt;
+    adding more invisible edges (from `Backlog`/`Blocked`) to recenter it fed
+    the crossing-minimization pass and **mirrored the entire approved
+    layout**. The graph `.dot` was reverted to its approved form and the
+    caption became a separate composited graph.
