@@ -41,7 +41,7 @@ class HeldOutExecutionConfig:
     requires_recorded_approval: bool
 
 
-def load_held_out_config(path: Path) -> HeldOutExecutionConfig:
+def load_held_out_config(path: Path, *, allow_execution: bool = False) -> HeldOutExecutionConfig:
     """Load and validate the held-out execution config without accessing data or model artifacts."""
     # Translate a missing, unreadable, or malformed-TOML file into HeldOutConfigError.
     try:
@@ -77,12 +77,9 @@ def load_held_out_config(path: Path) -> HeldOutExecutionConfig:
     # unsupported gate.
     if config.partition != SUPPORTED_PARTITION:
         raise HeldOutConfigError(f"execution.partition must be {SUPPORTED_PARTITION!r}")
-    # This is the core governance invariant this module exists to enforce: no config
-    # may enable held-out execution. It's a deliberately deferred, separately governed
-    # milestone -- this loader fails closed on any config that tries to flip that
-    # switch, rather than merely warning, since this module implements no execution
-    # command to actually run even if this flag were somehow set.
-    if config.execution_enabled:
+    # Routine callers retain the disabled-by-default boundary; the separately reviewed
+    # evaluator is the sole caller allowed to load an explicitly enabled copy.
+    if config.execution_enabled and not allow_execution:
         raise HeldOutConfigError("execution.execution_enabled must be false")
     # Symmetric to the check above: any future execution must require a recorded
     # approval (see benchmark_approval.py) rather than running unconditionally.

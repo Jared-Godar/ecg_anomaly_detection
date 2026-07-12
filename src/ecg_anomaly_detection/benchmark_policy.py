@@ -104,7 +104,7 @@ class BenchmarkPolicy:
     required_archival_records: frozenset[str]
 
 
-def load_benchmark_policy(path: Path) -> BenchmarkPolicy:
+def load_benchmark_policy(path: Path, *, allow_test_evaluation: bool = False) -> BenchmarkPolicy:
     """Load and validate policy metadata without accessing data or model artifacts."""
     # Translate a missing, unreadable, or malformed-TOML file into BenchmarkPolicyError.
     try:
@@ -148,11 +148,9 @@ def load_benchmark_policy(path: Path) -> BenchmarkPolicy:
     # naming any other value would be describing a different, unsupported gate.
     if policy.protected_partition != "test":
         raise BenchmarkPolicyError("benchmark.protected_partition must be 'test'")
-    # This is the core governance invariant: no policy may enable test-partition
-    # evaluation. Benchmark execution is a deliberately deferred, separately governed
-    # milestone (see docs/benchmark-governance.md) -- this loader fails closed on any
-    # policy that tries to flip that switch, rather than merely warning.
-    if policy.test_evaluation_enabled:
+    # Routine callers retain the disabled-by-default boundary; the separately reviewed
+    # evaluator is the sole caller allowed to load an explicitly enabled policy copy.
+    if policy.test_evaluation_enabled and not allow_test_evaluation:
         raise BenchmarkPolicyError("benchmark.test_evaluation_enabled must be false")
     # Symmetric to the check above: a future benchmark run must require deliberate,
     # explicit opt-in rather than running automatically once other conditions are met.

@@ -50,7 +50,7 @@ The current `evaluate_validation_from_index(...)` path remains validation-only. 
 `SUPPORTED_PARTITION`, reusing the validation command for test data, or manually opening test shards
 is not an approved benchmark procedure.
 
-### Implemented: approval and lineage verification (steps 1-2)
+### Implemented: approval and lineage verification (steps 1-2) and held-out execution (steps 3-5)
 
 `ecg-data record-benchmark-approval` implements steps 1 and 2 above. Given a human-authored
 approval-input record, a validated `BenchmarkPolicy`, and an existing `RunManifest`, it verifies
@@ -75,30 +75,69 @@ existing completion message, and a `[1/1] record-benchmark-approval: complete in
 [`run-pipeline`'s progress output](pipeline-orchestration.md#progress-output).
 
 Steps 3-5 — a separately reviewed execution command, the single run against the protected
-partition, and archival before publication — remain future, gated work tracked by a dependent
-issue and are not implemented by this command.
+partition, and archival before publication — are implemented by `ecg-data evaluate-held-out`
+(see below).
 
-### Scaffolding for a future execution command (not steps 3-5)
+### Implemented: held-out execution, archival, and disclosure (steps 3-5)
 
-Two additional, inert pieces of scaffolding exist so that a future, separately reviewed execution
-command has a place to plug into. Neither implements execution, opens the `test` partition, or
-changes `evaluate_validation_from_index(...)`'s validation-only behavior:
+`ecg-data evaluate-held-out` implements steps 3-5 above. It loads a verified `ApprovalRecord`
+(written by `record-benchmark-approval`), validates the `HeldOutExecutionConfig` and
+`BenchmarkPolicy`, confirms the approval record's `candidate_run_id` matches the model artifact's
+run path, opens only the `test`-partition shards from the dataset index, scores the frozen model
+exactly once, and writes two artifacts atomically:
+
+- `artifacts/runs/<run-id>/held-out-evaluation/held-out-metrics.json` — confusion matrix,
+  accuracy, per-class precision/recall/F1, and complete artifact lineage (index, shard, and model
+  digests bound to the approval record reference).
+- `artifacts/runs/<run-id>/held-out-evaluation/held-out-disclosure.json` — required disclosure
+  evidence per the policy's `required_disclosures`, `required_limitations`, `prohibited_claims`,
+  and `required_archival_records` fields.
+
+It fails closed at every step: a config without `execution_enabled = true`, a policy without
+`test_evaluation_enabled = true`, a missing or mismatched approval record, any digest mismatch,
+or any lineage failure aborts before any test shard is opened. If the disclosure write fails after
+the metrics file is written, the metrics file is removed rather than leaving an unapproved result
+on disk.
+
+The CI workflow (`.github/workflows/held-out-evaluation.yml`) triggers only on `workflow_dispatch`,
+never on `push` or `pull_request`, satisfying `scripts/check_held_out_trigger_safety.py`.
+
+```fish
+uv run ecg-data evaluate-held-out \
+  --repository-root . \
+  --dataset-index artifacts/datasets/mitdb/1.0.0/dataset-index.json \
+  --model artifacts/runs/<run-id>/training/model.json \
+  --training-metadata artifacts/runs/<run-id>/training/training-metadata.json \
+  --held-out-config configs/evaluation-heldout.toml \
+  --policy configs/benchmark-policy-v1.toml \
+  --approval-record artifacts/runs/<run-id>/benchmark_approval.json \
+  --output artifacts/runs/<run-id>/held-out-evaluation/held-out-metrics.json \
+  --disclosure artifacts/runs/<run-id>/held-out-evaluation/held-out-disclosure.json
+```
+
+`evaluate-held-out` prints a `[1/1] evaluate-held-out: starting` banner, its completion message,
+and a `[1/1] evaluate-held-out: complete in MM:SS` banner (or `failed after MM:SS`) to stdout.
+
+### Disabled-by-default execution controls
+
+Two additional controls support `ecg-data evaluate-held-out`. Neither opens the `test` partition
+independently nor changes
+`evaluate_validation_from_index(...)`'s validation-only behavior:
 
 - `configs/evaluation-heldout.toml`, loaded by `load_held_out_config(...)` in
   `held_out_config.py`, is a disabled-by-default configuration schema for a future held-out
-  execution. It fails closed the same way `BenchmarkPolicy` does: the loader rejects any config
-  where `execution.execution_enabled` is not `false` or `execution.requires_recorded_approval` is
-  not `true`.
+  execution. Routine loading rejects `execution.execution_enabled = true`; only the separately
+  reviewed execution command opts into loading an enabled copy, and it requires
+  `execution.requires_recorded_approval = true`.
 - `scripts/check_held_out_trigger_safety.py` is a read-only governance-as-code check, run as a
   job in `.github/workflows/repository-hygiene.yml`, that parses every workflow file and fails if
   any workflow whose name matches a held-out/benchmark-execution naming convention could trigger
   on a routine `push` or `pull_request` event instead of only `workflow_dispatch` and/or a `push`
-  restricted to `release-*` tags. No such workflow exists yet; this guards against one being added
-  later with an unsafe trigger.
+  restricted to `release-*` tags. The manual-only held-out workflow is covered by this guard.
 
-This scaffolding is a dependency-free precondition for steps 3-5, not a substitute for them. The
-execution command itself remains future, gated work tracked by a dependent issue and requires a
-named benchmark owner's real approval before it can proceed.
+These controls are preconditions for steps 3-5, not authorization by themselves. Execution still
+requires an explicitly enabled reviewed configuration and policy copy plus a named benchmark
+owner's recorded approval.
 
 ## Reruns
 
