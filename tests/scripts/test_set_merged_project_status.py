@@ -239,12 +239,21 @@ def test_set_status_merged_invokes_item_edit_with_expected_args() -> None:
         subprocess, "run", side_effect=[_completed(""), _completed(read_back)]
     ) as mock_run:
         smps.set_status_merged("PVTI_target", "PVT_project", field, "Jared-Godar", 5)
-    called_args = mock_run.call_args_list[0].args[0]
-    assert called_args[:3] == ["gh", "project", "item-edit"]
-    assert "--id" in called_args and "PVTI_target" in called_args
-    assert "--project-id" in called_args and "PVT_project" in called_args
-    assert "--field-id" in called_args and "PVTSSF_status" in called_args
-    assert "--single-select-option-id" in called_args and "merged" in called_args
+    # The exact argument list pins each flag to its own value; membership checks
+    # alone would let the two opaque node ids swap across --id and --project-id.
+    assert mock_run.call_args_list[0].args[0] == [
+        "gh",
+        "project",
+        "item-edit",
+        "--id",
+        "PVTI_target",
+        "--project-id",
+        "PVT_project",
+        "--field-id",
+        "PVTSSF_status",
+        "--single-select-option-id",
+        "merged",
+    ]
     assert mock_run.call_args_list[1].args[0][:3] == ["gh", "project", "item-list"]
 
 
@@ -279,23 +288,70 @@ def test_set_status_merged_retries_when_read_back_is_not_merged() -> None:
     assert mock_run.call_count == 4
 
 
+def test_set_status_merged_retries_when_clean_mutation_reads_back_wrong() -> None:
+    """A mutation that exits cleanly but reads back wrong still earns the retry.
+
+    This is the Closed-beats-Merged race itself: item-edit succeeds, a built-in
+    workflow overwrites the value, and only the read-back can reveal it. The
+    retry must not be conditional on gh's 'no changes to make' error.
+    """
+
+    closed = _item_list_payload([{"id": "PVTI_target", "status": "Closed"}])
+    merged = _item_list_payload([{"id": "PVTI_target", "status": "Merged"}])
+    field = smps.StatusField(field_id="PVTSSF_status", merged_option_id="merged")
+    # Both mutations exit zero; only the second read-back shows Merged.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[_completed(""), _completed(closed), _completed(""), _completed(merged)],
+    ) as mock_run:
+        smps.set_status_merged("PVTI_target", "PVT_project", field, "Jared-Godar", 5)
+    assert mock_run.call_count == 4
+    # The third call must be the re-run mutation itself, not another read.
+    assert mock_run.call_args_list[2].args[0][:3] == ["gh", "project", "item-edit"]
+
+
 def test_set_status_merged_fails_after_bounded_retry() -> None:
-    """Two unverified attempts fail clearly instead of claiming success."""
+    """Two unverified attempts fail clearly, reporting the exact observed value."""
 
     no_change = subprocess.CalledProcessError(1, ["gh"], stderr="error: no changes to make")
     closed = _item_list_payload([{"id": "PVTI_target", "status": "Closed"}])
     field = smps.StatusField(field_id="PVTSSF_status", merged_option_id="merged")
-    # Both mutation/read pairs leave the value Closed, exhausting the fixed bound.
+    # Both mutation/read pairs leave the value Closed, exhausting the fixed bound;
+    # the message must name the observed value so operators see what actually won.
     with (
         patch.object(
             subprocess,
             "run",
             side_effect=[no_change, _completed(closed), no_change, _completed(closed)],
         ) as mock_run,
-        pytest.raises(smps.ProjectStatusSyncError, match="after 2 attempts"),
+        pytest.raises(smps.ProjectStatusSyncError, match="read back as 'Closed' after 2 attempts"),
     ):
         smps.set_status_merged("PVTI_target", "PVT_project", field, "Jared-Godar", 5)
     assert mock_run.call_count == 4
+
+
+def test_set_status_merged_reports_unset_when_status_never_appears() -> None:
+    """A Status that never reads back at all is reported as 'unset', not None."""
+
+    no_status = _item_list_payload([{"id": "PVTI_target"}])
+    field = smps.StatusField(field_id="PVTSSF_status", merged_option_id="merged")
+    # Both mutations exit zero, but the item's Status stays absent throughout, so
+    # the failure message must translate the None read-back into 'unset'.
+    with (
+        patch.object(
+            subprocess,
+            "run",
+            side_effect=[
+                _completed(""),
+                _completed(no_status),
+                _completed(""),
+                _completed(no_status),
+            ],
+        ),
+        pytest.raises(smps.ProjectStatusSyncError, match="read back as 'unset' after 2 attempts"),
+    ):
+        smps.set_status_merged("PVTI_target", "PVT_project", field, "Jared-Godar", 5)
 
 
 def test_set_status_merged_propagates_other_gh_errors_without_read_back() -> None:

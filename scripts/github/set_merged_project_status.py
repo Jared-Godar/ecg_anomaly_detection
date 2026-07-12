@@ -13,7 +13,8 @@ Run only from the `project-status-sync` workflow, after
 `github.event.pull_request.merged == true` on a `pull_request: closed`
 event. Idempotent: every mutation is verified by a fresh Project item read.
 GitHub CLI's ``no changes to make`` error is inconclusive until that read-back
-confirms the requested value; an absent value receives one bounded retry.
+confirms the requested value; a read-back that is not yet ``Merged`` -- whether
+absent or a concretely different value -- earns one bounded retry.
 """
 
 from __future__ import annotations
@@ -255,8 +256,9 @@ def set_status_merged(
         # The fresh item value, not gh's exit status or message, proves success.
         if observed_status == "Merged":
             return
-        # One absent read-back earns one retry; the second fails with the exact
-        # value so operators never receive a false success message.
+        # Any non-Merged read-back (absent or a different value) earns one retry;
+        # the second fails with the exact observed value so operators never
+        # receive a false success message.
         if attempt == 1:
             observed = observed_status if observed_status is not None else "unset"
             raise ProjectStatusSyncError(
