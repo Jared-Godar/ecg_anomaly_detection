@@ -5,13 +5,25 @@
 This is read-only: it never modifies labels, issues, or pull requests, and never
 guesses a corrected label. Remediation is a separate, human-directed decision --
 see docs/governance/label-taxonomy.md.
+
+Quota stewardship (issue #175, extending #173): the `gh issue list` / `gh pr
+list` reads this script performs are GraphQL-backed, so every run draws on the
+shared 5000-points/hour pool. The run therefore preflights that pool and prints
+a before/after/consumed report, both via the shared access layer
+(`scripts/github/github_api.py`). The preflight threshold defaults to 0 --
+observe-only -- because this is low-frequency manual/scheduled hygiene whose
+spend is small; a manual run must never be blocked by a merely busy pool
+(issue #175's explicit non-goal).
+
+Exit codes: 0 no drift, 1 drift detected, 2 a genuine failure (manifest,
+authentication, gh CLI), 3 a GraphQL quota condition -- transient shared-pool
+infrastructure, never label drift itself.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -25,9 +37,34 @@ ROOT = Path(__file__).resolve().parents[1]
 # script cross-checks live issue/PR labels against exactly that source of truth.
 DEFAULT_MANIFEST = ROOT / ".github" / "labels.json"
 
+# The shared GitHub access layer lives in scripts/github/ (operational tooling,
+# not an installed package), one directory below this script, so it is imported
+# by putting that directory on sys.path first -- the same file-system-adjacency
+# convention the scripts/github/ governance scripts themselves use. The guard
+# keeps the insertion idempotent when several of these scripts are loaded into
+# one process (e.g. by the test suite).
+_GITHUB_SCRIPTS_DIR = str(ROOT / "scripts" / "github")
+# Only insert when absent, so repeated loads never stack duplicate entries.
+if _GITHUB_SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _GITHUB_SCRIPTS_DIR)
 
-class LabelDriftError(RuntimeError):
-    """Raised when the label manifest or GitHub data cannot be read."""
+import github_api  # noqa: E402  (needs the sys.path insertion above)
+
+# This script's own preflight threshold: observe-only by default (0 disables
+# the stop but keeps the before/after report). Deliberately not the shared
+# github_api.DEFAULT_MINIMUM_GRAPHQL_QUOTA: this is low-frequency manual or
+# scheduled hygiene whose two bounded listings cost a handful of points, and
+# issue #175 explicitly rules out defaults that would block a manual hygiene
+# run on a merely busy pool.
+_MIN_GRAPHQL_QUOTA_DEFAULT: int = 0
+
+
+class LabelDriftError(github_api.GitHubApiError):
+    """Raised when the label manifest or GitHub data cannot be read.
+
+    Subclasses the shared GitHubApiError so main()'s single except clause
+    catches script-level defects and access-layer failures uniformly.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,39 +115,13 @@ def find_drifted_items(
     return tuple(drifted)
 
 
-def _run_gh(args: list[str]) -> str:
-    """Run one fixed GitHub CLI command and return its captured output.
-
-    Args:
-        args: The `gh` subcommand and its arguments (without the leading "gh" itself).
-
-    Returns:
-        The command's captured stdout.
-    """
-
-    # Collapse "gh not installed" (FileNotFoundError) and "gh exited non-zero"
-    # (CalledProcessError, since check=True) into one LabelDriftError, so main()'s
-    # error handling only needs to catch this module's own exception type.
-    try:
-        # command is a fixed literal ("gh", *args) built from this module's own
-        # subcommand arguments, not runtime/user-constructed input.
-        result = subprocess.run(  # noqa: S603
-            ["gh", *args],  # noqa: S607
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except FileNotFoundError as error:
-        raise LabelDriftError("gh CLI is not installed or not on PATH") from error
-    except subprocess.CalledProcessError as error:
-        raise LabelDriftError(
-            f"gh {' '.join(args)} failed: {error.stderr.strip() or error.stdout.strip()}"
-        ) from error
-    return result.stdout
-
-
 def fetch_items(repo: str | None, *, include_closed: bool) -> list[dict[str, Any]]:
-    """Fetch issues and pull requests with their labels via the gh CLI."""
+    """Fetch issues and pull requests with their labels via the gh CLI.
+
+    The subprocess plumbing (retry classification, error translation) lives in
+    the shared access layer's run_gh (issue #175 removed this script's private
+    copy); failures surface as github_api.GitHubApiError for main() to map.
+    """
     state = "all" if include_closed else "open"
     items: list[dict[str, Any]] = []
     # gh uses separate subcommands for issues and pull requests; query both so drift
@@ -130,7 +141,7 @@ def fetch_items(repo: str | None, *, include_closed: bool) -> list[dict[str, Any
         # directory's Git remote, matching gh's own default behavior.
         if repo:
             args.extend(["--repo", repo])
-        payload = json.loads(_run_gh(args))
+        payload = json.loads(github_api.run_gh(args))
         # Flatten gh's nested label objects into plain name strings, and tag each row
         # with its kind, before appending to the combined items list.
         for row in payload:
@@ -152,7 +163,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         argv: Optional command-line arguments; defaults to the process arguments.
 
     Returns:
-        Parsed arguments: manifest path, optional target repo, and include-closed flag.
+        Parsed arguments: manifest path, optional target repo, include-closed
+        flag, and the minimum-remaining GraphQL quota threshold.
     """
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -162,6 +174,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--include-closed",
         action="store_true",
         help="Also check closed issues and merged or closed pull requests",
+    )
+    parser.add_argument(
+        "--min-graphql-quota",
+        type=int,
+        default=_MIN_GRAPHQL_QUOTA_DEFAULT,
+        help=(
+            "Minimum remaining GraphQL points required by the preflight check before "
+            "any listing is fetched; 0 or below disables the stop (the "
+            "before/after report is still printed). Default: "
+            f"{_MIN_GRAPHQL_QUOTA_DEFAULT} (observe-only, so manual hygiene "
+            "runs are never blocked)."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -180,15 +204,52 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
 
     args = parse_args(argv)
-    # Every failure mode this script can hit (manifest load, gh CLI) is collapsed
-    # into LabelDriftError by the functions above; catch it once here for uniform
-    # error reporting rather than duplicating handling at each call site.
+
+    # One monitor per run: preflight before the GraphQL-backed listings, report
+    # after -- both reads are REST and free, so accounting can never worsen the
+    # quota. The default threshold of 0 observes without ever blocking.
+    monitor = github_api.QuotaMonitor(minimum_remaining=args.min_graphql_quota)
+
+    # Every failure mode this script can hit (manifest load, gh CLI, quota) is
+    # part of the GitHubApiError hierarchy -- LabelDriftError subclasses it --
+    # so it is caught once here for uniform error reporting, with the two quota
+    # conditions mapped to their own exit code so hygiene output can never
+    # conflate a drained shared pool with label drift or a broken manifest.
     try:
+        # The manifest is local and free; load it before spending any gh call
+        # so a malformed manifest never costs even the free quota reads.
         canonical = load_canonical_label_names(args.manifest)
+        monitor.preflight()
         items = fetch_items(args.repo, include_closed=args.include_closed)
-    except LabelDriftError as error:
+    except (
+        github_api.GraphQLQuotaInsufficientError,
+        github_api.PrimaryRateLimitError,
+    ) as error:
+        # Quota conditions get their own exit code (3) and wording: transient
+        # shared-pool infrastructure, resumable by rerunning after the reset,
+        # never evidence about the repository's labels.
+        print(f"quota: {error}", file=sys.stderr)
+        return 3
+    except github_api.GitHubApiError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
+    finally:
+        # The consumption report prints on success and failure alike -- a
+        # failed run's consumption is exactly the evidence needed when
+        # diagnosing a drained pool. A run that failed before preflight ever
+        # recorded a baseline has nothing to report; otherwise reporting is
+        # best-effort, because a report failure must never mask the run's
+        # real outcome (including a drift finding).
+        if monitor.preflighted:
+            # Best-effort only: see the comment above for why a report failure
+            # is downgraded to a warning instead of changing the exit code.
+            try:
+                print(monitor.report(), file=sys.stderr)
+            except github_api.GitHubApiError as report_error:
+                print(
+                    f"warning: could not report quota consumption: {report_error}",
+                    file=sys.stderr,
+                )
 
     drifted = find_drifted_items(items, canonical)
     # A non-empty drift list means at least one item carries a non-canonical label;

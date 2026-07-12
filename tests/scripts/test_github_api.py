@@ -83,6 +83,24 @@ def test_run_gh_returns_stdout_on_success() -> None:
     with patch.object(subprocess, "run", return_value=_completed('{"ok": true}')) as mock_run:
         assert gha.run_gh(["pr", "view", "155"]) == '{"ok": true}'
     assert mock_run.call_count == 1
+    # With no explicit working directory, run_gh behaves exactly like plain
+    # subprocess.run: cwd is None and gh runs where the caller runs.
+    assert mock_run.call_args.kwargs["cwd"] is None
+
+
+def test_run_gh_passes_an_explicit_cwd_through_to_subprocess() -> None:
+    """A caller-supplied working directory reaches subprocess.run unchanged.
+
+    Callers that omit --repo and rely on gh inferring the repository from a
+    Git checkout (issue #175: sync_github_labels.py pins inference to the
+    repository root) depend on this passthrough being exact.
+    """
+
+    pinned = Path("/some/repository/checkout")
+    # The pinned directory must arrive as subprocess.run's own cwd argument.
+    with patch.object(subprocess, "run", return_value=_completed("ok")) as mock_run:
+        assert gha.run_gh(["label", "list"], cwd=pinned) == "ok"
+    assert mock_run.call_args.kwargs["cwd"] == pinned
 
 
 def test_run_gh_fails_fast_on_primary_rate_limit_without_retrying() -> None:

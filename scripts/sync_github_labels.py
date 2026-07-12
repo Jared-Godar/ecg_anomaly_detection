@@ -1,12 +1,29 @@
 #!/usr/bin/env python3
-"""Create or update the repository labels declared in .github/labels.json."""
+"""Create or update the repository labels declared in .github/labels.json.
+
+Quota stewardship (issue #175, extending #173): the `gh label create --force`
+mutations this script performs are REST, so a sync spends no GraphQL points of
+its own -- but the run still preflights the shared 5000-points/hour GraphQL
+pool and prints a before/after/consumed report via the shared access layer
+(`scripts/github/github_api.py`), so every gh-calling script in the repository
+is accountable in its own logs under one convention. The preflight threshold
+defaults to 0 -- observe-only -- because this is low-frequency manual hygiene;
+a manual run must never be blocked by a merely busy pool (issue #175's
+explicit non-goal). `--dry-run` performs no gh calls at all, including the
+free quota reads.
+
+Exit codes: 0 success, 2 a gh CLI/API failure (a malformed manifest still
+raises ValueError directly, unchanged from before the migration), 3 a GraphQL
+quota condition -- transient shared-pool infrastructure, never a label defect.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
 import re
-import subprocess
+import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -20,12 +37,36 @@ DEFAULT_MANIFEST = ROOT / ".github" / "labels.json"
 # validates the manifest's color field matches that format before it's sent to `gh`.
 COLOR_PATTERN = re.compile(r"[0-9a-fA-F]{6}")
 
+# The shared GitHub access layer lives in scripts/github/ (operational tooling,
+# not an installed package), one directory below this script, so it is imported
+# by putting that directory on sys.path first -- the same file-system-adjacency
+# convention the scripts/github/ governance scripts themselves use. The guard
+# keeps the insertion idempotent when several of these scripts are loaded into
+# one process (e.g. by the test suite).
+_GITHUB_SCRIPTS_DIR = str(ROOT / "scripts" / "github")
+# Only insert when absent, so repeated loads never stack duplicate entries.
+if _GITHUB_SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _GITHUB_SCRIPTS_DIR)
 
-def parse_args() -> argparse.Namespace:
+import github_api  # noqa: E402  (needs the sys.path insertion above)
+
+# This script's own preflight threshold: observe-only by default (0 disables
+# the stop but keeps the before/after report). Deliberately not the shared
+# github_api.DEFAULT_MINIMUM_GRAPHQL_QUOTA: the sync's mutations are REST and
+# spend no GraphQL points, and issue #175 explicitly rules out defaults that
+# would block a manual hygiene run on a merely busy pool.
+_MIN_GRAPHQL_QUOTA_DEFAULT: int = 0
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments for the label-sync entry point.
 
+    Args:
+        argv: Optional command-line arguments; defaults to the process arguments.
+
     Returns:
-        Parsed arguments: manifest path, optional target repo, and dry-run flag.
+        Parsed arguments: manifest path, optional target repo, dry-run flag,
+        and the minimum-remaining GraphQL quota threshold.
     """
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -34,7 +75,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run", action="store_true", help="Print commands without changing labels"
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--min-graphql-quota",
+        type=int,
+        default=_MIN_GRAPHQL_QUOTA_DEFAULT,
+        help=(
+            "Minimum remaining GraphQL points required by the preflight check before "
+            "any label mutation is attempted; 0 or below disables the stop (the "
+            "before/after report is still printed). Default: "
+            f"{_MIN_GRAPHQL_QUOTA_DEFAULT} (observe-only, so manual hygiene "
+            "runs are never blocked)."
+        ),
+    )
+    return parser.parse_args(argv)
 
 
 def load_labels(path: Path) -> list[dict[str, str]]:
@@ -77,42 +130,113 @@ def load_labels(path: Path) -> list[dict[str, str]]:
     return labels
 
 
-def main() -> int:
+def _label_create_args(label: dict[str, str], repo_args: list[str]) -> list[str]:
+    """Build one label's `gh label create --force` argument list (without "gh").
+
+    Args:
+        label: One validated manifest entry (name, color, description).
+        repo_args: Either ["--repo", OWNER/REPO] or [] to let gh infer the repo.
+
+    Returns:
+        The gh subcommand arguments for creating or updating this label.
+    """
+
+    return [
+        "label",
+        "create",
+        label["name"],
+        "--color",
+        label["color"],
+        "--description",
+        label["description"],
+        "--force",
+        *repo_args,
+    ]
+
+
+def main(argv: Sequence[str] | None = None) -> int:
     """Run the command-line entry point and return its process exit status.
 
     Keeping orchestration here makes terminal behavior and error translation straightforward
     to audit.
 
+    Args:
+        argv: Optional command-line arguments; defaults to the process arguments.
+
     Returns:
         The value produced by the documented operation.
     """
 
-    args = parse_args()
+    args = parse_args(argv)
     labels = load_labels(args.manifest)
     repo_args = ["--repo", args.repo] if args.repo else []
 
-    # Create or update (via --force) every manifest label in turn; `gh label create
-    # --force` is idempotent, so re-running this script is always safe.
-    for label in labels:
-        command = [
-            "gh",
-            "label",
-            "create",
-            label["name"],
-            "--color",
-            label["color"],
-            "--description",
-            label["description"],
-            "--force",
-            *repo_args,
-        ]
-        # --dry-run prints the command that would run instead of executing it, so a
-        # reviewer can confirm intended changes before actually syncing labels.
-        if args.dry_run:
-            print(json.dumps(command))
-        else:
-            # command is a fixed literal list built above, not runtime/user-constructed input.
-            subprocess.run(command, cwd=ROOT, check=True)  # noqa: S603
+    # --dry-run prints the command that would run for every label instead of
+    # executing anything, so a reviewer can confirm intended changes before
+    # actually syncing labels. It returns before the quota monitor exists
+    # because a dry run performs no gh calls at all -- not even the free
+    # rate_limit reads -- exactly as it did before the migration.
+    if args.dry_run:
+        # Print one command per manifest label, in manifest order, with the
+        # leading "gh" kept so each line is byte-for-byte what a reviewer
+        # could paste into a shell.
+        for label in labels:
+            print(json.dumps(["gh", *_label_create_args(label, repo_args)]))
+        return 0
+
+    # One monitor per run: preflight before the first mutation, report after --
+    # both reads are REST and free, so accounting can never worsen the quota.
+    # The default threshold of 0 observes without ever blocking.
+    monitor = github_api.QuotaMonitor(minimum_remaining=args.min_graphql_quota)
+
+    # Every gh failure mode is collapsed into the GitHubApiError hierarchy by
+    # the access layer; catch it once here for uniform error reporting, with
+    # the two quota conditions mapped to their own exit code so hygiene output
+    # can never conflate a drained shared pool with a label defect.
+    try:
+        monitor.preflight()
+        # Create or update (via --force) every manifest label in turn; `gh label
+        # create --force` is idempotent, so re-running this script is always safe.
+        for label in labels:
+            # cwd=ROOT pins gh's repository inference to this checkout's root
+            # when --repo is omitted, preserving the pre-migration
+            # subprocess.run(cwd=ROOT) behavior exactly.
+            output = github_api.run_gh(_label_create_args(label, repo_args), cwd=ROOT)
+            # Before the migration gh wrote directly to the terminal; run_gh
+            # captures stdout instead, so any confirmation text gh produced is
+            # forwarded verbatim (gh emits nothing on success when captured,
+            # so this is usually silent -- matching a piped pre-migration run).
+            if output:
+                print(output, end="")
+    except (
+        github_api.GraphQLQuotaInsufficientError,
+        github_api.PrimaryRateLimitError,
+    ) as error:
+        # Quota conditions get their own exit code (3) and wording: transient
+        # shared-pool infrastructure, resumable by rerunning after the reset
+        # (the sync is idempotent), never a defect in the label manifest.
+        print(f"quota: {error}", file=sys.stderr)
+        return 3
+    except github_api.GitHubApiError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    finally:
+        # The consumption report prints on success and failure alike -- a
+        # failed run's consumption is exactly the evidence needed when
+        # diagnosing a drained pool. A run that failed before preflight ever
+        # recorded a baseline has nothing to report; otherwise reporting is
+        # best-effort, because a report failure must never mask the run's
+        # real outcome.
+        if monitor.preflighted:
+            # Best-effort only: see the comment above for why a report failure
+            # is downgraded to a warning instead of changing the exit code.
+            try:
+                print(monitor.report(), file=sys.stderr)
+            except github_api.GitHubApiError as report_error:
+                print(
+                    f"warning: could not report quota consumption: {report_error}",
+                    file=sys.stderr,
+                )
     return 0
 
 
