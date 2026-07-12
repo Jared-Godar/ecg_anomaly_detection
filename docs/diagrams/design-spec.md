@@ -402,10 +402,24 @@ rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/<name>.png doc
   Progress and returns to it. Arrow labels name the trigger for each transition,
   such as a linked pull request moving work to In Progress."
 
-## Diagram 4 — Governance Automation Overlay (net-new)
+## Diagram 4 — Governance Automation Overlay (net-new, approved 2026-07-11)
 
 - **Host**: `docs/governance/github-metadata-automation.md` (no ASCII precursor;
   place near the top as an orientation figure).
+- **Files**: `src/governance-automation-overlay.dot` + `-legend.dot` +
+  `-caption.dot`.
+- **Color note**: manual/maintainer elements are dashed slate (`#B9C7DA`
+  dashed edges and labels; Maintainer card `#122238` fill, dashed `#B9C7DA`
+  border echoing the Manual Step line style) -- an early draft used amber and
+  the maintainer directed that amber stay reserved for its established
+  Blocked/warning meaning.
+- **Approved compose placement** (two splices): caption centered under the
+  heading below everything (`--left-inset 318.38 --top-inset 519.75`);
+  legend bottom-right, right edge aligned with the Project V2 Field Update
+  card, vertically centered between the automation row's bottom and the
+  canvas bottom (`--right-inset 4 --top-inset 398.75`). The top-right corner
+  is *not* free on this diagram -- the Field Update card's edge and label
+  sweep through it.
 - **Semantics**, synthesized from three sections of that document:
   1. **Idempotent issue creation** (`## Idempotent issue creation`): parse
      reviewed catalog → validate title, labels, milestone, body → list open and
@@ -446,11 +460,9 @@ rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/<name>.png doc
 
 Drafts are iterated on this branch with rendered previews shared for maintainer
 review. **No pull request is opened until the maintainer has explicitly approved
-the image quality of the complete four-diagram set.** Diagrams 1, 2, and 3
-(including diagram 3's legend/caption retrofit) have that approval as of
-2026-07-11; diagram 4 does not yet. Doc integration (swapping the ASCII
-blocks for image references with captions and alt text) happens in this same
-branch once full-set approval is given.
+the image quality of the complete four-diagram set.** All four diagrams have
+that approval as of 2026-07-11, which cleared doc integration (swapping the
+ASCII blocks for image references with captions and alt text) and the PR.
 
 ## History: what was tried and rejected on diagram 3, and why
 

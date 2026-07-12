@@ -1,0 +1,9 @@
+digraph caption {
+  bgcolor="#000C1E"
+
+  Caption [shape=none margin=0 label=<
+<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="12" COLOR="#8A8F98" BGCOLOR="#FFFFFF">
+<TR><TD ALIGN="LEFT"><FONT COLOR="#000000" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif"><B>Governance Automation Overlay.</B> Scripts create issues and fill in project-board fields without overwriting<BR ALIGN="LEFT"/>anything a person curated, a gate checks every pull request for complete metadata, and a post-merge job<BR ALIGN="LEFT"/>marks finished work. The maintainer stays in the loop: reviewing the intake catalog, configuring board<BR ALIGN="LEFT"/>views, and reviewing pull requests.<BR ALIGN="LEFT"/></FONT></TD></TR>
+</TABLE>
+>]
+}

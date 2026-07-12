@@ -1,0 +1,70 @@
+digraph governance_automation_overlay {
+  bgcolor="#000C1E"
+  rankdir=BT
+  fontname="Helvetica,Arial,sans-serif"
+  labelloc=t
+  labeljust=c
+  fontsize=18
+  fontcolor="#FFFFFF"
+  margin="0.6,0.5"
+  label=<<B>GOVERNANCE AUTOMATION OVERLAY</B><BR/><BR/><FONT COLOR="#00D4E8" POINT-SIZE="13">Where automation touches the repository and the ECG Pipeline Modernization board</FONT><BR/><BR/><BR/>>
+  nodesep=0.55
+  ranksep=0.9
+
+  node [shape=box style="rounded,filled" fontname="Helvetica,Arial,sans-serif" fontcolor="#FFFFFF" color="#00D4E8" fillcolor="#0A1B33" penwidth=2 margin="0.25,0.15" fontsize=12]
+  edge [color="#00D4E8" penwidth=1.5]
+
+  subgraph cluster_github {
+    label=<<FONT COLOR="#FFFFFF" POINT-SIZE="14"><B>GitHub</B></FONT>>
+    labelloc=b
+    color="#4A6584"
+    penwidth=1.5
+    style=rounded
+    margin=20
+
+    subgraph cluster_repo {
+      label=<<FONT COLOR="#8FE3F0" POINT-SIZE="12">Repository</FONT>>
+      labelloc=b
+      color="#4A6584"
+      penwidth=1
+      style=rounded
+      margin=14
+
+      Issues [fillcolor="#122238" color="#4A6584" fontcolor="#B9C7DA"]
+      PullRequests [label="Pull Requests" fillcolor="#122238" color="#4A6584" fontcolor="#B9C7DA"]
+      LabelsMilestones [label="Labels + Milestones" fillcolor="#122238" color="#4A6584" fontcolor="#B9C7DA"]
+    }
+
+    subgraph cluster_board {
+      label=<<FONT COLOR="#8FE3F0" POINT-SIZE="12">ECG Pipeline Modernization Board</FONT>>
+      labelloc=b
+      color="#4A6584"
+      penwidth=1
+      style=rounded
+      margin=14
+
+      BoardItems [label="Board Items" fillcolor="#122238" color="#4A6584" fontcolor="#B9C7DA"]
+      PlanningFields [label="Planning Fields" fillcolor="#122238" color="#4A6584" fontcolor="#B9C7DA"]
+    }
+  }
+
+  IssueCreation [label="Idempotent Issue Creation"]
+  FieldUpdate [label="Project V2 Field Update"]
+  MetadataGate [label="PR Metadata Gate"]
+  StatusSync [label="Post-Merge Status Sync"]
+
+  Maintainer [style="rounded,filled,dashed" fillcolor="#122238" color="#B9C7DA"]
+
+  { rank=same; IssueCreation; FieldUpdate; MetadataGate; StatusSync }
+
+  IssueCreation -> Issues [label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#8FE3F0" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif">Creates Missing, Skips Existing</FONT></TD></TR></TABLE>>]
+  IssueCreation -> LabelsMilestones [label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#8FE3F0" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif">Creates Missing</FONT></TD></TR></TABLE>>]
+  FieldUpdate -> PlanningFields [label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#8FE3F0" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif">Preserves Curated Values</FONT></TD></TR></TABLE>>]
+  MetadataGate -> PullRequests [label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#8FE3F0" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif">Validates Every PR Event</FONT></TD></TR></TABLE>>]
+  MetadataGate -> PlanningFields [label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#8FE3F0" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif">Checks Linked Issue Fields</FONT></TD></TR></TABLE>>]
+  StatusSync -> PlanningFields [label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#8FE3F0" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif">Sets Status to Merged</FONT></TD></TR></TABLE>>]
+
+  Maintainer -> IssueCreation [color="#B9C7DA" style=dashed label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#B9C7DA" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif">Reviews Intake Catalog</FONT></TD></TR></TABLE>>]
+  Maintainer -> BoardItems [color="#B9C7DA" style=dashed label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#B9C7DA" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif">Configures Views</FONT></TD></TR></TABLE>>]
+  Maintainer -> PullRequests [color="#B9C7DA" style=dashed label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#B9C7DA" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif">Reviews</FONT></TD></TR></TABLE>>]
+}
