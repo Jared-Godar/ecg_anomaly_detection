@@ -1,0 +1,5 @@
+digraph footnote {
+  bgcolor="#000C1E"
+
+  Footnote [shape=none margin=0 fontname="Helvetica,Arial,sans-serif" label=<<FONT COLOR="#8FE3F0" POINT-SIZE="10"><I>The indexed test partition remains unopened and unreported.</I></FONT>>]
+}

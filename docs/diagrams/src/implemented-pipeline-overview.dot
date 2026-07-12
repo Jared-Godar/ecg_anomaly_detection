@@ -1,0 +1,46 @@
+digraph implemented_pipeline_overview {
+  bgcolor="#000C1E"
+  rankdir=TB
+  fontname="Helvetica,Arial,sans-serif"
+  labelloc=t
+  labeljust=c
+  fontsize=18
+  fontcolor="#FFFFFF"
+  margin="0.6,0.5"
+  label=<<B>IMPLEMENTED PIPELINE OVERVIEW</B><BR/><BR/><FONT COLOR="#00D4E8" POINT-SIZE="13">Supported local workflow from acquisition to auditable evaluation</FONT><BR/><BR/><BR/>>
+  nodesep=0.6
+  ranksep=0.7
+
+  node [shape=box style="rounded,filled" fontname="Helvetica,Arial,sans-serif" fontcolor="#FFFFFF" color="#00D4E8" fillcolor="#0A1B33" penwidth=2 margin="0.25,0.15" fontsize=12]
+  edge [color="#00D4E8" penwidth=1.5]
+
+  Source [label="PhysioNet MIT-BIH v1.0.0" fillcolor="#122238" color="#4A6584" fontcolor="#B9C7DA"]
+
+  Acquire [label="Acquire"]
+  Inventory [label="Inventory"]
+  Validate [label="Validate"]
+  MapAnnotations [label="Map Annotations"]
+  ExtractWindows [label="Extract Windows"]
+  SubjectSplit [label="Subject-Aware Split"]
+  DatasetIndex [label="Dataset Index"]
+  Training [label="Training"]
+  ValidationEval [label="Validation-Only Evaluation"]
+
+  RunManifest [label="Auditable Run Manifest" fillcolor="#00506B" color="#00E5FF"]
+
+  { rank=same; Source }
+  { rank=same; Acquire; Inventory; Validate; MapAnnotations }
+  { rank=same; ExtractWindows; SubjectSplit; DatasetIndex }
+  { rank=same; Training; ValidationEval; RunManifest }
+
+  Source -> Acquire
+  Acquire -> Inventory
+  Inventory -> Validate
+  Validate -> MapAnnotations
+  MapAnnotations -> ExtractWindows
+  ExtractWindows -> SubjectSplit
+  SubjectSplit -> DatasetIndex
+  DatasetIndex -> Training
+  Training -> ValidationEval
+  ValidationEval -> RunManifest
+}

@@ -304,10 +304,19 @@ rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/<name>.png doc
   publicly discoverable -- see the reproducibility note under "Title and
   explanatory framing" above.
 
-## Diagram 1 — Implemented Pipeline Overview
+## Diagram 1 — Implemented Pipeline Overview (approved 2026-07-11)
 
 - **Host**: `README.md`, `## Implemented pipeline` section (replaces the ASCII
   block there).
+- **Files**: `src/implemented-pipeline-overview.dot` +
+  `-legend.dot` + `-caption.dot` + `-footnote.dot` (the test-partition note,
+  spliced like the others).
+- **Approved compose placement** (three splices): caption centered under the
+  heading below everything (`--left-inset 371.07 --top-inset 481`); footnote
+  right-aligned under the terminal row it annotates
+  (`--right-inset 4 --top-inset 405`); legend upper-right, right edge aligned
+  with the terminal card, vertically centered between the subtitle's bottom
+  and that card's top (`--right-inset 4 --top-inset 150.18`).
 - **Semantics** (must match the ASCII exactly): source node
   `PhysioNet MIT-BIH v1.0.0` feeds a sequential local pipeline:
   `acquire -> inventory -> validate -> map annotations -> extract windows`, then
@@ -437,9 +446,9 @@ rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/<name>.png doc
 
 Drafts are iterated on this branch with rendered previews shared for maintainer
 review. **No pull request is opened until the maintainer has explicitly approved
-the image quality of the complete four-diagram set.** Diagrams 2 and 3
+the image quality of the complete four-diagram set.** Diagrams 1, 2, and 3
 (including diagram 3's legend/caption retrofit) have that approval as of
-2026-07-11; diagrams 1 and 4 do not yet. Doc integration (swapping the ASCII
+2026-07-11; diagram 4 does not yet. Doc integration (swapping the ASCII
 blocks for image references with captions and alt text) happens in this same
 branch once full-set approval is given.
 
