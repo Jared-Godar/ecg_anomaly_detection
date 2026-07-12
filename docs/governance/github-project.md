@@ -154,12 +154,54 @@ set -l project_id PVT_kwHOAQEwMM4BcY39
 set -l status_field_id PVTSSF_lAHOAQEwMM4BcY39zhXCFmM
 
 # Find an item's ID:
-gh project item-list 5 --owner Jared-Godar --format json --limit 200 \
+gh project item-list 5 --owner Jared-Godar --format json --limit 500 \
   | jq '.items[] | select(.content.number == <ISSUE_OR_PR_NUMBER>) | .id'
 
-gh project item-edit --id <ITEM_ID> --field-id $status_field_id --project-id $project_id \
-  --single-select-option-id <OPTION_ID>
+# Specific to this document's Project #5: item-edit takes the project's node ID,
+# but item-list takes its number and owner, so all three identifiers must be
+# changed together if this pattern is ever adapted to another project.
+function set_project_status_verified \
+        --argument-names project_id item_id field_id option_id expected_value
+    for attempt in 1 2
+        gh project item-edit --id $item_id --field-id $field_id --project-id $project_id \
+            --single-select-option-id $option_id
+
+        # A fresh read is authoritative even when gh reports "no changes to make".
+        set -l observed (gh project item-list 5 --owner Jared-Godar --format json --limit 500 \
+            | jq -r --arg item_id $item_id \
+                '.items[] | select(.id == $item_id) | .status // "unset"')
+        # An item absent from the read-back entirely (empty jq output) is not the
+        # same as an unset field: the requested state is unknowable, so stop.
+        if test -z "$observed"
+            echo "Item $item_id not found in the Project #5 read-back" >&2
+            return 1
+        end
+        if test "$observed" = "$expected_value"
+            return 0
+        end
+
+        if test $attempt -eq 2
+            echo "Project field verification failed: expected '$expected_value', got '$observed'" >&2
+            return 1
+        end
+        echo "Field read back as '$observed', not '$expected_value'; retrying the mutation once" >&2
+    end
+end
+
+# Apply fields sequentially; call this once per field before starting the next.
+set_project_status_verified $project_id <ITEM_ID> $status_field_id <OPTION_ID> <EXPECTED_STATUS>
 ```
+
+Run Project field mutations sequentially, never as one back-to-back batch. After each mutation,
+read the item again and compare the applicable `item-list` property with the exact requested
+value before starting the next field. The function above demonstrates the Status field; use the
+same two-attempt bound and the corresponding JSON property for every other single-select field.
+In particular, `error: no changes to make` is not proof that a value was already present: it is
+an inconclusive mutation result until a fresh read-back confirms the requested value. A
+conclusive `gh` failure (an authentication error, a wrong field or option ID) still prints its
+own stderr between the retries -- stop and fix that instead of re-running; only
+`no changes to make` is the inconclusive case (`set_merged_project_status.py` enforces this
+distinction explicitly by failing fast on every other error class).
 
 | Status | Option ID |
 |---|---|

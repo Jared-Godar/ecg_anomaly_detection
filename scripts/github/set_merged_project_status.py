@@ -11,8 +11,10 @@ explicitly, after the fact, via a direct field mutation.
 
 Run only from the `project-status-sync` workflow, after
 `github.event.pull_request.merged == true` on a `pull_request: closed`
-event. Idempotent: setting an item's Status to Merged when it is already
-Merged is a harmless no-op mutation.
+event. Idempotent: every mutation is verified by a fresh Project item read.
+GitHub CLI's ``no changes to make`` error is inconclusive until that read-back
+confirms the requested value; a read-back that is not yet ``Merged`` -- whether
+absent or a concretely different value -- earns one bounded retry.
 """
 
 from __future__ import annotations
@@ -193,22 +195,76 @@ def find_pull_request_item_id(
     return None
 
 
-def set_status_merged(item_id: str, project_id: str, field: StatusField) -> None:
-    """Set one Project item's Status field to Merged."""
-    _run_gh(
-        [
-            "project",
-            "item-edit",
-            "--id",
-            item_id,
-            "--project-id",
-            project_id,
-            "--field-id",
-            field.field_id,
-            "--single-select-option-id",
-            field.merged_option_id,
-        ]
-    )
+def fetch_item_status(owner: str, project_number: int, item_id: str) -> str | None:
+    """Read one Project item's current Status value by item id."""
+    args = [
+        "project",
+        "item-list",
+        str(project_number),
+        "--owner",
+        owner,
+        "--format",
+        "json",
+        "--limit",
+        "500",
+    ]
+    payload = json.loads(_run_gh(args))
+    item = next((candidate for candidate in payload["items"] if candidate["id"] == item_id), None)
+    # Losing the item between mutation and verification makes the requested
+    # state unknowable, so fail instead of treating a missing row as unset.
+    if item is None:
+        raise ProjectStatusSyncError(
+            f"Project #{project_number} no longer contains item {item_id} during status read-back"
+        )
+    return item.get("status")
+
+
+def set_status_merged(
+    item_id: str,
+    project_id: str,
+    field: StatusField,
+    owner: str,
+    project_number: int,
+) -> None:
+    """Set one Project item's Status to Merged and verify it, with one bounded retry."""
+    mutation_args = [
+        "project",
+        "item-edit",
+        "--id",
+        item_id,
+        "--project-id",
+        project_id,
+        "--field-id",
+        field.field_id,
+        "--single-select-option-id",
+        field.merged_option_id,
+    ]
+    # Two attempts bound recovery from gh's misleading no-change response while
+    # ensuring every attempted write receives its own authoritative read-back.
+    for attempt in range(2):
+        # Only the observed false no-change response is eligible for read-back
+        # recovery; unrelated CLI failures retain their existing fail-fast path.
+        try:
+            _run_gh(mutation_args)
+        except ProjectStatusSyncError as error:
+            # A different error has no evidence that the mutation was accepted,
+            # so preserve it rather than masking authentication or schema faults.
+            if "no changes to make" not in str(error).lower():
+                raise
+
+        observed_status = fetch_item_status(owner, project_number, item_id)
+        # The fresh item value, not gh's exit status or message, proves success.
+        if observed_status == "Merged":
+            return
+        # Any non-Merged read-back (absent or a different value) earns one retry;
+        # the second fails with the exact observed value so operators never
+        # receive a false success message.
+        if attempt == 1:
+            observed = observed_status if observed_status is not None else "unset"
+            raise ProjectStatusSyncError(
+                f"Project #{project_number} item {item_id} Status read back as "
+                f"{observed!r} after 2 attempts; expected 'Merged'"
+            )
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -264,7 +320,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         project_id = fetch_project_id(args.owner, args.project_number)
         field = fetch_status_field(args.owner, args.project_number)
-        set_status_merged(item_id, project_id, field)
+        set_status_merged(item_id, project_id, field, args.owner, args.project_number)
     except ProjectStatusSyncError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
