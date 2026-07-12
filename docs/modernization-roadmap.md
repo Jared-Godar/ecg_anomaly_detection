@@ -89,19 +89,18 @@ Exit criterion: every proposed change receives automated, data-independent quali
 **v1.0.0 scope versus post-1.0 roadmap:** the repository has shipped its [`v1.0.0`
 release](https://github.com/Jared-Godar/ecg_anomaly_detection/releases/tag/v1.0.0). Every claim in
 `README.md`, `MODEL_CARD.md`, and `docs/*` was audited against generated evidence and code behavior
-before the release (#71); the one remaining unchecked box below (held-out evaluation) was
-intentionally scoped out of v1.0.0 and is tracked separately in `M9 — Held-out Evaluation`, not
-silently checked off or hidden. Phase 7 therefore completed its v1.0.0-relevant scope with one
-honestly-open, deliberately-deferred item — this is accurate reporting, not an incomplete audit.
+before the release (#71); held-out evaluation was intentionally scoped out of v1.0.0 and tracked
+separately in `M9 — Held-out Evaluation`. It was completed post-1.0 under its own governance rather
+than silently folded into the earlier release.
 
 - [x] Document repository architecture and proposed data lineage.
-- [ ] Define and execute a separately reviewed held-out evaluation protocol. **Deliberately deferred
+- [x] Define and execute a separately reviewed held-out evaluation protocol. **Completed
   post-1.0**, not a v1.0.0 blocker: the eligibility, access, lineage, rerun, disclosure, and archival
   governance this requires is already defined (next item), but forcing the single irreversible,
   governance-gated protected-test execution itself against a release milestone would contradict
   that governance's own deliberate gating. Tracked in the `M9 — Held-out Evaluation` milestone
-  (#72, #73). v1.0.0 shipped honestly documenting that no held-out benchmark exists yet, per the
-  existing evaluation-policy and benchmark-governance boundaries below.
+  (#72, #73). v1.0.0 shipped before this work; the aggregate post-1.0 record is documented in
+  [held-out evaluation](held-out-evaluation.md).
 - [x] Publish a validation-only model card covering assumptions, evidence boundaries, limitations,
   intended use, and prohibited use without implying that a held-out benchmark exists.
 - [x] Define benchmark eligibility, protected-test access, lineage, rerun, disclosure, and archival

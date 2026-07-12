@@ -11,6 +11,10 @@ quality, generalization, clinical validity, or medical utility. This repository 
 educational machine-learning project being modernized as a data-engineering case study. It is not
 medical software.
 
+Issue #73 completed one governed execution under this policy. Its aggregate result, required
+disclosures, rerun record, and limitations are documented in
+[Held-out evaluation](held-out-evaluation.md); generated evidence remains outside Git.
+
 The machine-readable policy is `configs/benchmark-policy-v1.toml`. Validate it without reading data,
 loading a model, or generating metrics:
 

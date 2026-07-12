@@ -25,7 +25,7 @@ The labels are simplified reference-annotation classes from a historical dataset
 | **What is this?** | A responsible modernization of a notebook-oriented ECG classification project into a configuration-driven local data pipeline. |
 | **Why modernize it?** | The original work used absolute paths, an unrecorded environment, and random beat-window splits that cannot establish generalization to unseen patients. |
 | **What is implemented?** | Reproducible setup, acquisition, subject-aware preparation, deterministic baseline training, validation-only metrics, orchestration, and run manifests. |
-| **What comes next?** | A separately reviewed protected test-partition evaluation. No supported modern benchmark exists yet. |
+| **What comes next?** | Stewardship of the governed pipeline and honestly bounded evaluation evidence. |
 
 ## Engineering capabilities demonstrated
 
@@ -54,21 +54,24 @@ generated from
 [`implemented-pipeline-overview.dot`](docs/diagrams/src/implemented-pipeline-overview.dot)
 via Graphviz (see [`docs/diagrams/design-spec.md`](docs/diagrams/design-spec.md)).
 
-The supported workflow is local and sequential. It fits a deterministic baseline on training shards and evaluates the frozen model only on validation shards. The indexed test partition remains unopened and unreported. It does not implement final test evaluation, cloud infrastructure, or distributed processing.
+The supported development workflow remains local, sequential, and validation-only. A separate,
+explicitly approved command completed one governed protected-test execution for issue #73; see the
+[aggregate record and limitations](docs/held-out-evaluation.md). Cloud infrastructure and
+distributed processing are not implemented.
 
 ## Current status
 
 | Implemented today | Not yet implemented |
 |---|---|
-| Locked package environment and CLI | Test-partition evaluation |
-| Versioned, fail-safe dataset retrieval | Test-evaluation release policy |
-| File inventory, local integrity baseline, and model card | Modern held-out benchmark |
+| Locked package environment and CLI | Cloud or distributed execution |
+| Versioned, fail-safe dataset retrieval | Additional benchmark access without new governed approval |
+| File inventory, local integrity baseline, and model card | |
 | Typed WFDB ingestion and record validation | |
 | Auditable annotation mapping and window extraction | |
 | Deterministic subject-aware split manifests | |
 | Model-ready index over immutable record shards | |
 | Run manifests and synthetic end-to-end coverage | |
-| Deterministic baseline training and validation-only tested metrics | Threshold analysis and generated figures (candidate follow-up) |
+| Deterministic baseline training, validation metrics, and one governed held-out evaluation | Threshold analysis and generated figures (candidate follow-up) |
 | Historical archive image attribution and provenance audit | |
 | Per-stage pipeline progress reporting for `run-pipeline` | |
 | Local run listing and purge helpers (`list-runs`/`purge-run`) | |
@@ -152,7 +155,7 @@ The original workflow downloaded MIT-BIH records, selected the first signal chan
 
 The saved 2022 notebook reports 95.3% test accuracy, 85.5% recall for the combined abnormal class, and a 0.2% false-positive rate. These are historical outputs, not validated portfolio benchmarks.
 
-The split was performed after window creation, so windows from the same record—and potentially overlapping windows—could occur in both training and test data. The result may therefore be inflated and does not measure generalization to unseen subjects. The modern pipeline now reports validation-only subject-aware metrics, but those exploratory metrics are not a replacement benchmark or evidence of test-set generalization. No held-out test benchmark is produced.
+The split was performed after window creation, so windows from the same record—and potentially overlapping windows—could occur in both training and test data. The result may therefore be inflated and does not measure generalization to unseen subjects. The modern pipeline reports validation-only subject-aware metrics and one separately governed held-out result. Neither is evidence of broader population generalization.
 
 One notebook cell also reports validation accuracy of 1.00 because it scores predictions against themselves; the separately calculated value for that model is 0.845. The confusion matrices, metric definitions, and additional caveats are documented in the [historical results audit](docs/historical-results.md).
 
@@ -183,7 +186,7 @@ The repository's [MIT License](LICENSE) applies to project code and original doc
 - Historical metrics use a random beat-window split and do not demonstrate generalization to unseen patients.
 - Record grouping prevents record crossover but does not guarantee subject independence when multiple records belong to one person.
 - The current split balances record counts rather than target distributions.
-- Validation metrics are exploratory; the indexed test partition has not been evaluated.
+- Validation metrics are exploratory; the single held-out result is bounded to one frozen candidate and one grouped split.
 
 ### Reproducibility and operations
 

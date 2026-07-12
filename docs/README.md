@@ -29,6 +29,7 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Model-ready dataset](model-ready-dataset.md) | Grouped shard index, lazy-loading contract, and training boundary |
 | [Baseline training](baseline-training.md) | Deterministic estimator fitting, train-only isolation, and lineage |
 | [Baseline evaluation](baseline-evaluation.md) | Frozen-model validation metrics, isolation, and digest checks |
+| [Held-out evaluation](held-out-evaluation.md) | Aggregate record, lineage, disclosures, and limitations for the governed protected-test execution |
 | [Threshold sweep analysis](threshold-sweep-analysis.md) | Validation-only centroid-distance margin sweep, its non-goals, and CLI usage |
 | [Evaluation policy](evaluation-policy.md) | Development evaluation and protected-test boundaries |
 | [Benchmark governance](benchmark-governance.md) | Future benchmark eligibility, execution, disclosure, rerun, and archival rules |
