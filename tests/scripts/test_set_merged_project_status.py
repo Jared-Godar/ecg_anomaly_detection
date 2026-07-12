@@ -188,18 +188,72 @@ def test_find_pull_request_item_id_returns_none_when_not_tracked() -> None:
 
 
 def test_set_status_merged_invokes_item_edit_with_expected_args() -> None:
-    """set_status_merged calls `gh project item-edit` with every required field-mutation flag."""
+    """set_status_merged mutates with every required flag and verifies the result."""
 
     field = smps.StatusField(field_id="PVTSSF_status", merged_option_id="merged")
-    # Capture the actual gh invocation to inspect its arguments below.
-    with patch.object(subprocess, "run", return_value=_completed("")) as mock_run:
-        smps.set_status_merged("PVTI_target", "PVT_project", field)
-    called_args = mock_run.call_args.args[0]
+    read_back = _item_list_payload([{"id": "PVTI_target", "status": "Merged"}])
+    # The mutation succeeds, then the item list confirms the desired value.
+    with patch.object(
+        subprocess, "run", side_effect=[_completed(""), _completed(read_back)]
+    ) as mock_run:
+        smps.set_status_merged("PVTI_target", "PVT_project", field, "Jared-Godar", 5)
+    called_args = mock_run.call_args_list[0].args[0]
     assert called_args[:3] == ["gh", "project", "item-edit"]
     assert "--id" in called_args and "PVTI_target" in called_args
     assert "--project-id" in called_args and "PVT_project" in called_args
     assert "--field-id" in called_args and "PVTSSF_status" in called_args
     assert "--single-select-option-id" in called_args and "merged" in called_args
+    assert mock_run.call_args_list[1].args[0][:3] == ["gh", "project", "item-list"]
+
+
+def test_set_status_merged_verifies_no_changes_error_before_accepting_it() -> None:
+    """A no-change error succeeds only when a fresh read confirms Merged."""
+
+    no_change = subprocess.CalledProcessError(1, ["gh"], stderr="error: no changes to make")
+    read_back = _item_list_payload([{"id": "PVTI_target", "status": "Merged"}])
+    field = smps.StatusField(field_id="PVTSSF_status", merged_option_id="merged")
+    # Despite gh's error, the independent item read proves no retry is needed.
+    with patch.object(
+        subprocess, "run", side_effect=[no_change, _completed(read_back)]
+    ) as mock_run:
+        smps.set_status_merged("PVTI_target", "PVT_project", field, "Jared-Godar", 5)
+    assert mock_run.call_count == 2
+
+
+def test_set_status_merged_retries_when_read_back_is_not_merged() -> None:
+    """A missing desired value triggers one retry, followed by another read-back."""
+
+    no_change = subprocess.CalledProcessError(1, ["gh"], stderr="error: no changes to make")
+    closed = _item_list_payload([{"id": "PVTI_target", "status": "Closed"}])
+    merged = _item_list_payload([{"id": "PVTI_target", "status": "Merged"}])
+    field = smps.StatusField(field_id="PVTSSF_status", merged_option_id="merged")
+    # First read remains Closed; the single retry changes the second read to Merged.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[no_change, _completed(closed), _completed(""), _completed(merged)],
+    ) as mock_run:
+        smps.set_status_merged("PVTI_target", "PVT_project", field, "Jared-Godar", 5)
+    assert mock_run.call_count == 4
+
+
+def test_set_status_merged_fails_after_bounded_retry() -> None:
+    """Two unverified attempts fail clearly instead of claiming success."""
+
+    no_change = subprocess.CalledProcessError(1, ["gh"], stderr="error: no changes to make")
+    closed = _item_list_payload([{"id": "PVTI_target", "status": "Closed"}])
+    field = smps.StatusField(field_id="PVTSSF_status", merged_option_id="merged")
+    # Both mutation/read pairs leave the value Closed, exhausting the fixed bound.
+    with (
+        patch.object(
+            subprocess,
+            "run",
+            side_effect=[no_change, _completed(closed), no_change, _completed(closed)],
+        ) as mock_run,
+        pytest.raises(smps.ProjectStatusSyncError, match="after 2 attempts"),
+    ):
+        smps.set_status_merged("PVTI_target", "PVT_project", field, "Jared-Godar", 5)
+    assert mock_run.call_count == 4
 
 
 # --- _run_gh rate-limit classification and retry ------------------------------------

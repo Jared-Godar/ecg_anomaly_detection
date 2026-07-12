@@ -157,9 +157,43 @@ set -l status_field_id PVTSSF_lAHOAQEwMM4BcY39zhXCFmM
 gh project item-list 5 --owner Jared-Godar --format json --limit 200 \
   | jq '.items[] | select(.content.number == <ISSUE_OR_PR_NUMBER>) | .id'
 
-gh project item-edit --id <ITEM_ID> --field-id $status_field_id --project-id $project_id \
-  --single-select-option-id <OPTION_ID>
+function set_project_status_verified \
+        --argument-names project_id item_id field_id option_id expected_value
+    for attempt in 1 2
+        gh project item-edit --id $item_id --field-id $field_id --project-id $project_id \
+            --single-select-option-id $option_id
+        set -l mutation_status $status
+
+        # A fresh read is authoritative even when gh reports "no changes to make".
+        set -l observed (gh project item-list 5 --owner Jared-Godar --format json --limit 200 \
+            | jq -r --arg item_id $item_id \
+                '.items[] | select(.id == $item_id) | .status // "unset"')
+        if test "$observed" = "$expected_value"
+            return 0
+        end
+
+        if test $attempt -eq 2
+            echo "Project field verification failed: expected '$expected_value', got '$observed'" >&2
+            return 1
+        end
+
+        if test $mutation_status -ne 0
+            echo "Mutation was inconclusive; retrying once after read-back" >&2
+        end
+    end
+end
+
+
+# Apply fields sequentially; call this once per field before starting the next.
+set_project_status_verified $project_id <ITEM_ID> $status_field_id <OPTION_ID> <EXPECTED_STATUS>
 ```
+
+Run Project field mutations sequentially, never as one back-to-back batch. After each mutation,
+read the item again and compare the applicable `item-list` property with the exact requested
+value before starting the next field. The function above demonstrates the Status field; use the
+same two-attempt bound and the corresponding JSON property for every other single-select field.
+In particular, `error: no changes to make` is not proof that a value was already present: it is
+an inconclusive mutation result until a fresh read-back confirms the requested value.
 
 | Status | Option ID |
 |---|---|
