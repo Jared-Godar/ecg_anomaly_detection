@@ -260,8 +260,12 @@ and the `gh`-subprocess boundary with mocked process output -- including the quo
 one native read per closing issue reused across stages, one Project snapshot per run, the
 preflight stop, and the distinct quota exit code. `tests/scripts/test_github_api.py` covers the
 shared access layer (rate-limit classification, quota accounting, schema caching, the targeted
-lookup and read-back, and the union-type and unset-field edge cases). Neither calls the network;
-running them requires no GitHub token.
+lookup and read-back, and the union-type and unset-field edge cases).
+`tests/scripts/test_detect_label_drift.py` and `tests/scripts/test_sync_github_labels.py` cover
+the two label-hygiene scripts that migrated onto the same layer in issue #175, including their
+observe-only preflight defaults (a drained pool must never block a manual hygiene run) and the
+distinct quota exit code. None of these calls the network; running them requires no GitHub
+token.
 
 ## GraphQL quota stewardship
 
@@ -279,7 +283,8 @@ reset.
 Projects V2 has **no REST API**: every `gh project` subcommand (`view`, `field-list`,
 `item-list`, `item-edit`, `item-add`) and every `gh api graphql` call is GraphQL. Several other
 `gh` abstractions are GraphQL-backed even though nothing in their syntax says so; the table
-below records the transport of every repository-owned call site (the issue #173 inventory).
+below records the transport of every repository-owned call site (the issue #173 inventory,
+updated by issue #175 when the two label-hygiene scripts migrated onto the shared layer).
 `gh`'s underlying transport for a given command can change across CLI versions -- re-verify
 this table when upgrading `gh` majors.
 
@@ -288,9 +293,9 @@ this table when upgrading `gh` majors.
 | `scripts/github/set_merged_project_status.py` | `gh api graphql` targeted PR-item lookup and Status read-back; `gh project field-list` / `item-edit` | GraphQL (~5 points/run; no full-board reads) |
 | `scripts/github/validate_project_metadata.py` | one `gh project item-list --limit 500` snapshot | GraphQL (measured live 2026-07-12: **203 points** for one snapshot -- GraphQL pricing scales with requested node counts, so this dominates the script's spend) |
 | `scripts/github/validate_project_metadata.py` | `gh api repos/.../pulls/N`, `.../issues/N`, `.../issues/N/timeline` | REST (moved off `gh pr view` / `gh issue view`, which are GraphQL-backed) |
-| both governance scripts | `gh api rate_limit` preflight/report | REST; the endpoint is documented as not counting against any quota |
-| `scripts/detect_label_drift.py` | `gh issue list` / `gh pr list --json` | GraphQL-backed listing; low frequency (manual/scheduled hygiene) |
-| `scripts/sync_github_labels.py` | `gh label list` / `create` / `edit` | GraphQL-backed listing, REST mutations; low frequency (manual) |
+| all four scripts above and below | `gh api rate_limit` preflight/report | REST; the endpoint is documented as not counting against any quota |
+| `scripts/detect_label_drift.py` | `gh issue list` / `gh pr list --json` via the shared `run_gh` (issue #175) | GraphQL-backed listing; low frequency (manual/scheduled hygiene); observe-only preflight default (0) with before/after/consumed reporting and quota exit code 3 |
+| `scripts/sync_github_labels.py` | `gh label create --force` per manifest label via the shared `run_gh` (issue #175; the pre-migration inventory listed `label list`/`edit`, which the script never actually called) | REST mutations -- no GraphQL spend of its own; low frequency (manual); observe-only preflight default (0) with before/after/consumed reporting and quota exit code 3; `--dry-run` makes no `gh` calls at all |
 | `.github/workflows/*.yml` | no direct `gh` calls | -- (workflows only invoke the scripts above) |
 
 ### Consumption rules

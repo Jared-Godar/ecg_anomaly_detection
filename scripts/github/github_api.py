@@ -37,6 +37,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 
@@ -109,7 +110,7 @@ def _is_secondary_rate_limit_error(message: str) -> bool:
     return "secondary rate limit" in message.lower()
 
 
-def run_gh(args: list[str]) -> str:
+def run_gh(args: list[str], cwd: Path | None = None) -> str:
     """Run one fixed GitHub CLI command and return its captured output.
 
     Retries a bounded number of times, with short fixed delays, when gh
@@ -120,6 +121,12 @@ def run_gh(args: list[str]) -> str:
 
     Args:
         args: The `gh` subcommand and its arguments (without the leading "gh" itself).
+        cwd: Optional working directory for the gh process. A caller that
+            omits `--repo` and relies on gh inferring the repository from the
+            surrounding Git checkout can pin that inference to a known
+            directory here (`sync_github_labels.py` pins it to the repository
+            root); None keeps the calling process's own working directory,
+            exactly like plain subprocess.run.
 
     Returns:
         The command's captured stdout.
@@ -146,6 +153,7 @@ def run_gh(args: list[str]) -> str:
                 check=True,
                 capture_output=True,
                 text=True,
+                cwd=cwd,
             )
         except FileNotFoundError as error:
             raise GitHubApiError("gh CLI is not installed or not on PATH") from error

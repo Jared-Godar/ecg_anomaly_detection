@@ -2,7 +2,14 @@
 
 scripts/ holds standalone operational tooling, not the installed package, so
 the module under test is loaded directly from its file path rather than
-imported as `ecg_anomaly_detection.*`.
+imported as `ecg_anomaly_detection.*`. Every test mocks the subprocess
+boundary; none performs a live GitHub call.
+
+The shared GitHub access layer (`scripts/github/github_api.py`) the script
+migrated onto in issue #175 has its own test module; the tests here cover
+this script's orchestration on top of it -- in particular the observe-only
+quota default that must never block a manual hygiene run, and the distinct
+quota exit code.
 """
 
 from __future__ import annotations
@@ -168,8 +175,13 @@ def test_fetch_items_combines_issues_and_pull_requests() -> None:
     assert items[1] == {"kind": "pull request", "number": 2, "title": "a pr", "labels": ["b"]}
 
 
-def test_fetch_items_raises_label_drift_error_on_gh_failure() -> None:
-    """A failing `gh` invocation (e.g. an unauthenticated CLI) is translated into LabelDriftError."""
+def test_fetch_items_raises_the_shared_api_error_on_gh_failure() -> None:
+    """A failing `gh` invocation (e.g. an unauthenticated CLI) surfaces as the shared layer's error.
+
+    Before issue #175 this script's private _run_gh translated the failure
+    into LabelDriftError; the shared run_gh raises GitHubApiError instead,
+    which main() catches identically (LabelDriftError subclasses it).
+    """
 
     # gh exits non-zero when the local CLI has no valid authentication.
     with (
@@ -178,6 +190,181 @@ def test_fetch_items_raises_label_drift_error_on_gh_failure() -> None:
             "run",
             side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="not authenticated"),
         ),
-        pytest.raises(dld.LabelDriftError, match="not authenticated"),
+        pytest.raises(dld.github_api.GitHubApiError, match="not authenticated"),
     ):
         dld.fetch_items(repo=None, include_closed=False)
+
+
+# --- main (quota stewardship, mocked subprocess) --------------------------------------
+
+
+def _completed(stdout: str) -> subprocess.CompletedProcess:
+    """Build a fake successful subprocess.CompletedProcess with the given stdout.
+
+    Args:
+        stdout: The text `gh` would have printed to stdout.
+
+    Returns:
+        A CompletedProcess with returncode 0 and empty stderr.
+    """
+
+    return subprocess.CompletedProcess([], 0, stdout=stdout, stderr="")
+
+
+def _quota(remaining: int) -> subprocess.CompletedProcess:
+    """Build a fake `gh api rate_limit` response with the given GraphQL points remaining.
+
+    Args:
+        remaining: The GraphQL points remaining to report.
+
+    Returns:
+        A successful CompletedProcess carrying the rate_limit payload.
+    """
+
+    payload = {
+        "resources": {
+            "graphql": {
+                "limit": 5000,
+                "used": 5000 - remaining,
+                "remaining": remaining,
+                "reset": 1770000000,
+            }
+        }
+    }
+    return _completed(json.dumps(payload))
+
+
+# A clean one-issue listing page, labeled only with a name the committed
+# manifest actually declares, for happy-path main() tests.
+_CLEAN_ISSUES = _completed(
+    json.dumps([{"number": 1, "title": "an issue", "labels": [{"name": "type: governance"}]}])
+)
+# The matching clean pull-request listing page; unlabeled, so it can never drift.
+_CLEAN_PRS = _completed(json.dumps([{"number": 2, "title": "a pr", "labels": []}]))
+
+
+def test_main_happy_path_reports_quota_and_detects_no_drift(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A clean repository exits 0 and prints the before/after/consumed quota line.
+
+    The stderr report must carry the before, after, and consumed values --
+    the accountability line issue #173 requires of every quota-consuming run,
+    extended to this hygiene script by issue #175.
+    """
+
+    # Full sequence: preflight, issue listing, PR listing, report.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[_quota(4990), _CLEAN_ISSUES, _CLEAN_PRS, _quota(4988)],
+    ):
+        exit_code = dld.main([])
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "No label drift detected." in captured.out
+    # The consumption report names all three accounting values.
+    assert "4990 before" in captured.err
+    assert "4988 after" in captured.err
+    assert "2 consumed" in captured.err
+
+
+def test_main_still_reports_quota_when_drift_is_found(capsys: pytest.CaptureFixture) -> None:
+    """A drift finding keeps its exit code 1, with the quota report alongside it.
+
+    The quota line is accounting, not a verdict: it must accompany the drift
+    report without altering the drift exit code CI gates on.
+    """
+
+    drifted_issues = _completed(
+        json.dumps([{"number": 42, "title": "old", "labels": [{"name": "type:governance"}]}])
+    )
+    # Preflight, drifted issue listing, clean PR listing, report.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[_quota(4990), drifted_issues, _CLEAN_PRS, _quota(4988)],
+    ):
+        exit_code = dld.main([])
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Label drift detected on 1 item(s):" in captured.err
+    assert "type:governance" in captured.err
+    assert "4990 before" in captured.err
+
+
+def test_main_default_threshold_never_blocks_even_on_a_drained_pool(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """With the observe-only default, a fully drained pool still runs the check.
+
+    This is issue #175's explicit non-goal made executable: the default
+    threshold of 0 must record and report consumption without ever blocking
+    a manual hygiene run.
+    """
+
+    # The pool reads 0 remaining at preflight and at report time alike.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[_quota(0), _CLEAN_ISSUES, _CLEAN_PRS, _quota(0)],
+    ):
+        exit_code = dld.main([])
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "No label drift detected." in captured.out
+    assert "0 before" in captured.err
+
+
+def test_main_stops_with_exit_three_when_an_explicit_threshold_is_undercut(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """An operator-supplied positive threshold stops the run before any listing.
+
+    The stop must happen before either GraphQL-backed listing is fetched, and
+    its exit code must differ from both the drift code (1) and the failure
+    code (2) so hygiene output can never conflate a drained pool with drift.
+    """
+
+    # Both rate_limit reads (preflight and report) see a nearly drained pool.
+    with patch.object(subprocess, "run", side_effect=[_quota(12), _quota(12)]) as mock_run:
+        exit_code = dld.main(["--min-graphql-quota", "50"])
+    assert exit_code == 3
+    captured = capsys.readouterr()
+    assert "quota:" in captured.err
+    assert "only 12 of 5000" in captured.err
+    # The only gh traffic allowed is the free REST rate_limit accounting --
+    # neither the issue listing nor the PR listing may have been fetched.
+    for call in mock_run.call_args_list:
+        assert "rate_limit" in call.args[0]
+        assert "list" not in call.args[0]
+
+
+def test_main_maps_a_primary_rate_limit_to_exit_three(capsys: pytest.CaptureFixture) -> None:
+    """Primary rate-limit exhaustion mid-run exits 3, distinct from failures and drift.
+
+    The drained shared pool is infrastructure, not evidence about the
+    repository's labels; the exit code and the "quota:" prefix keep the two
+    unmistakably apart.
+    """
+
+    exhausted = subprocess.CalledProcessError(
+        1, ["gh"], stderr="GraphQL: API rate limit already exceeded for user ID 16855088."
+    )
+    # Preflight passes (observe-only default), the first listing then hits the
+    # exhausted pool, and the report still runs.
+    with patch.object(subprocess, "run", side_effect=[_quota(60), exhausted, _quota(0)]):
+        exit_code = dld.main([])
+    assert exit_code == 3
+    assert "quota:" in capsys.readouterr().err
+
+
+def test_main_returns_two_on_an_ordinary_gh_failure(capsys: pytest.CaptureFixture) -> None:
+    """A gh CLI failure (e.g. an unauthenticated CLI) keeps the pre-migration exit code 2."""
+
+    auth_error = subprocess.CalledProcessError(1, ["gh"], stderr="not authenticated")
+    # Preflight passes, then the issue listing fails; the report still runs.
+    with patch.object(subprocess, "run", side_effect=[_quota(4990), auth_error, _quota(4990)]):
+        exit_code = dld.main([])
+    assert exit_code == 2
+    assert "not authenticated" in capsys.readouterr().err
