@@ -1,0 +1,9 @@
+digraph caption {
+  bgcolor="#000C1E"
+
+  Caption [shape=none margin=0 label=<
+<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="12" COLOR="#8A8F98" BGCOLOR="#FFFFFF">
+<TR><TD ALIGN="LEFT"><FONT COLOR="#000000" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif"><B>Implemented Pipeline Overview.</B> The supported workflow runs locally and in order: heartbeat recordings<BR ALIGN="LEFT"/>are downloaded and checked, organized into labeled training windows, and split by subject. A baseline model<BR ALIGN="LEFT"/>is trained and scored only on the validation portion, and a run manifest records exactly what ran.<BR ALIGN="LEFT"/></FONT></TD></TR>
+</TABLE>
+>]
+}

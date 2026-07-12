@@ -1,0 +1,70 @@
+digraph local_flow_artifact_zones {
+  bgcolor="#000C1E"
+  rankdir=TB
+  fontname="Helvetica,Arial,sans-serif"
+  labelloc=t
+  labeljust=c
+  fontsize=18
+  fontcolor="#FFFFFF"
+  margin="0.6,0.5"
+  label=<<B>LOCAL FLOW AND ARTIFACT ZONES</B><BR/><BR/><FONT COLOR="#00D4E8" POINT-SIZE="13">Each stage writes into a gitignored data zone</FONT><BR/><BR/><BR/>>
+  nodesep=0.7
+  ranksep=0.7
+
+  node [shape=box style="rounded,filled" fontname="Helvetica,Arial,sans-serif" fontcolor="#FFFFFF" color="#00D4E8" fillcolor="#0A1B33" penwidth=2 margin="0.25,0.15" fontsize=12]
+  edge [color="#00D4E8" penwidth=1.5]
+
+  Source [label="PhysioNet MIT-BIH v1.0.0" fillcolor="#122238" color="#4A6584" fontcolor="#B9C7DA"]
+
+  AcquireVerify [label="Acquire + Verify Checksums"]
+  DataRaw [label="data/raw/\n(Immutable, Ignored)" style="rounded,filled,dashed" fillcolor="#0A1B33" color="#4A6584" fontcolor="#B9C7DA"]
+
+  Validate [label="Validate Records + Annotations"]
+  ValidationReport [label="Validation Report" style="rounded,filled,dashed" fillcolor="#0A1B33" color="#8FE3F0" fontcolor="#8FE3F0"]
+
+  CreateWindows [label="Create Labeled Beat Windows"]
+  DataInterim [label="data/interim/\n(Rebuildable, Ignored)" style="rounded,filled,dashed" fillcolor="#0A1B33" color="#4A6584" fontcolor="#B9C7DA"]
+
+  MapSplit [label="Map Records to Subjects,\nThen Split"]
+  DataProcessed [label="data/processed/\n(Model-Ready, Ignored)" style="rounded,filled,dashed" fillcolor="#0A1B33" color="#4A6584" fontcolor="#B9C7DA"]
+  SplitManifest [label="Split Manifest" style="rounded,filled,dashed" fillcolor="#0A1B33" color="#8FE3F0" fontcolor="#8FE3F0"]
+
+  TrainEvaluate [label="Train + Evaluate"]
+  Artifacts [label="artifacts/\n(Ignored)" style="rounded,filled,dashed" fillcolor="#0A1B33" color="#4A6584" fontcolor="#B9C7DA"]
+
+  RunManifest [label="Run Manifest" fillcolor="#00506B" color="#00E5FF"]
+  MachineMetrics [label="Machine-Readable\nMetrics" fillcolor="#00506B" color="#00E5FF"]
+  GeneratedFigures [label="Generated Figures" fillcolor="#00506B" color="#00E5FF"]
+
+  { rank=same; Source }
+  { rank=same; AcquireVerify; DataRaw }
+  { rank=same; Validate; ValidationReport }
+  { rank=same; CreateWindows; DataInterim }
+  { rank=same; MapSplit; DataProcessed; SplitManifest }
+  { rank=same; TrainEvaluate; Artifacts }
+  { rank=same; RunManifest; MachineMetrics; GeneratedFigures }
+
+  Source -> AcquireVerify
+  AcquireVerify -> DataRaw [style=dashed color="#4A6584" arrowhead=vee]
+  AcquireVerify -> Validate
+  Validate -> ValidationReport [style=dashed color="#4A6584" arrowhead=vee]
+  Validate -> CreateWindows
+  CreateWindows -> DataInterim [style=dashed color="#4A6584" arrowhead=vee]
+  CreateWindows -> MapSplit
+  MapSplit -> DataProcessed [style=dashed color="#4A6584" arrowhead=vee]
+  MapSplit -> SplitManifest [style=dashed color="#4A6584" arrowhead=vee]
+  MapSplit -> TrainEvaluate
+  TrainEvaluate -> Artifacts [style=dashed color="#4A6584" arrowhead=vee]
+  Artifacts -> RunManifest:n
+  Artifacts -> MachineMetrics
+  Artifacts -> GeneratedFigures:n
+
+  Caption [shape=none margin=0 label=<
+<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="12" COLOR="#8A8F98" BGCOLOR="#FFFFFF">
+<TR><TD ALIGN="LEFT"><FONT COLOR="#000000" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif"><B>Local Flow and Artifact Zones.</B> Data is ingested from the MIT sourcefiles then verified, validated,<BR ALIGN="LEFT"/>mapped, and split. The output of each step is cached in storage so nothing is lost or overwritten.<BR ALIGN="LEFT"/>Clear provenance and record tracking from raw ingestion to trained, evaluated model.<BR ALIGN="LEFT"/></FONT></TD></TR>
+</TABLE>
+>]
+  RunManifest -> Caption [style=invis]
+  MachineMetrics -> Caption [style=invis]
+  GeneratedFigures -> Caption [style=invis]
+}

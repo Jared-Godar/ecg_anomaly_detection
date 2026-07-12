@@ -1,0 +1,9 @@
+digraph caption {
+  bgcolor="#000C1E"
+
+  Caption [shape=none margin=0 label=<
+<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="12" COLOR="#8A8F98" BGCOLOR="#FFFFFF">
+<TR><TD ALIGN="LEFT"><FONT COLOR="#000000" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif"><B>Governance Status Lifecycle.</B> Every work item moves through the same stages, from Backlog to Closed.<BR ALIGN="LEFT"/>Each arrow names what has to happen before the item advances. Blocked is a temporary side step: work<BR ALIGN="LEFT"/>that hits an obstacle waits there, then returns to In Progress.<BR ALIGN="LEFT"/></FONT></TD></TR>
+</TABLE>
+>]
+}

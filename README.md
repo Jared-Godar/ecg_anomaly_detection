@@ -46,21 +46,13 @@ The labels are simplified reference-annotation classes from a historical dataset
 
 ## Implemented pipeline
 
-```text
-PhysioNet MIT-BIH v1.0.0
-          |
-          v
-acquire -> inventory -> validate -> map annotations -> extract windows
-                                                        |
-                                                        v
-                                    subject-aware split -> dataset index
-                                                        |
-                                                        v
-                         training -> validation-only evaluation
-                                      |
-                                      v
-                             auditable run manifest
-```
+![Flow diagram of the implemented pipeline. PhysioNet MIT-BIH v1.0.0 feeds nine sequential stages: acquire, inventory, validate, map annotations, extract windows, subject-aware split, dataset index, training, and validation-only evaluation, which produces an auditable run manifest. A note states the indexed test partition remains unopened.](docs/diagrams/exports/implemented-pipeline-overview.svg)
+
+*The implemented local pipeline: sequential stages from PhysioNet acquisition
+through validation-only evaluation, ending in an auditable run manifest.* —
+generated from
+[`implemented-pipeline-overview.dot`](docs/diagrams/src/implemented-pipeline-overview.dot)
+via Graphviz (see [`docs/diagrams/design-spec.md`](docs/diagrams/design-spec.md)).
 
 The supported workflow is local and sequential. It fits a deterministic baseline on training shards and evaluates the frozen model only on validation shards. The indexed test partition remains unopened and unreported. It does not implement final test evaluation, cloud infrastructure, or distributed processing.
 

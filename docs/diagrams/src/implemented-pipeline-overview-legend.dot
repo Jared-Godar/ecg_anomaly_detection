@@ -1,0 +1,13 @@
+digraph legend {
+  bgcolor="#000C1E"
+
+  Legend [shape=none margin=0 label=<
+<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="3" CELLPADDING="3" COLOR="#4A6584" BGCOLOR="#0A1B33">
+<TR><TD COLSPAN="2" ALIGN="CENTER"><FONT COLOR="#FFFFFF" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif"><B>Legend</B></FONT></TD></TR>
+<TR><TD BORDER="1" COLOR="#00D4E8" BGCOLOR="#0A1B33" WIDTH="22" HEIGHT="12" FIXEDSIZE="TRUE"></TD><TD ALIGN="LEFT"><FONT COLOR="#FFFFFF" POINT-SIZE="9" FACE="Helvetica,Arial,sans-serif"><B>Pipeline Stage</B></FONT></TD></TR>
+<TR><TD BORDER="1" COLOR="#4A6584" BGCOLOR="#122238" WIDTH="22" HEIGHT="12" FIXEDSIZE="TRUE"></TD><TD ALIGN="LEFT"><FONT COLOR="#B9C7DA" POINT-SIZE="9" FACE="Helvetica,Arial,sans-serif">External Source</FONT></TD></TR>
+<TR><TD BORDER="1" COLOR="#00E5FF" BGCOLOR="#00506B" WIDTH="22" HEIGHT="12" FIXEDSIZE="TRUE"></TD><TD ALIGN="LEFT"><FONT COLOR="#8FE3F0" POINT-SIZE="9" FACE="Helvetica,Arial,sans-serif">Terminal Output</FONT></TD></TR>
+<TR><TD ALIGN="CENTER"><FONT COLOR="#00D4E8" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif">&#8212;&#8594;</FONT></TD><TD ALIGN="LEFT"><FONT COLOR="#B9C7DA" POINT-SIZE="9" FACE="Helvetica,Arial,sans-serif">Sequential Flow</FONT></TD></TR>
+</TABLE>
+>]
+}

@@ -4,6 +4,15 @@ This document records the programmatic repository and Project V2 metadata work u
 the modernization backlog. It provides representative, auditable examples without duplicating
 complete issue bodies or treating generated command output as maintained documentation.
 
+![Architecture-style diagram of governance automation. Four automated flows touch a GitHub container holding the repository and the ECG Pipeline Modernization project board: issue creation that skips exact-title matches, field updates that preserve curated values, a pull-request metadata gate validating labels, milestone, closing references, and project fields, and a post-merge job that sets status to Merged. Dashed lines mark manual maintainer steps such as catalog review and view configuration.](../diagrams/exports/governance-automation-overlay.svg)
+
+*Where automation touches governance: idempotent issue creation, project board
+field updates with read-back validation, the per-PR metadata gate, and
+post-merge status sync — with maintainer judgment left in the loop.* —
+generated from
+[`governance-automation-overlay.dot`](../diagrams/src/governance-automation-overlay.dot)
+via Graphviz (see [`docs/diagrams/design-spec.md`](../diagrams/design-spec.md)).
+
 ## Scope
 
 The bootstrap process:
