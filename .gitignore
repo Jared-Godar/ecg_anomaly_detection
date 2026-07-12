@@ -109,9 +109,13 @@ credentials/
 
 # Local AI assistant / coding-agent configuration
 # Keep durable project instructions in AGENTS.md or docs/, not local tool configs.
+#
 .amazonq/
 .codex/
 .claude/
+.claude/*
+!.claude/CLAUDE.md
+!.claude/settings.json
 .cursor/
 .github-copilot/
 .continue/
