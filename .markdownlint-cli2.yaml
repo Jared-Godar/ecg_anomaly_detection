@@ -13,14 +13,14 @@ globs:
   - "**/*.md"
   - "!archive/original_2022/**"
   - "!.venv/**"
-  # Local AI assistant / coding-agent configuration -- gitignored (see
-  # .gitignore's "Local AI assistant / coding-agent configuration" section)
-  # but not respected by markdownlint-cli2's own glob scan, which reads the
-  # filesystem directly rather than consulting Git. Keep this list in sync
-  # with that .gitignore section.
+  # Tool-local AI assistant / coding-agent files are gitignored (see
+  # .gitignore's matching configuration section), but markdownlint-cli2 scans
+  # the filesystem without consulting Git. Exclude local files here while
+  # retaining explicitly approved project instructions below.
   - "!.amazonq/**"
   - "!.codex/**"
   - "!.claude/**"
+  - ".claude/CLAUDE.md"
   - "!.cursor/**"
   - "!.github-copilot/**"
   - "!.continue/**"
