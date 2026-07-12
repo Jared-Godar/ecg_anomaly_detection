@@ -19,29 +19,12 @@ implemented; test shards remain reserved for a separate future stage.
 
 ## Target local flow
 
-```text
-PhysioNet MIT-BIH v1.0.0
-          |
-          v
-acquire + verify checksums  ---> data/raw/ (immutable, ignored)
-          |
-          v
-validate records + annotations ---> validation report
-          |
-          v
-create labeled beat windows ---> data/interim/ (rebuildable, ignored)
-          |
-          v
-map records to subjects, then split ---> data/processed/ (model-ready, ignored)
-          |
-          +--------------------> split manifest
-          v
-train + evaluate ------------> artifacts/ (ignored)
-                                  |
-                                  +--> run manifest
-                                  +--> machine-readable metrics
-                                  +--> generated figures
-```
+![Vertical flow diagram. PhysioNet MIT-BIH v1.0.0 flows through acquire and verify checksums into data/raw, then validate records and annotations producing a validation report, then create labeled beat windows into data/interim, then map records to subjects and split into data/processed with a split manifest, then train and evaluate into artifacts, which contains a run manifest, machine-readable metrics, and generated figures. All zones are gitignored.](diagrams/exports/local-flow-artifact-zones.svg)
+
+*Target local flow: each transformation writes into a gitignored data zone, with
+validation and split evidence emitted alongside the artifacts.* — generated from
+[`local-flow-artifact-zones.dot`](diagrams/src/local-flow-artifact-zones.dot)
+via Graphviz (see [`docs/diagrams/design-spec.md`](diagrams/design-spec.md)).
 
 Every transformation should accept versioned configuration and produce deterministic metadata.
 Notebooks should consume package APIs and generated outputs rather than implement parallel data

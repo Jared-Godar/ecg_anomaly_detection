@@ -66,11 +66,13 @@ field values of PR #155 or PR #160 (see #162).
 
 Use this progression for new work:
 
-```text
-Backlog -> Ready -> In Progress -> Validation -> Review -> Merged -> Closed
-                         |
-                         +-> Blocked
-```
+![State diagram of seven statuses in order: Backlog, Ready, In Progress, Validation, Review, Merged, Closed. A Blocked state branches from In Progress and returns to it. Arrow labels name the trigger for each transition, such as a linked pull request moving work to In Progress.](../diagrams/exports/governance-status-lifecycle.svg)
+
+*The ECG Pipeline Modernization board's status lifecycle: the progression every
+work item follows, with Blocked as a temporary excursion from In Progress.* —
+generated from
+[`governance-status-lifecycle.dot`](../diagrams/src/governance-status-lifecycle.dot)
+via Graphviz (see [`docs/diagrams/design-spec.md`](../diagrams/design-spec.md)).
 
 - New project items begin in Backlog.
 - A linked implementation pull request moves work to In Progress.
