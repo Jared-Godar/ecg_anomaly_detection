@@ -11,222 +11,95 @@ explicitly, after the fact, via a direct field mutation.
 
 Run only from the `project-status-sync` workflow, after
 `github.event.pull_request.merged == true` on a `pull_request: closed`
-event. Idempotent: every mutation is verified by a fresh Project item read.
-GitHub CLI's ``no changes to make`` error is inconclusive until that read-back
-confirms the requested value; a read-back that is not yet ``Merged`` -- whether
-absent or a concretely different value -- earns one bounded retry.
+event. Idempotent: every mutation is verified by a fresh targeted read of the
+mutated item (a GraphQL `node(id:)` query for exactly the Status field --
+never a full board scan; see issue #173 and
+docs/governance/github-project.md). GitHub CLI's ``no changes to make`` error
+is inconclusive until that read-back confirms the requested value; a
+read-back that is not yet ``Merged`` -- whether absent or a concretely
+different value -- earns one bounded retry.
+
+Quota stewardship (issue #173): the run preflights the shared GraphQL point
+budget before touching it, stops with exit code 3 when the remaining quota is
+below a configurable threshold (or when GitHub reports the primary limit
+already exhausted mid-run), and prints a before/after/consumed report so
+every consumer of the shared 5000-points/hour pool is accountable in its own
+logs.
+
+Exit codes: 0 success (including "PR not tracked on the board"), 2 a genuine
+failure (metadata defect, authentication, schema), 3 a GraphQL quota
+condition -- transient shared-pool infrastructure, never a defect in the
+pull request being synced.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
-import subprocess
 import sys
-import time
 from collections.abc import Sequence
-from dataclasses import dataclass
+from pathlib import Path
+
+# scripts/github/ is operational tooling, not an installed package, so the
+# shared github_api helper that lives alongside this script is imported by
+# putting this script's own directory on sys.path first. That is already true
+# when the script runs directly (sys.path[0] is the script's directory) but
+# not when the test suite loads this file from its path, so the insertion is
+# explicit and idempotent.
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+# Guard against duplicate insertion when both governance scripts are loaded
+# into one process (e.g. the test suite imports each of them).
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
+import github_api  # noqa: E402  (needs the sys.path insertion above)
+
+# This script's own preflight threshold: a full run costs ~5 GraphQL points
+# (targeted lookup, field-list, mutation, read-backs -- no board snapshots),
+# so 25 is a 5x margin. Deliberately far below the shared
+# github_api.DEFAULT_MINIMUM_GRAPHQL_QUOTA (sized for a ~203-point board
+# snapshot this script never takes): requiring that much headroom here would
+# block a cheap merge sync that a moderately drained pool could easily serve.
+_MIN_GRAPHQL_QUOTA_DEFAULT: int = 25
 
 
-class ProjectStatusSyncError(RuntimeError):
-    """Raised when the merged-status sync cannot complete."""
+class ProjectStatusSyncError(github_api.GitHubApiError):
+    """Raised when the merged-status sync cannot complete.
 
-
-@dataclass(frozen=True, slots=True)
-class StatusField:
-    """The Status field's id and the option id for its 'Merged' value."""
-
-    field_id: str
-    merged_option_id: str
-
-
-# Short, fixed backoff schedule for GitHub's *secondary* rate limit (its
-# short-lived abuse-detection throttle, distinct from the hours-long primary
-# point-budget limit below). These delays are deliberately small: the secondary
-# limit is documented to clear within seconds, so there is no benefit to a long
-# or exponential schedule, only to workflow wall-clock time spent waiting.
-_SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS: tuple[int, ...] = (2, 5, 10)
-
-
-def _is_primary_rate_limit_error(message: str) -> bool:
-    """True when gh's error text is GitHub's primary (points/hour) rate limit.
-
-    Distinguished from the secondary/abuse-detection limit below because this
-    one takes up to an hour to clear -- no retry within a single CI job's
-    lifetime can help, so callers should fail fast instead of waiting.
+    Subclasses the shared GitHubApiError so main()'s single except clause
+    catches script-level defects and access-layer failures uniformly.
     """
-
-    # GitHub's own wording for this case always includes "rate limit" without
-    # the word "secondary"; checking for the absence of "secondary" is what
-    # separates this from _is_secondary_rate_limit_error below, since both
-    # messages otherwise share the substring "rate limit".
-    lowered = message.lower()
-    return "rate limit" in lowered and "secondary" not in lowered
-
-
-def _is_secondary_rate_limit_error(message: str) -> bool:
-    """True when gh's error text is GitHub's transient secondary/abuse-detection throttle."""
-
-    return "secondary rate limit" in message.lower()
-
-
-def _run_gh(args: list[str]) -> str:
-    """Run one fixed GitHub CLI command and return its captured output.
-
-    Retries a bounded number of times, with short fixed delays, when gh
-    reports GitHub's transient secondary rate limit -- but never for the
-    primary (hours-long) rate limit, where retrying inside one CI job cannot
-    help and would only waste its runtime.
-
-    Args:
-        args: The `gh` subcommand and its arguments (without the leading "gh" itself).
-
-    Returns:
-        The command's captured stdout.
-    """
-
-    # The first attempt has no delay; each retry after a secondary-rate-limit
-    # failure waits progressively longer per _SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS.
-    delays = (0, *_SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS)
-    # Walk the fixed attempt schedule rather than recursing, so the bound on
-    # total attempts is visible directly from `delays` with no separate counter.
-    for attempt_index, delay in enumerate(delays):
-        # Only a retry (attempt_index > 0) has a delay; the first attempt runs
-        # immediately.
-        if delay:
-            time.sleep(delay)
-        # Collapse "gh not installed" (FileNotFoundError) and "gh exited
-        # non-zero" (CalledProcessError, since check=True) into one
-        # ProjectStatusSyncError, so callers only need to catch this module's
-        # own exception type.
-        try:
-            # command is a fixed literal ("gh", *args) built from this module's own
-            # subcommand arguments, not runtime/user-constructed input.
-            result = subprocess.run(  # noqa: S603
-                ["gh", *args],  # noqa: S607
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except FileNotFoundError as error:
-            raise ProjectStatusSyncError("gh CLI is not installed or not on PATH") from error
-        except subprocess.CalledProcessError as error:
-            message = error.stderr.strip() or error.stdout.strip()
-            is_last_attempt = attempt_index == len(delays) - 1
-            # A genuine metadata defect and an hours-long token-budget
-            # exhaustion must never look the same in CI output, or a human
-            # will waste time "fixing" a PR that was never the problem -- so
-            # this case fails immediately, without spending any retry.
-            if _is_primary_rate_limit_error(message):
-                raise ProjectStatusSyncError(
-                    "GitHub API rate limit exhausted -- this is a transient "
-                    f"infrastructure condition, not a metadata defect: gh {' '.join(args)} "
-                    f"failed: {message}"
-                ) from error
-            # Transient and documented to clear within seconds; loop around to
-            # the next (longer) delay instead of failing, unless this was
-            # already the last scheduled attempt.
-            if _is_secondary_rate_limit_error(message) and not is_last_attempt:
-                continue
-            raise ProjectStatusSyncError(f"gh {' '.join(args)} failed: {message}") from error
-        else:
-            return result.stdout
-    # Unreachable: `delays` is a fixed non-empty literal, so every iteration of
-    # the loop above either returns on success or raises on failure. Kept only
-    # so a static checker can see every code path produces or raises a value.
-    raise AssertionError("unreachable: _run_gh's retry loop always returns or raises")
-
-
-def fetch_project_id(owner: str, project_number: int) -> str:
-    """Fetch a user-owned Project V2's node id."""
-    args = ["project", "view", str(project_number), "--owner", owner, "--format", "json"]
-    payload = json.loads(_run_gh(args))
-    return payload["id"]
-
-
-def fetch_status_field(owner: str, project_number: int) -> StatusField:
-    """Fetch the Status field's id and its 'Merged' option id."""
-    args = ["project", "field-list", str(project_number), "--owner", owner, "--format", "json"]
-    payload = json.loads(_run_gh(args))
-    field = next((f for f in payload["fields"] if f.get("name") == "Status"), None)
-    # A project without a Status field at all can't be the field-id mutation target
-    # this script is designed to write to.
-    if field is None:
-        raise ProjectStatusSyncError(f"Project #{project_number} has no 'Status' field")
-    option = next((o for o in field.get("options", []) if o.get("name") == "Merged"), None)
-    # Without a "Merged" option's node id, set_status_merged has no value to write --
-    # the Status field exists but doesn't have the specific option this script needs.
-    if option is None:
-        raise ProjectStatusSyncError(
-            f"Project #{project_number}'s Status field has no 'Merged' option"
-        )
-    return StatusField(field_id=field["id"], merged_option_id=option["id"])
-
-
-def find_pull_request_item_id(
-    owner: str, project_number: int, repo: str, pr_number: int
-) -> str | None:
-    """Return the Project item id for a pull request, or None if it isn't tracked."""
-    args = [
-        "project",
-        "item-list",
-        str(project_number),
-        "--owner",
-        owner,
-        "--format",
-        "json",
-        "--limit",
-        "500",
-    ]
-    payload = json.loads(_run_gh(args))
-    # Scan every project item for the one whose content matches this exact pull
-    # request (type + number + repo, since a project can track items across
-    # multiple repositories with overlapping PR numbers).
-    for item in payload["items"]:
-        content = item.get("content", {})
-        # All three fields must match: type distinguishes PRs from issues, number and
-        # repository together uniquely identify this exact pull request.
-        if (
-            content.get("type") == "PullRequest"
-            and content.get("number") == pr_number
-            and content.get("repository") == repo
-        ):
-            return item["id"]
-    return None
-
-
-def fetch_item_status(owner: str, project_number: int, item_id: str) -> str | None:
-    """Read one Project item's current Status value by item id."""
-    args = [
-        "project",
-        "item-list",
-        str(project_number),
-        "--owner",
-        owner,
-        "--format",
-        "json",
-        "--limit",
-        "500",
-    ]
-    payload = json.loads(_run_gh(args))
-    item = next((candidate for candidate in payload["items"] if candidate["id"] == item_id), None)
-    # Losing the item between mutation and verification makes the requested
-    # state unknowable, so fail instead of treating a missing row as unset.
-    if item is None:
-        raise ProjectStatusSyncError(
-            f"Project #{project_number} no longer contains item {item_id} during status read-back"
-        )
-    return item.get("status")
 
 
 def set_status_merged(
+    client: github_api.ProjectClient,
     item_id: str,
     project_id: str,
-    field: StatusField,
-    owner: str,
-    project_number: int,
+    field: github_api.SingleSelectOption,
 ) -> None:
-    """Set one Project item's Status to Merged and verify it, with one bounded retry."""
+    """Set one Project item's Status to Merged and verify it, with one bounded retry.
+
+    Starts with an idempotent pre-check: a Status that already reads Merged
+    skips the mutation entirely (and, since the pre-check is a fresh targeted
+    read, the observed value is current, not cached). Otherwise, verification
+    is a fresh targeted read of exactly this item's Status field
+    after every attempted write -- the mutation's exit status is never treated
+    as proof of success (the read-back-verified mutation rule from #164/#170;
+    issue #173 narrowed the read's scope from a full board scan to one item,
+    not the requirement).
+
+    Args:
+        client: The Project access layer bound to the target project.
+        item_id: The Project item to mutate (PVTI_...).
+        project_id: The owning project's node id (PVT_..., required by item-edit).
+        field: The Status field's id and the "Merged" option's id.
+    """
+
+    # Idempotent skip (issue #173): when a rerun -- or a built-in workflow that
+    # happened to produce the desired value -- finds Status already Merged,
+    # one targeted read is the run's entire cost and no mutation is attempted.
+    if client.fetch_item_single_select(item_id, "Status") == "Merged":
+        return
+
     mutation_args = [
         "project",
         "item-edit",
@@ -237,7 +110,7 @@ def set_status_merged(
         "--field-id",
         field.field_id,
         "--single-select-option-id",
-        field.merged_option_id,
+        field.option_id,
     ]
     # Two attempts bound recovery from gh's misleading no-change response while
     # ensuring every attempted write receives its own authoritative read-back.
@@ -245,14 +118,17 @@ def set_status_merged(
         # Only the observed false no-change response is eligible for read-back
         # recovery; unrelated CLI failures retain their existing fail-fast path.
         try:
-            _run_gh(mutation_args)
-        except ProjectStatusSyncError as error:
+            github_api.run_gh(mutation_args)
+        except github_api.GitHubApiError as error:
             # A different error has no evidence that the mutation was accepted,
             # so preserve it rather than masking authentication or schema faults.
             if "no changes to make" not in str(error).lower():
                 raise
 
-        observed_status = fetch_item_status(owner, project_number, item_id)
+        # Fresh targeted read of exactly this item's Status -- never cached,
+        # never a full board scan (github_api.fetch_item_single_select's own
+        # docstring records both guarantees).
+        observed_status = client.fetch_item_single_select(item_id, "Status")
         # The fresh item value, not gh's exit status or message, proves success.
         if observed_status == "Merged":
             return
@@ -262,7 +138,7 @@ def set_status_merged(
         if attempt == 1:
             observed = observed_status if observed_status is not None else "unset"
             raise ProjectStatusSyncError(
-                f"Project #{project_number} item {item_id} Status read back as "
+                f"Project item {item_id} Status read back as "
                 f"{observed!r} after 2 attempts; expected 'Merged'"
             )
 
@@ -274,7 +150,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         argv: Optional command-line arguments; defaults to the process arguments.
 
     Returns:
-        Parsed arguments: PR number, repo, project owner, and project number.
+        Parsed arguments: PR number, repo, project owner, project number, and
+        the minimum-remaining GraphQL quota threshold.
     """
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -284,6 +161,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--owner", default="Jared-Godar", help="Project owner login")
     parser.add_argument("--project-number", type=int, default=5)
+    parser.add_argument(
+        "--min-graphql-quota",
+        type=int,
+        default=_MIN_GRAPHQL_QUOTA_DEFAULT,
+        help=(
+            "Minimum remaining GraphQL points required by the preflight check before "
+            "any mutation is attempted; 0 or below disables the stop (the "
+            "before/after report is still printed). Default: "
+            f"{_MIN_GRAPHQL_QUOTA_DEFAULT}."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -302,28 +190,64 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parse_args(argv)
 
-    # Every gh CLI failure mode this script can hit is collapsed into
-    # ProjectStatusSyncError by _run_gh; catch it once here for uniform error reporting.
+    # One monitor per run: preflight before any GraphQL work, report after --
+    # both reads are REST and free, so accounting can never worsen the quota.
+    monitor = github_api.QuotaMonitor(minimum_remaining=args.min_graphql_quota)
+    # One client per run = one logical phase: schema lookups are cached on it,
+    # and no code path in this script ever requests a full board snapshot.
+    client = github_api.ProjectClient(args.owner, args.project_number)
+
+    # Every failure mode is collapsed into the GitHubApiError hierarchy by the
+    # access layer; catch it once here for uniform error reporting, with the
+    # two quota conditions mapped to their own exit code so CI output can
+    # never conflate shared-pool exhaustion with a defect in this PR.
     try:
-        item_id = find_pull_request_item_id(
-            args.owner, args.project_number, args.repo, args.pr_number
-        )
+        # Stop before any mutation when the shared pool is already too low --
+        # a half-completed mutation phase on a drained pool is strictly worse
+        # than a clean, resumable early exit.
+        monitor.preflight()
+        item = client.fetch_pull_request_item(args.repo, args.pr_number)
         # A PR that was never added to Project #5 has nothing to sync; this is a
         # legitimate, non-fatal state (warn and exit 0), not a script failure, since
         # not every merged PR is necessarily tracked on this project board.
-        if item_id is None:
+        if item is None:
             print(
                 f"warning: pull request #{args.pr_number} is not a Project "
                 f"#{args.project_number} item; nothing to sync",
                 file=sys.stderr,
             )
             return 0
-        project_id = fetch_project_id(args.owner, args.project_number)
-        field = fetch_status_field(args.owner, args.project_number)
-        set_status_merged(item_id, project_id, field, args.owner, args.project_number)
-    except ProjectStatusSyncError as error:
+        field = client.single_select_option("Status", "Merged")
+        set_status_merged(client, item.item_id, item.project_id, field)
+    except (
+        github_api.GraphQLQuotaInsufficientError,
+        github_api.PrimaryRateLimitError,
+    ) as error:
+        # Quota conditions get their own exit code (3) and wording: transient
+        # shared-pool infrastructure, resumable by rerunning after the reset,
+        # never a metadata defect in the pull request being synced.
+        print(f"quota: {error}", file=sys.stderr)
+        return 3
+    except github_api.GitHubApiError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
+    finally:
+        # The consumption report prints on success and failure alike -- a
+        # failed run's consumption is exactly the evidence needed when
+        # diagnosing a drained pool. A run that failed before preflight ever
+        # recorded a baseline has nothing to report; otherwise reporting is
+        # best-effort, because a report failure must never mask the run's
+        # real outcome.
+        if monitor.preflighted:
+            # Best-effort only: see the comment above for why a report failure
+            # is downgraded to a warning instead of changing the exit code.
+            try:
+                print(monitor.report(), file=sys.stderr)
+            except github_api.GitHubApiError as report_error:
+                print(
+                    f"warning: could not report quota consumption: {report_error}",
+                    file=sys.stderr,
+                )
 
     print(
         f"Set Project #{args.project_number} status to Merged for pull request #{args.pr_number}."

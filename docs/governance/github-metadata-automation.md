@@ -131,8 +131,11 @@ This limitation is why view definitions and expected workflow transitions are ma
 `.github/workflows/metadata-governance.yml` runs `scripts/github/validate_project_metadata.py`
 on every pull request event, converting the field requirements above from documentation-only
 guidance into an enforced check. The script and workflow are deliberately separate: the script
-takes no GitHub Actions-specific input (only `--pr-number`, `--repo`, `--owner`, and
-`--project-number`), so it runs identically from a terminal for local debugging.
+takes no GitHub Actions-specific input (only `--pr-number`, `--repo`, `--owner`,
+`--project-number`, `--strict-project-checks`, and `--min-graphql-quota`), so it runs
+identically from a terminal for local debugging. Exit codes distinguish outcomes: 0 passed,
+1 metadata violations, 2 required data unreadable, 3 a GraphQL quota condition (see
+[GraphQL quota stewardship](#graphql-quota-stewardship)).
 
 ```fish
 uv run python scripts/github/validate_project_metadata.py --pr-number 65
@@ -253,5 +256,95 @@ can actually block a merge.
 
 `tests/scripts/test_validate_project_metadata.py` covers the pure validation logic (closing-
 reference extraction, pull-request-level checks, linked-issue field-completeness checks) directly,
-and the `gh`-subprocess boundary with mocked process output. It does not call the network; running
-it requires no GitHub token.
+and the `gh`-subprocess boundary with mocked process output -- including the quota safeguards:
+one native read per closing issue reused across stages, one Project snapshot per run, the
+preflight stop, and the distinct quota exit code. `tests/scripts/test_github_api.py` covers the
+shared access layer (rate-limit classification, quota accounting, schema caching, the targeted
+lookup and read-back, and the union-type and unset-field edge cases). Neither calls the network;
+running them requires no GitHub token.
+
+## GraphQL quota stewardship
+
+Issue #173 hardened the repository's governance automation against avoidable GraphQL
+consumption, after issue #171 and PR #170 demonstrated the failure mode live: the GraphQL
+point budget is **one shared 5000-points/hour pool per user account**, drawn on simultaneously
+by interactive `gh` sessions, coding-agent sessions and their subagents, and the
+`PROJECT_METADATA_TOKEN`-backed workflows (a classic PAT belongs to the same user, so it shares
+the same pool). PR #170's merge-time `project-status-sync` run failed on a pool drained by
+unrelated same-session work and was recovered with `gh run rerun --failed` after the hourly
+reset.
+
+### Which repository automation consumes GraphQL
+
+Projects V2 has **no REST API**: every `gh project` subcommand (`view`, `field-list`,
+`item-list`, `item-edit`, `item-add`) and every `gh api graphql` call is GraphQL. Several other
+`gh` abstractions are GraphQL-backed even though nothing in their syntax says so; the table
+below records the transport of every repository-owned call site (the issue #173 inventory).
+`gh`'s underlying transport for a given command can change across CLI versions -- re-verify
+this table when upgrading `gh` majors.
+
+| Call site | Command shape | Transport |
+|---|---|---|
+| `scripts/github/set_merged_project_status.py` | `gh api graphql` targeted PR-item lookup and Status read-back; `gh project field-list` / `item-edit` | GraphQL (~5 points/run; no full-board reads) |
+| `scripts/github/validate_project_metadata.py` | one `gh project item-list --limit 500` snapshot | GraphQL (measured live 2026-07-12: **203 points** for one snapshot -- GraphQL pricing scales with requested node counts, so this dominates the script's spend) |
+| `scripts/github/validate_project_metadata.py` | `gh api repos/.../pulls/N`, `.../issues/N`, `.../issues/N/timeline` | REST (moved off `gh pr view` / `gh issue view`, which are GraphQL-backed) |
+| both governance scripts | `gh api rate_limit` preflight/report | REST; the endpoint is documented as not counting against any quota |
+| `scripts/detect_label_drift.py` | `gh issue list` / `gh pr list --json` | GraphQL-backed listing; low frequency (manual/scheduled hygiene) |
+| `scripts/sync_github_labels.py` | `gh label list` / `create` / `edit` | GraphQL-backed listing, REST mutations; low frequency (manual) |
+| `.github/workflows/*.yml` | no direct `gh` calls | -- (workflows only invoke the scripts above) |
+
+### Consumption rules
+
+The shared access layer (`scripts/github/github_api.py`) owns these rules; new governance
+tooling should build on it rather than shelling out to `gh` directly:
+
+- **One full Project snapshot per logical phase, maximum.** Board-wide discovery or validation
+  may read the whole item list once; the result is cached and reused across every per-item
+  check in that phase. A full `item-list` inside a per-item loop is a defect (the exact pattern
+  issue #173 removed from `set_merged_project_status.py`, whose verification reads previously
+  paid full-board pagination twice per run).
+- **Targeted read-back after every actual mutation.** Verification reads exactly the mutated
+  item's field via GraphQL `node(id:)` + `fieldValueByName` -- one point regardless of board
+  size. The read-back is never cached and never skipped: mutation exit status alone is not
+  proof of success (`error: no changes to make` is inconclusive until a fresh read confirms
+  the value), and a stale first read-back earns one bounded retry. Unset fields return JSON
+  `null` and are reported as unset; a value of an unexpected union type (Project field values
+  span several GraphQL union types) is an explicit error, never misread as unset.
+- **Cache identity and schema per operation.** Project ID, field IDs, and option IDs are
+  resolved at most once per run and reused; the targeted PR-item lookup returns the project ID
+  alongside the item ID, so no separate `gh project view` is needed at all.
+- **REST for native metadata.** Labels, assignees, milestones, comments, issue/PR state, and
+  issue timelines are read via `gh api repos/...` REST endpoints, keeping native reads off the
+  shared GraphQL pool entirely.
+- **Preflight, threshold, and stop.** Before its GraphQL phase, each script reads
+  `gh api rate_limit` (free) and stops -- before any mutation -- when the remaining GraphQL
+  quota is below `--min-graphql-quota` (`0` disables the stop but keeps the reporting). The
+  defaults are sized per script to the phase they guard: 250 points for the validator
+  (covers its measured 203-point snapshot with margin) and 25 for the merge sync (~5 points
+  needed -- demanding snapshot-sized headroom there would block a cheap sync a moderately
+  drained pool could easily serve). Both scripts are idempotent and resumable, so a stopped
+  run is simply rerun after the reset; `set_merged_project_status.py` additionally skips its
+  mutation outright when a fresh pre-check already reads `Merged`.
+- **Report before/after/consumed.** Every run prints a
+  `GraphQL quota: N before, M after, K consumed` line on success and failure alike, so any
+  future pool drain can be attributed from workflow logs. The delta is a pool-level
+  measurement: concurrent consumers of the same shared pool can inflate a run's apparent
+  consumption, so treat the line as evidence, not as an exact per-run invoice.
+- **Distinguish quota from defects.** Primary (hours-long) rate-limit exhaustion and a failed
+  preflight exit with code **3** and a `quota:` prefix -- never the metadata-violation (1) or
+  data-read-failure (2) codes -- so CI output can never make a drained pool look like a broken
+  pull request. The transient secondary/abuse-detection throttle keeps its short bounded
+  retries (2s/5s/10s); the primary limit is never retried in-job.
+
+### Recovery and local artifacts
+
+When a workflow run fails with exit code 3 (or a confirmed `rate limit already exceeded`
+message), the pull request is not the problem: wait for the hourly window
+(`gh api rate_limit` shows the reset time) and `gh run rerun --failed`. The
+maintainer-override procedure for a required check blocked by confirmed infrastructure failure
+is documented [above](#maintainer-override-for-confirmed-infrastructure-failures).
+
+Ad hoc board snapshots taken during governance work (e.g. the one discovery snapshot of a
+manual phase) are working evidence, not documentation: keep them in temporary directories or
+gitignored locations, never in tracked repository content -- the same boundary this document
+already applies to tokens and raw API responses.

@@ -35,6 +35,21 @@ not a merged commit/PR referencing it) -- see issue #158. This never fails the
 run; it is printed as a separate, non-blocking warning, since an issue closed
 independently of its fixing PR is an anomaly worth a human's attention, not
 proof that this particular PR's own metadata is incomplete.
+
+Quota stewardship (issue #173): native pull-request and issue metadata is read
+via REST (`gh api repos/...`), keeping this script's GraphQL consumption to
+exactly one Project #5 snapshot per run -- fetched once and reused across every
+closing issue's membership and field checks. Each closing issue's native
+metadata (milestone and state) is likewise fetched once and reused by both the
+milestone-inheritance and premature-closure stages. The GraphQL phase is
+preflighted against a configurable minimum-remaining threshold, and the run
+prints a quota before/after/consumed report so every consumer of the shared
+5000-points/hour pool is accountable in its own logs.
+
+Exit codes: 0 all checks passed, 1 metadata violations found, 2 required data
+could not be read (a genuine failure: authentication, missing PR), 3 a GraphQL
+quota condition -- transient shared-pool infrastructure, never a defect in the
+pull request being validated.
 """
 
 from __future__ import annotations
@@ -42,12 +57,33 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
-import time
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+# scripts/github/ is operational tooling, not an installed package, so the
+# shared github_api helper that lives alongside this script is imported by
+# putting this script's own directory on sys.path first. That is already true
+# when the script runs directly (sys.path[0] is the script's directory) but
+# not when the test suite loads this file from its path, so the insertion is
+# explicit and idempotent.
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+# Guard against duplicate insertion when both governance scripts are loaded
+# into one process (e.g. the test suite imports each of them).
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
+import github_api  # noqa: E402  (needs the sys.path insertion above)
+
+# The two error classes that mean "the shared API quota, not this pull
+# request, is the problem": grouped once so every handler that must let them
+# escalate to main()'s dedicated exit path re-raises the same tuple.
+_QUOTA_ERRORS: tuple[type[github_api.GitHubApiError], ...] = (
+    github_api.PrimaryRateLimitError,
+    github_api.GraphQLQuotaInsufficientError,
+)
 
 # The complete, fixed set of Project #5 fields every tracked issue must have
 # populated (see docs/governance/github-project.md); a PR's closing issue(s) must
@@ -93,10 +129,6 @@ _FENCED_CODE_BLOCK_PATTERN = re.compile(r"```.*?```", re.DOTALL)
 _INLINE_CODE_SPAN_PATTERN = re.compile(r"`[^`\n]*`")
 
 
-class MetadataValidationError(RuntimeError):
-    """Raised when required PR or Project data cannot be read from GitHub."""
-
-
 @dataclass(frozen=True, slots=True)
 class PullRequestMetadata:
     """The subset of PR data this check cares about."""
@@ -107,6 +139,20 @@ class PullRequestMetadata:
     labels: tuple[str, ...]
     body: str
     state: str
+
+
+@dataclass(frozen=True, slots=True)
+class IssueOverview:
+    """One closing issue's native metadata, fetched once and reused across stages.
+
+    Both the milestone-inheritance check and the premature-closure check need
+    the same issue's native data; fetching it once per issue (rather than once
+    per stage) is the request-deduplication rule from issue #173.
+    """
+
+    number: int
+    milestone: str | None
+    is_closed: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,117 +301,38 @@ def validate_project_membership(report: ProjectFieldReport) -> tuple[str, ...]:
     return ()
 
 
-# Short, fixed backoff schedule for GitHub's *secondary* rate limit (its
-# short-lived abuse-detection throttle, distinct from the hours-long primary
-# point-budget limit below). These delays are deliberately small: the secondary
-# limit is documented to clear within seconds, so there is no benefit to a long
-# or exponential schedule, only to CI wall-clock time spent waiting.
-_SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS: tuple[int, ...] = (2, 5, 10)
+def _rest_endpoint(resource_path: str, repo: str | None) -> str:
+    """Build a `gh api` REST endpoint for this repository, with or without an explicit repo.
 
-
-def _is_primary_rate_limit_error(message: str) -> bool:
-    """True when gh's error text is GitHub's primary (points/hour) rate limit.
-
-    Distinguished from the secondary/abuse-detection limit below because this
-    one takes up to an hour to clear -- no retry within a single CI job's
-    lifetime can help, so callers should fail fast instead of waiting.
-    """
-
-    # GitHub's own wording for this case always includes "rate limit" without
-    # the word "secondary"; checking for the absence of "secondary" is what
-    # separates this from _is_secondary_rate_limit_error below, since both
-    # messages otherwise share the substring "rate limit".
-    lowered = message.lower()
-    return "rate limit" in lowered and "secondary" not in lowered
-
-
-def _is_secondary_rate_limit_error(message: str) -> bool:
-    """True when gh's error text is GitHub's transient secondary/abuse-detection throttle."""
-
-    return "secondary rate limit" in message.lower()
-
-
-def _run_gh(args: list[str]) -> str:
-    """Run one fixed GitHub CLI command and return its captured output.
-
-    Retries a bounded number of times, with short fixed delays, when gh
-    reports GitHub's transient secondary rate limit -- but never for the
-    primary (hours-long) rate limit, where retrying inside one CI job cannot
-    help and would only waste its runtime.
+    gh api has no --repo flag; an explicit repo is embedded directly in the
+    endpoint path, while the literal "{owner}/{repo}" placeholders (kept
+    unexpanded) let gh resolve them itself from the current directory's Git
+    remote when repo is None.
 
     Args:
-        args: The `gh` subcommand and its arguments (without the leading "gh" itself).
+        resource_path: The path below the repository, e.g. "pulls/155".
+        repo: Optional GitHub OWNER/REPO; None defers to gh's own resolution.
 
     Returns:
-        The command's captured stdout.
+        The endpoint string to pass to `gh api`.
     """
 
-    # The first attempt has no delay; each retry after a secondary-rate-limit
-    # failure waits progressively longer per _SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS.
-    delays = (0, *_SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS)
-    # Walk the fixed attempt schedule rather than recursing, so the bound on
-    # total attempts is visible directly from `delays` with no separate counter.
-    for attempt_index, delay in enumerate(delays):
-        # Only a retry (attempt_index > 0) has a delay; the first attempt runs
-        # immediately.
-        if delay:
-            time.sleep(delay)
-        # Collapse "gh not installed" (FileNotFoundError) and "gh exited
-        # non-zero" (CalledProcessError, since check=True) into one
-        # MetadataValidationError, so callers only need to catch this module's
-        # own exception type.
-        try:
-            # command is a fixed literal ("gh", *args) built from this module's own
-            # subcommand arguments, not runtime/user-constructed input.
-            result = subprocess.run(  # noqa: S603
-                ["gh", *args],  # noqa: S607
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except FileNotFoundError as error:
-            raise MetadataValidationError("gh CLI is not installed or not on PATH") from error
-        except subprocess.CalledProcessError as error:
-            message = error.stderr.strip() or error.stdout.strip()
-            is_last_attempt = attempt_index == len(delays) - 1
-            # A genuine metadata defect and an hours-long token-budget
-            # exhaustion must never look the same in CI output, or a human
-            # will waste time "fixing" a PR that was never the problem -- so
-            # this case fails immediately, without spending any retry.
-            if _is_primary_rate_limit_error(message):
-                raise MetadataValidationError(
-                    "GitHub API rate limit exhausted -- this is a transient "
-                    f"infrastructure condition, not a metadata defect: gh {' '.join(args)} "
-                    f"failed: {message}"
-                ) from error
-            # Transient and documented to clear within seconds; loop around to
-            # the next (longer) delay instead of failing, unless this was
-            # already the last scheduled attempt.
-            if _is_secondary_rate_limit_error(message) and not is_last_attempt:
-                continue
-            raise MetadataValidationError(f"gh {' '.join(args)} failed: {message}") from error
-        else:
-            return result.stdout
-    # Unreachable: `delays` is a fixed non-empty literal, so every iteration of
-    # the loop above either returns on success or raises on failure. Kept only
-    # so a static checker can see every code path produces or raises a value.
-    raise AssertionError("unreachable: _run_gh's retry loop always returns or raises")
+    # The placeholder form is a literal gh feature, not an f-string gap: gh
+    # substitutes {owner}/{repo} from the current Git remote at run time.
+    prefix = f"repos/{repo}" if repo else "repos/{owner}/{repo}"
+    return f"{prefix}/{resource_path}"
 
 
 def fetch_pull_request(pr_number: int, repo: str | None) -> PullRequestMetadata:
-    """Fetch a pull request's metadata via the gh CLI."""
-    args = [
-        "pr",
-        "view",
-        str(pr_number),
-        "--json",
-        "number,assignees,milestone,labels,body,state",
-    ]
-    # repo is optional; omitting --repo lets gh infer it from the current
-    # directory's Git remote, matching gh's own default behavior.
-    if repo:
-        args.extend(["--repo", repo])
-    payload = json.loads(_run_gh(args))
+    """Fetch a pull request's native metadata via REST.
+
+    REST rather than `gh pr view` (which is GraphQL-backed) keeps native
+    pull-request reads off the shared GraphQL point pool entirely -- see this
+    module's quota-stewardship docstring and issue #173. REST reports state in
+    lowercase ("open"/"closed"), so it is normalized to the uppercase form the
+    rest of this module compares against.
+    """
+    payload = json.loads(github_api.run_gh(["api", _rest_endpoint(f"pulls/{pr_number}", repo)]))
     milestone = payload.get("milestone")
     return PullRequestMetadata(
         number=payload["number"],
@@ -373,24 +340,36 @@ def fetch_pull_request(pr_number: int, repo: str | None) -> PullRequestMetadata:
         milestone=milestone.get("title") if milestone else None,
         labels=tuple(label["name"] for label in payload.get("labels", [])),
         body=payload.get("body") or "",
-        state=payload["state"],
+        state=payload["state"].upper(),
     )
 
 
-def fetch_issue_milestone(issue_number: int, repo: str | None) -> str | None:
-    """Fetch one issue's own milestone via the gh CLI.
+def fetch_issue_overview(issue_number: int, repo: str | None) -> IssueOverview:
+    """Fetch one issue's native milestone and open/closed state via REST, in one call.
 
-    Reads only the issue's native milestone field, not Project #5 data, so this
-    needs no elevated Project-scope token -- the default GITHUB_TOKEN suffices.
+    One REST read serves both downstream consumers (milestone inheritance and
+    the premature-closure check), replacing the two separate GraphQL-backed
+    `gh issue view` calls the stages previously made for the same issue --
+    the request-deduplication rule from issue #173.
+
+    Args:
+        issue_number: The issue to fetch.
+        repo: Optional GitHub OWNER/REPO; None lets gh infer it from the current
+            directory's Git remote.
+
+    Returns:
+        The issue's number, milestone title (None when unmilestoned), and
+        whether it is currently closed.
     """
-    args = ["issue", "view", str(issue_number), "--json", "milestone"]
-    # repo is optional; omitting --repo lets gh infer it from the current
-    # directory's Git remote, matching gh's own default behavior.
-    if repo:
-        args.extend(["--repo", repo])
-    payload = json.loads(_run_gh(args))
+
+    payload = json.loads(github_api.run_gh(["api", _rest_endpoint(f"issues/{issue_number}", repo)]))
     milestone = payload.get("milestone")
-    return milestone.get("title") if milestone else None
+    return IssueOverview(
+        number=issue_number,
+        milestone=milestone.get("title") if milestone else None,
+        # REST reports state as lowercase "open"/"closed".
+        is_closed=payload.get("state") == "closed",
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -409,19 +388,20 @@ class IssueClosureState:
     closed_via_commit: bool
 
 
-def fetch_issue_closure_state(issue_number: int, repo: str | None) -> IssueClosureState:
-    """Fetch whether an issue is closed, and if closed, whether that closure is commit-linked.
+def fetch_issue_closure_state(overview: IssueOverview, repo: str | None) -> IssueClosureState:
+    """Resolve whether an already-fetched issue's closure, if any, is commit-linked.
 
     A GitHub issue timeline's `closed` event carries a `commit_id` only when the
     closure was caused by a merged commit/PR referencing the issue (e.g. "Closes
     #N"); a direct manual close (via the UI, API, or `gh issue close`) always
     leaves `commit_id` null -- the exact signal observed live for issue #154's
     2026-07-11T03:41:41Z manual closure while PR #155 (its `Closes #154` PR) was
-    still open. The issue's own state is checked first so an issue that's still
-    open never needs the additional timeline lookup.
+    still open. The issue's own state arrives on the already-fetched overview
+    (no additional read), so an issue that's still open never costs the
+    timeline lookup either.
 
     Args:
-        issue_number: The issue to check.
+        overview: The issue's already-fetched native metadata.
         repo: Optional GitHub OWNER/REPO; None lets gh infer it from the current
             directory's Git remote, matching this module's other fetch functions.
 
@@ -429,36 +409,22 @@ def fetch_issue_closure_state(issue_number: int, repo: str | None) -> IssueClosu
         The issue's closure state.
     """
 
-    state_args = ["issue", "view", str(issue_number), "--json", "state"]
-    # repo is optional; omitting --repo lets gh infer it from the current
-    # directory's Git remote, matching this module's other fetch functions.
-    if repo:
-        state_args.extend(["--repo", repo])
-    state_payload = json.loads(_run_gh(state_args))
     # An open issue was never closed by anything, merge or otherwise, so there's
-    # no timeline event to inspect -- skip the extra gh call entirely.
-    if state_payload.get("state") != "CLOSED":
-        return IssueClosureState(issue_number, is_closed=False, closed_via_commit=False)
+    # no timeline event to inspect -- skip the gh call entirely.
+    if not overview.is_closed:
+        return IssueClosureState(overview.number, is_closed=False, closed_via_commit=False)
 
-    # gh api has no --repo flag; an explicit repo is embedded directly in the
-    # endpoint path, while the literal "{owner}/{repo}" placeholders (kept
-    # unexpanded via f-string brace-escaping) let gh resolve them itself from
-    # the current directory's Git remote when repo is None.
-    endpoint = (
-        f"repos/{repo}/issues/{issue_number}/timeline"
-        if repo
-        else f"repos/{{owner}}/{{repo}}/issues/{issue_number}/timeline"
-    )
     # --paginate --slurp wraps every page of timeline events into one JSON
     # array of pages, so a long-lived issue's full history is scanned rather
-    # than only its first page of events.
-    pages = json.loads(_run_gh(["api", endpoint, "--paginate", "--slurp"]))
+    # than only its first page of events. The timeline endpoint is REST.
+    endpoint = _rest_endpoint(f"issues/{overview.number}/timeline", repo)
+    pages = json.loads(github_api.run_gh(["api", endpoint, "--paginate", "--slurp"]))
     events = [event for page in pages for event in page]
     # An issue can be closed and reopened more than once; the most recent
     # "closed" event describes how it reached its current closed state.
     closed_events = [event for event in events if event.get("event") == "closed"]
     closed_via_commit = bool(closed_events) and closed_events[-1].get("commit_id") is not None
-    return IssueClosureState(issue_number, is_closed=True, closed_via_commit=closed_via_commit)
+    return IssueClosureState(overview.number, is_closed=True, closed_via_commit=closed_via_commit)
 
 
 def find_prematurely_closed_issues(
@@ -483,9 +449,13 @@ def find_prematurely_closed_issues(
 def fetch_project_items(owner: str, project_number: int) -> list[dict[str, Any]]:
     """Fetch every item in the tracked Project, once, for reuse across issue lookups.
 
-    Requires a token with the `project` scope. Raises MetadataValidationError
-    (rather than letting a CalledProcessError propagate) so callers can choose
-    whether an unreadable Project is a hard failure or an advisory warning.
+    This is the run's single full Project snapshot -- the one legitimately
+    board-wide read (issue #173's one-snapshot-per-phase rule), reused across
+    every closing issue's membership and field checks rather than re-fetched
+    per issue. It is also this script's only GraphQL consumption. Requires a
+    token with the `project` scope. Raises GitHubApiError (rather than letting
+    a CalledProcessError propagate) so callers can choose whether an
+    unreadable Project is a hard failure or an advisory warning.
     """
     args = [
         "project",
@@ -498,7 +468,7 @@ def fetch_project_items(owner: str, project_number: int) -> list[dict[str, Any]]
         "--limit",
         "500",
     ]
-    payload = json.loads(_run_gh(args))
+    payload = json.loads(github_api.run_gh(args))
     return payload["items"]
 
 
@@ -509,7 +479,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         argv: Optional command-line arguments; defaults to the process arguments.
 
     Returns:
-        Parsed arguments: PR number, repo, project owner/number, and strictness flag.
+        Parsed arguments: PR number, repo, project owner/number, strictness flag,
+        and the minimum-remaining GraphQL quota threshold.
     """
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -525,48 +496,72 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "hard failure instead of a skipped-with-warning advisory check."
         ),
     )
+    parser.add_argument(
+        "--min-graphql-quota",
+        type=int,
+        default=github_api.DEFAULT_MINIMUM_GRAPHQL_QUOTA,
+        help=(
+            "Minimum remaining GraphQL points required by the preflight check before "
+            "the Project snapshot is fetched; 0 or below disables the stop (the "
+            "before/after report is still printed). Default: "
+            f"{github_api.DEFAULT_MINIMUM_GRAPHQL_QUOTA}."
+        ),
+    )
     return parser.parse_args(argv)
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Run the command-line entry point and return its process exit status.
+def _run_validation(args: argparse.Namespace, monitor: github_api.QuotaMonitor) -> int:
+    """Run every validation stage and return the process exit status.
 
-    Keeping orchestration here makes terminal behavior and error translation straightforward
-    to audit.
+    Split from main() so the quota-condition exit path (exit code 3) can be
+    handled in exactly one place there: any stage that hits the primary rate
+    limit or the preflight threshold re-raises to main() instead of folding
+    the condition into its own stage-local error handling.
 
     Args:
-        argv: Optional command-line arguments; defaults to the process arguments.
+        args: The parsed command-line arguments.
+        monitor: The run's quota monitor; preflighted here, reported by main().
 
     Returns:
-        The value produced by the documented operation.
+        0 when validation passes, 1 for metadata violations, 2 when required
+        data cannot be read.
     """
-
-    args = parse_args(argv)
 
     # A pull request that can't be fetched at all makes every other check moot;
     # fail immediately rather than attempting partial validation against no data.
+    # Quota conditions re-raise to main()'s dedicated exit path first.
     try:
         pr = fetch_pull_request(args.pr_number, args.repo)
-    except MetadataValidationError as error:
+    except _QUOTA_ERRORS:
+        raise
+    except github_api.GitHubApiError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
 
     closing_issues = extract_closing_issue_numbers(pr.body)
 
+    # Each closing issue's native metadata is fetched exactly once and reused
+    # by both the milestone-inheritance and premature-closure stages below --
+    # the request-deduplication rule from issue #173.
+    overviews: dict[int, IssueOverview] = {}
     require_milestone = True
-    # Only fetch closing issues' milestones (and only then reconsider the PR
-    # milestone requirement) when there are closing issues to check in the first
-    # place; with none, require_milestone keeps its conservative True default.
+    # Only fetch closing issues' native metadata (and only then reconsider the
+    # PR milestone requirement) when there are closing issues to check in the
+    # first place; with none, require_milestone keeps its conservative True default.
     if closing_issues:
         # Same "can't fetch, can't validate" reasoning as the PR fetch above.
         try:
-            closing_milestones = tuple(
-                fetch_issue_milestone(number, args.repo) for number in closing_issues
-            )
-        except MetadataValidationError as error:
+            overviews = {
+                number: fetch_issue_overview(number, args.repo) for number in closing_issues
+            }
+        except _QUOTA_ERRORS:
+            raise
+        except github_api.GitHubApiError as error:
             print(f"error: {error}", file=sys.stderr)
             return 2
-        require_milestone = closing_issue_milestones_require_pr_milestone(closing_milestones)
+        require_milestone = closing_issue_milestones_require_pr_milestone(
+            tuple(overview.milestone for overview in overviews.values())
+        )
 
     warnings: list[str] = []
     # The premature-closure check (issue #158) only makes sense while this PR is
@@ -576,12 +571,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     if closing_issues and pr.state == "OPEN":
         # A failure here must never fail the whole run (see this check's own
         # non-blocking, observational design in issue #158) -- print a warning
-        # and continue rather than propagating like the hard-failing fetches above.
+        # and continue rather than propagating like the hard-failing fetches
+        # above. Quota conditions still re-raise: a drained shared pool would
+        # fail every later stage anyway, and deserves its distinct exit code.
         try:
             closure_states = tuple(
-                fetch_issue_closure_state(number, args.repo) for number in closing_issues
+                fetch_issue_closure_state(overview, args.repo) for overview in overviews.values()
             )
-        except MetadataValidationError as error:
+        except _QUOTA_ERRORS:
+            raise
+        except github_api.GitHubApiError as error:
             print(
                 f"warning: could not check closing-issue closure state: {error}",
                 file=sys.stderr,
@@ -596,11 +595,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     # own closing-reference check above.
     if closing_issues:
         # An unreadable Project (see fetch_project_items' own docstring) is handled
-        # specially below rather than propagating like other MetadataValidationErrors,
-        # since the default GITHUB_TOKEN often lacks the scope to read it.
+        # specially below rather than propagating like other GitHubApiErrors,
+        # since the default GITHUB_TOKEN often lacks the scope to read it. The
+        # preflight guards the snapshot -- this run's only GraphQL spend -- and
+        # its quota conditions re-raise to main()'s dedicated exit path, never
+        # masquerading as a metadata or token problem.
         try:
+            monitor.preflight()
             items = fetch_project_items(args.owner, args.project_number)
-        except MetadataValidationError as error:
+        except _QUOTA_ERRORS:
+            raise
+        except github_api.GitHubApiError as error:
             message = f"could not read Project #{args.project_number} data: {error}"
             # --strict-project-checks opts into treating this as a hard failure;
             # otherwise it's an advisory warning so PR-level checks can still enforce
@@ -644,6 +649,55 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print(f"Metadata validation passed for pull request #{pr.number}.")
     return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command-line entry point and return its process exit status.
+
+    Keeping orchestration here makes terminal behavior and error translation straightforward
+    to audit.
+
+    Args:
+        argv: Optional command-line arguments; defaults to the process arguments.
+
+    Returns:
+        The value produced by the documented operation.
+    """
+
+    args = parse_args(argv)
+
+    # One monitor per run: it preflights the GraphQL phase inside
+    # _run_validation and reports consumption below -- both reads are REST and
+    # free, so accounting can never worsen the quota.
+    monitor = github_api.QuotaMonitor(minimum_remaining=args.min_graphql_quota)
+
+    # Quota conditions from any stage exit through this single handler with
+    # their own exit code (3) and wording: transient shared-pool
+    # infrastructure, resumable by rerunning after the reset, never a
+    # metadata defect in the pull request being validated.
+    try:
+        exit_code = _run_validation(args, monitor)
+    except _QUOTA_ERRORS as error:
+        print(f"quota: {error}", file=sys.stderr)
+        exit_code = 3
+
+    # The consumption report prints on success and failure alike -- a failed
+    # run's consumption is exactly the evidence needed when diagnosing a
+    # drained pool. A run that never reached its GraphQL phase (no closing
+    # issues, or an earlier hard failure) has no baseline and nothing to
+    # report; otherwise reporting is best-effort, because a report failure
+    # must never mask the run's real outcome.
+    if monitor.preflighted:
+        # Best-effort only: see the comment above for why a report failure is
+        # downgraded to a warning instead of changing the exit code.
+        try:
+            print(monitor.report(), file=sys.stderr)
+        except github_api.GitHubApiError as report_error:
+            print(
+                f"warning: could not report quota consumption: {report_error}",
+                file=sys.stderr,
+            )
+    return exit_code
 
 
 # Standard script entry-point guard: only run main() when executed directly, not when
