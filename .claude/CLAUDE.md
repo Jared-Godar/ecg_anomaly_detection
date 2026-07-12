@@ -95,7 +95,7 @@ so `pyproject.toml` and `uv.lock` stay in sync — never edit dependency version
 The package implements one linear, local, sequential pipeline over the MIT-BIH Arrhythmia
 Database:
 
-```
+```text
 acquire → inventory → validate → map annotations → extract windows
                                                     ↓
                                 subject/record-aware split → dataset index

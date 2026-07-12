@@ -160,6 +160,10 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Documentation
 
+- Documented the selective `.claude/` tracking policy: project-level `CLAUDE.md` instructions and
+  `settings.json` are retained in Git, while arbitrary tool-local state remains ignored. Markdown
+  linting now explicitly includes `.claude/CLAUDE.md` despite excluding other local Claude files
+  from its filesystem-based scan (#169).
 - `docs/governance/label-taxonomy.md`'s `area:*` dimension list and existing-label normalization
   table expanded to cover all 40 labels found undeclared by #67's live drift scan, marking each as
   a confident migration target or an open judgment call for the maintainer. `docs/governance/

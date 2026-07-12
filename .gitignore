@@ -107,12 +107,11 @@ local_settings.py
 secrets/
 credentials/
 
-# Local AI assistant / coding-agent configuration
-# Keep durable project instructions in AGENTS.md or docs/, not local tool configs.
+# AI assistant / coding-agent configuration
+# Ignore tool-local state while retaining explicitly approved project instructions.
 #
 .amazonq/
 .codex/
-.claude/
 .claude/*
 !.claude/CLAUDE.md
 !.claude/settings.json
