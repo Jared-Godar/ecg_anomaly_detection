@@ -153,9 +153,27 @@ internal GraphQL identifiers specific to this project; re-verify them with
 set -l project_id PVT_kwHOAQEwMM4BcY39
 set -l status_field_id PVTSSF_lAHOAQEwMM4BcY39zhXCFmM
 
-# Find an item's ID:
+# Find an item's ID. This full item-list read is the ONE board-wide discovery
+# snapshot a logical batch of work is allowed (see GraphQL quota stewardship in
+# github-metadata-automation.md): take it once, cache every item ID and current
+# value you need from it, and never repeat it per item or per mutation.
 gh project item-list 5 --owner Jared-Godar --format json --limit 500 \
   | jq '.items[] | select(.content.number == <ISSUE_OR_PR_NUMBER>) | .id'
+
+# Targeted read-back: read exactly the mutated item's field via node(id:) --
+# one GraphQL point regardless of board size, where a repeated item-list scan
+# pays full-board pagination on every verification (the issue #173 fix).
+# Prints the option name, "unset" when the field has no value, and nothing at
+# all when the item itself no longer exists.
+function project_status_read_back --argument-names item_id
+    gh api graphql \
+        -f query='query($item: ID!) { node(id: $item) { ... on ProjectV2Item {
+            fieldValueByName(name: "Status") {
+                ... on ProjectV2ItemFieldSingleSelectValue { name } } } } }' \
+        -f item=$item_id \
+        --jq 'if .data.node == null then empty
+              else (.data.node.fieldValueByName.name // "unset") end'
+end
 
 # Specific to this document's Project #5: item-edit takes the project's node ID,
 # but item-list takes its number and owner, so all three identifiers must be
@@ -166,11 +184,9 @@ function set_project_status_verified \
         gh project item-edit --id $item_id --field-id $field_id --project-id $project_id \
             --single-select-option-id $option_id
 
-        # A fresh read is authoritative even when gh reports "no changes to make".
-        set -l observed (gh project item-list 5 --owner Jared-Godar --format json --limit 500 \
-            | jq -r --arg item_id $item_id \
-                '.items[] | select(.id == $item_id) | .status // "unset"')
-        # An item absent from the read-back entirely (empty jq output) is not the
+        # A fresh targeted read is authoritative even when gh reports "no changes to make".
+        set -l observed (project_status_read_back $item_id)
+        # An item absent from the read-back entirely (empty output) is not the
         # same as an unset field: the requested state is unknowable, so stop.
         if test -z "$observed"
             echo "Item $item_id not found in the Project #5 read-back" >&2
@@ -193,15 +209,22 @@ set_project_status_verified $project_id <ITEM_ID> $status_field_id <OPTION_ID> <
 ```
 
 Run Project field mutations sequentially, never as one back-to-back batch. After each mutation,
-read the item again and compare the applicable `item-list` property with the exact requested
-value before starting the next field. The function above demonstrates the Status field; use the
-same two-attempt bound and the corresponding JSON property for every other single-select field.
+read the mutated item again -- via the targeted `node(id:)` read-back above, not another full
+`item-list` -- and compare the observed value with the exact requested value before starting the
+next field. The function above demonstrates the Status field; use the same two-attempt bound and
+the corresponding `fieldValueByName` name for every other single-select field.
 In particular, `error: no changes to make` is not proof that a value was already present: it is
 an inconclusive mutation result until a fresh read-back confirms the requested value. A
 conclusive `gh` failure (an authentication error, a wrong field or option ID) still prints its
 own stderr between the retries -- stop and fix that instead of re-running; only
 `no changes to make` is the inconclusive case (`set_merged_project_status.py` enforces this
 distinction explicitly by failing fast on every other error class).
+
+The read-back-verified mutation *rule* is unchanged by issue #173's quota hardening; only the
+read's *scope* narrowed (one item, one field) so that verification cost no longer scales with
+board size. Quota thresholds, consumption reporting, and the shared-pool recovery procedure are
+documented in [GraphQL quota
+stewardship](github-metadata-automation.md#graphql-quota-stewardship).
 
 | Status | Option ID |
 |---|---|

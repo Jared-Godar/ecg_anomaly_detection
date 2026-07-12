@@ -367,35 +367,147 @@ def test_find_prematurely_closed_issues_reports_only_the_flagged_ones() -> None:
 
 # --- I/O boundary (mocked subprocess) -----------------------------------------------
 
+# The shared access layer the script imports; referenced directly for its error types.
+_gha = vpm.github_api
 
-def test_fetch_pull_request_parses_gh_output() -> None:
-    """fetch_pull_request converts `gh pr view`'s JSON shape into a flat PullRequestMetadata.
 
-    Confirms the nested assignee/milestone/label objects in gh's JSON are
-    each reduced to the flat strings validate_pull_request expects.
+def _completed(payload: object) -> subprocess.CompletedProcess:
+    """Build a fake successful subprocess.CompletedProcess whose stdout is JSON.
+
+    Args:
+        payload: The object `gh` would have printed as JSON.
+
+    Returns:
+        A CompletedProcess with returncode 0 and empty stderr.
     """
 
-    fake_stdout = (
-        '{"number": 65, "assignees": [{"login": "Jared-Godar"}], '
-        '"milestone": {"title": "M5"}, "labels": [{"name": "type: modernization"}], '
-        '"body": "Closes #38", "state": "OPEN"}'
+    import json
+
+    return subprocess.CompletedProcess([], 0, stdout=json.dumps(payload), stderr="")
+
+
+def _pr_payload(body: str = "Closes #38", state: str = "open") -> dict[str, object]:
+    """Build a complete REST pull-request payload that passes every PR-level check.
+
+    Args:
+        body: The PR body text (controls closing references).
+        state: REST's lowercase state value ("open"/"closed").
+
+    Returns:
+        A dict shaped like `gh api repos/.../pulls/N` output.
+    """
+
+    return {
+        "number": 65,
+        "assignees": [{"login": "Jared-Godar"}],
+        "milestone": {"title": "M5"},
+        "labels": [{"name": "type: modernization"}, {"name": "area: ci-cd"}],
+        "body": body,
+        "state": state,
+    }
+
+
+def _issue_payload(milestone: str | None = "M5", state: str = "open") -> dict[str, object]:
+    """Build a REST issue payload carrying the two fields fetch_issue_overview reads.
+
+    Args:
+        milestone: The issue's milestone title, or None for unmilestoned.
+        state: REST's lowercase state value ("open"/"closed").
+
+    Returns:
+        A dict shaped like `gh api repos/.../issues/N` output.
+    """
+
+    return {
+        "milestone": {"title": milestone} if milestone else None,
+        "state": state,
+    }
+
+
+def _quota(remaining: int) -> subprocess.CompletedProcess:
+    """Build a fake `gh api rate_limit` response with the given GraphQL points remaining.
+
+    Args:
+        remaining: The GraphQL points remaining to report.
+
+    Returns:
+        A successful CompletedProcess carrying the rate_limit payload.
+    """
+
+    return _completed(
+        {
+            "resources": {
+                "graphql": {
+                    "limit": 5000,
+                    "used": 5000 - remaining,
+                    "remaining": remaining,
+                    "reset": 1770000000,
+                }
+            }
+        }
     )
-    # gh's real `pr view --json` output nests assignees/milestone/labels as objects.
-    with patch.object(
-        subprocess,
-        "run",
-        return_value=subprocess.CompletedProcess([], 0, stdout=fake_stdout, stderr=""),
-    ):
+
+
+def _complete_item(number: int) -> dict[str, object]:
+    """Build a Project item for one issue with every required field populated.
+
+    Args:
+        number: The GitHub issue number the item represents.
+
+    Returns:
+        A dict shaped like one entry of `gh project item-list`'s items array.
+    """
+
+    return {
+        "content": {"type": "Issue", "number": number},
+        "status": "In Progress",
+        "workstream": "Governance",
+        "issue Type": "Governance",
+        "priority": "High",
+        "risk": "Medium",
+        "size": "M",
+        "repository Area": "ci-cd",
+        "portfolio Signal": "Operational Maturity",
+        "target Release": "Future",
+    }
+
+
+def test_fetch_pull_request_parses_rest_output() -> None:
+    """fetch_pull_request converts REST's JSON shape into a flat PullRequestMetadata.
+
+    Confirms the nested assignee/milestone/label objects are reduced to the flat
+    strings validate_pull_request expects, and that REST's lowercase state is
+    normalized to the uppercase form the rest of the module compares against.
+    """
+
+    # REST reports state lowercase; everything else nests objects like GraphQL did.
+    with patch.object(subprocess, "run", return_value=_completed(_pr_payload())) as mock_run:
         pr = vpm.fetch_pull_request(65, repo=None)
     assert pr.number == 65
     assert pr.assignees == ("Jared-Godar",)
     assert pr.milestone == "M5"
-    assert pr.labels == ("type: modernization",)
+    assert "type: modernization" in pr.labels
     assert pr.state == "OPEN"
+    # The read must be REST (gh api repos/...), with gh's own {owner}/{repo}
+    # placeholders left for it to resolve when no explicit repo is given.
+    assert mock_run.call_args_list[0].args[0] == ["gh", "api", "repos/{owner}/{repo}/pulls/65"]
+
+
+def test_fetch_pull_request_embeds_an_explicit_repo_in_the_endpoint() -> None:
+    """With an explicit repo, the REST endpoint embeds it directly (gh api has no --repo)."""
+
+    # The explicit slug replaces the placeholders in the endpoint path.
+    with patch.object(subprocess, "run", return_value=_completed(_pr_payload())) as mock_run:
+        vpm.fetch_pull_request(65, repo="Jared-Godar/ecg_anomaly_detection")
+    assert mock_run.call_args_list[0].args[0] == [
+        "gh",
+        "api",
+        "repos/Jared-Godar/ecg_anomaly_detection/pulls/65",
+    ]
 
 
 def test_fetch_pull_request_raises_on_gh_failure() -> None:
-    """A failing `gh pr view` invocation is translated into MetadataValidationError with gh's stderr."""
+    """A failing REST read is translated into the shared GitHubApiError with gh's stderr."""
 
     # gh exits non-zero when the PR number doesn't exist.
     with (
@@ -404,107 +516,46 @@ def test_fetch_pull_request_raises_on_gh_failure() -> None:
             "run",
             side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="pull request not found"),
         ),
-        pytest.raises(vpm.MetadataValidationError, match="pull request not found"),
+        pytest.raises(_gha.GitHubApiError, match="pull request not found"),
     ):
         vpm.fetch_pull_request(999999, repo=None)
 
 
-# --- _run_gh rate-limit classification and retry ------------------------------------
+# --- fetch_issue_overview -------------------------------------------------------------
 
 
-def test_run_gh_fails_fast_on_primary_rate_limit_without_retrying() -> None:
-    """A primary (hours-long) rate limit is fatal immediately, with no retry attempt.
+def test_fetch_issue_overview_reads_milestone_and_state_in_one_call() -> None:
+    """One REST read yields both the milestone and the open/closed state.
 
-    Retrying inside a single CI job's lifetime cannot help this failure mode
-    (it takes up to an hour to clear), so a retry would only waste time and
-    delay the same unavoidable failure.
+    This single read is what both the milestone-inheritance and premature-
+    closure stages reuse -- the request-deduplication rule from issue #173.
     """
 
-    # GitHub's real wording for this case, observed live against PR #155.
-    error = subprocess.CalledProcessError(
-        1, ["gh"], stderr="GraphQL: API rate limit already exceeded for user ID 16855088."
-    )
-    # subprocess.run always raises this same error, so a retry would just hit
-    # it again -- the assertions below confirm _run_gh doesn't bother trying.
-    with (
-        patch.object(subprocess, "run", side_effect=error) as mock_run,
-        patch.object(vpm.time, "sleep") as mock_sleep,
-        pytest.raises(vpm.MetadataValidationError, match="rate limit exhausted"),
-    ):
-        vpm._run_gh(["pr", "view", "155"])
-    # Exactly one attempt: no retry loop should have run for this error class.
+    # A milestoned, closed issue exercises both extracted fields at once.
+    with patch.object(
+        subprocess, "run", return_value=_completed(_issue_payload("M8", state="closed"))
+    ) as mock_run:
+        overview = vpm.fetch_issue_overview(69, repo=None)
+    assert overview.number == 69
+    assert overview.milestone == "M8"
+    assert overview.is_closed is True
     assert mock_run.call_count == 1
-    mock_sleep.assert_not_called()
 
 
-def test_run_gh_retries_then_succeeds_on_secondary_rate_limit() -> None:
-    """A secondary (short-lived, abuse-detection) rate limit is retried and can recover."""
+def test_fetch_issue_overview_returns_none_milestone_when_absent() -> None:
+    """An issue with no milestone assigned reads as None, not an error or empty string."""
 
-    secondary_error = subprocess.CalledProcessError(
-        1, ["gh"], stderr="You have exceeded a secondary rate limit. Please wait."
-    )
-    success = subprocess.CompletedProcess([], 0, stdout='{"ok": true}', stderr="")
-    # Fails twice, then succeeds on the third attempt.
-    with (
-        patch.object(
-            subprocess, "run", side_effect=[secondary_error, secondary_error, success]
-        ) as mock_run,
-        patch.object(vpm.time, "sleep") as mock_sleep,
-    ):
-        result = vpm._run_gh(["pr", "view", "155"])
-    assert result == '{"ok": true}'
-    assert mock_run.call_count == 3
-    # First attempt has no delay; the two retries use the first two entries of
-    # the fixed backoff schedule.
-    assert [call.args[0] for call in mock_sleep.call_args_list] == [2, 5]
-
-
-def test_run_gh_raises_after_exhausting_secondary_rate_limit_retries() -> None:
-    """A secondary rate limit that never clears still fails, after using every retry slot."""
-
-    secondary_error = subprocess.CalledProcessError(
-        1, ["gh"], stderr="You have exceeded a secondary rate limit. Please wait."
-    )
-    # Every attempt fails the same way, so the retry schedule must exhaust
-    # completely before this raises.
-    with (
-        patch.object(subprocess, "run", side_effect=secondary_error) as mock_run,
-        patch.object(vpm.time, "sleep"),
-        pytest.raises(vpm.MetadataValidationError, match="secondary rate limit"),
-    ):
-        vpm._run_gh(["pr", "view", "155"])
-    # One initial attempt plus one retry per entry in the backoff schedule.
-    assert mock_run.call_count == 1 + len(vpm._SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS)
-
-
-def test_fetch_issue_milestone_parses_gh_output_with_a_milestone() -> None:
-    """fetch_issue_milestone extracts the milestone title from `gh issue view`'s JSON output."""
-
-    # gh's real `issue view --json milestone` output nests the title under "milestone".
+    # REST reports a JSON null when the issue has no milestone set.
     with patch.object(
-        subprocess,
-        "run",
-        return_value=subprocess.CompletedProcess(
-            [], 0, stdout='{"milestone": {"title": "M8"}}', stderr=""
-        ),
+        subprocess, "run", return_value=_completed(_issue_payload(None, state="open"))
     ):
-        assert vpm.fetch_issue_milestone(69, repo=None) == "M8"
+        overview = vpm.fetch_issue_overview(67, repo=None)
+    assert overview.milestone is None
+    assert overview.is_closed is False
 
 
-def test_fetch_issue_milestone_returns_none_when_absent() -> None:
-    """An issue with no milestone assigned returns None, not an error or an empty string."""
-
-    # gh reports a JSON null when the issue has no milestone set.
-    with patch.object(
-        subprocess,
-        "run",
-        return_value=subprocess.CompletedProcess([], 0, stdout='{"milestone": null}', stderr=""),
-    ):
-        assert vpm.fetch_issue_milestone(67, repo=None) is None
-
-
-def test_fetch_issue_milestone_raises_on_gh_failure() -> None:
-    """A failing `gh issue view` invocation is translated into MetadataValidationError with gh's stderr."""
+def test_fetch_issue_overview_raises_on_gh_failure() -> None:
+    """A failing REST read is translated into the shared GitHubApiError with gh's stderr."""
 
     # gh exits non-zero when the issue number doesn't exist.
     with (
@@ -513,13 +564,124 @@ def test_fetch_issue_milestone_raises_on_gh_failure() -> None:
             "run",
             side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="issue not found"),
         ),
-        pytest.raises(vpm.MetadataValidationError, match="issue not found"),
+        pytest.raises(_gha.GitHubApiError, match="issue not found"),
     ):
-        vpm.fetch_issue_milestone(999999, repo=None)
+        vpm.fetch_issue_overview(999999, repo=None)
 
 
-def test_fetch_project_items_raises_metadata_validation_error_on_failure() -> None:
-    """A failing `gh project item-list` invocation is translated into MetadataValidationError.
+# --- fetch_issue_closure_state (issue #158) -----------------------------------------
+
+
+def _timeline_pages(events: list[dict[str, object]]) -> subprocess.CompletedProcess:
+    """Build a fake `gh api ... --paginate --slurp` response of one timeline page.
+
+    Args:
+        events: The timeline event objects to include on that single page.
+
+    Returns:
+        A successful CompletedProcess whose stdout matches gh's --paginate --slurp
+        output shape: an array of pages, each page itself an array of event objects.
+    """
+
+    return _completed([events])
+
+
+def test_fetch_issue_closure_state_skips_the_timeline_for_an_open_issue() -> None:
+    """An open issue is reported as not closed, with no gh call at all.
+
+    The open/closed state arrives on the already-fetched overview, so an open
+    issue must cost zero additional API reads here.
+    """
+
+    overview = vpm.IssueOverview(38, milestone=None, is_closed=False)
+    # No subprocess mock response is provided: any call would fail the test.
+    with patch.object(subprocess, "run") as mock_run:
+        state = vpm.fetch_issue_closure_state(overview, repo=None)
+    assert state == vpm.IssueClosureState(38, is_closed=False, closed_via_commit=False)
+    mock_run.assert_not_called()
+
+
+def test_fetch_issue_closure_state_detects_a_merge_linked_closure() -> None:
+    """A closed timeline event carrying a commit_id is recognized as a merge-linked closure."""
+
+    overview = vpm.IssueOverview(38, milestone="M5", is_closed=True)
+    # The one gh call fetches the timeline; state came from the overview.
+    with patch.object(
+        subprocess,
+        "run",
+        return_value=_timeline_pages([{"event": "closed", "commit_id": "abc123"}]),
+    ) as mock_run:
+        state = vpm.fetch_issue_closure_state(overview, repo=None)
+    assert state == vpm.IssueClosureState(38, is_closed=True, closed_via_commit=True)
+    assert mock_run.call_count == 1
+
+
+def test_fetch_issue_closure_state_detects_a_non_merge_closure() -> None:
+    """A closed timeline event with commit_id null is recognized as a direct, manual closure.
+
+    Mirrors the real, live evidence behind issue #158: issue #154's timeline
+    showed exactly this shape (a closed event with no commit_id) while its
+    fixing PR #155 was still open.
+    """
+
+    overview = vpm.IssueOverview(154, milestone="M5", is_closed=True)
+    # The timeline's most recent closed event carries no commit_id.
+    with patch.object(
+        subprocess,
+        "run",
+        return_value=_timeline_pages([{"event": "closed", "commit_id": None}]),
+    ):
+        state = vpm.fetch_issue_closure_state(overview, repo=None)
+    assert state == vpm.IssueClosureState(154, is_closed=True, closed_via_commit=False)
+
+
+def test_fetch_issue_closure_state_uses_the_most_recent_closed_event() -> None:
+    """When an issue was closed, reopened, and closed again, only the latest closure counts.
+
+    The first closure here is merge-linked but the issue was later reopened and
+    then closed a second time manually; the manual (most recent) closure must be
+    the one that determines closed_via_commit, not the earlier merge-linked one.
+    """
+
+    overview = vpm.IssueOverview(38, milestone="M5", is_closed=True)
+    # Three timeline events model the close/reopen/close-manually history.
+    with patch.object(
+        subprocess,
+        "run",
+        return_value=_timeline_pages(
+            [
+                {"event": "closed", "commit_id": "abc123"},
+                {"event": "reopened"},
+                {"event": "closed", "commit_id": None},
+            ]
+        ),
+    ):
+        state = vpm.fetch_issue_closure_state(overview, repo=None)
+    assert state.closed_via_commit is False
+
+
+def test_fetch_issue_closure_state_passes_explicit_repo_directly_in_the_endpoint() -> None:
+    """With an explicit repo, the timeline endpoint embeds it directly (gh api has no --repo flag)."""
+
+    overview = vpm.IssueOverview(38, milestone="M5", is_closed=True)
+    # Capture the actual gh invocation to inspect the timeline call's endpoint below.
+    with patch.object(
+        subprocess,
+        "run",
+        return_value=_timeline_pages([{"event": "closed", "commit_id": "abc123"}]),
+    ) as mock_run:
+        vpm.fetch_issue_closure_state(overview, repo="Jared-Godar/ecg_anomaly_detection")
+    timeline_call_args = mock_run.call_args_list[0].args[0]
+    assert "repos/Jared-Godar/ecg_anomaly_detection/issues/38/timeline" in timeline_call_args
+    assert "--paginate" in timeline_call_args
+    assert "--slurp" in timeline_call_args
+
+
+# --- fetch_project_items --------------------------------------------------------------
+
+
+def test_fetch_project_items_raises_the_shared_error_on_failure() -> None:
+    """A failing `gh project item-list` invocation is translated into GitHubApiError.
 
     "insufficient scope" is a realistic failure here: reading Project #5
     items requires a `gh` token with the `project` scope granted.
@@ -532,135 +694,186 @@ def test_fetch_project_items_raises_metadata_validation_error_on_failure() -> No
             "run",
             side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="insufficient scope"),
         ),
-        pytest.raises(vpm.MetadataValidationError, match="insufficient scope"),
+        pytest.raises(_gha.GitHubApiError, match="insufficient scope"),
     ):
         vpm.fetch_project_items("Jared-Godar", 5)
 
 
-# --- fetch_issue_closure_state (issue #158) -----------------------------------------
+# --- main: quota safeguards, deduplication, and snapshot reuse (issue #173) -----------
 
 
-def _timeline_pages(events: list[dict[str, object]]) -> str:
-    """Build a fake `gh api ... --paginate --slurp` JSON payload of one timeline page.
+def test_main_fetches_each_closing_issue_once_across_stages(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """One closing issue costs exactly one native REST read across both consuming stages.
 
-    Args:
-        events: The timeline event objects to include on that single page.
-
-    Returns:
-        JSON text matching gh's --paginate --slurp output shape: an array of pages,
-        each page itself an array of event objects.
+    The milestone-inheritance stage and the premature-closure stage previously
+    each fetched the same issue; the deduplicated overview must satisfy both
+    from a single read (the request-deduplication regression from issue #173).
     """
 
-    import json
-
-    return json.dumps([events])
-
-
-def test_fetch_issue_closure_state_returns_not_closed_for_an_open_issue() -> None:
-    """An open issue is reported as not closed, with no timeline lookup performed.
-
-    Only one gh invocation (the state check) should happen; fetching the
-    timeline for an issue that isn't even closed would be wasted work.
-    """
-
-    # gh reports state "OPEN" for an issue that has never been closed.
+    # Full sequence: PR read, ONE issue read (open, so no timeline), quota
+    # preflight, the single Project snapshot, quota report.
     with patch.object(
         subprocess,
         "run",
-        return_value=subprocess.CompletedProcess([], 0, stdout='{"state": "OPEN"}', stderr=""),
+        side_effect=[
+            _completed(_pr_payload()),
+            _completed(_issue_payload()),
+            _quota(4988),
+            _completed({"items": [_complete_item(38)]}),
+            _quota(4985),
+        ],
     ) as mock_run:
-        state = vpm.fetch_issue_closure_state(38, repo=None)
-    assert state == vpm.IssueClosureState(38, is_closed=False, closed_via_commit=False)
-    assert mock_run.call_count == 1
+        exit_code = vpm.main(["--pr-number", "65", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 0
+    # Exactly one invocation may touch the issue's native endpoint.
+    issue_reads = [
+        call for call in mock_run.call_args_list if any("issues/38" in arg for arg in call.args[0])
+    ]
+    assert len(issue_reads) == 1
+    # The run's consumption report is printed for the GraphQL phase.
+    assert "3 consumed" in capsys.readouterr().err
 
 
-def test_fetch_issue_closure_state_detects_a_merge_linked_closure() -> None:
-    """A closed timeline event carrying a commit_id is recognized as a merge-linked closure."""
+def test_main_fetches_the_project_snapshot_once_for_multiple_closing_issues() -> None:
+    """Two closing issues share one Project snapshot -- never one item-list per issue.
 
-    state_response = subprocess.CompletedProcess([], 0, stdout='{"state": "CLOSED"}', stderr="")
-    timeline_response = subprocess.CompletedProcess(
-        [], 0, stdout=_timeline_pages([{"event": "closed", "commit_id": "abc123"}]), stderr=""
-    )
-    # First gh call checks state; second fetches the timeline once state is CLOSED.
-    with patch.object(subprocess, "run", side_effect=[state_response, timeline_response]):
-        state = vpm.fetch_issue_closure_state(38, repo=None)
-    assert state == vpm.IssueClosureState(38, is_closed=True, closed_via_commit=True)
-
-
-def test_fetch_issue_closure_state_detects_a_non_merge_closure() -> None:
-    """A closed timeline event with commit_id null is recognized as a direct, manual closure.
-
-    Mirrors the real, live evidence behind issue #158: issue #154's timeline
-    showed exactly this shape (a closed event with no commit_id) while its
-    fixing PR #155 was still open.
+    This is the one-snapshot-per-phase regression from issue #173: membership
+    and field checks for every closing issue must reuse the same fetched list.
     """
 
-    state_response = subprocess.CompletedProcess([], 0, stdout='{"state": "CLOSED"}', stderr="")
-    timeline_response = subprocess.CompletedProcess(
-        [], 0, stdout=_timeline_pages([{"event": "closed", "commit_id": None}]), stderr=""
-    )
-    # First gh call checks state; second fetches the timeline once state is CLOSED.
-    with patch.object(subprocess, "run", side_effect=[state_response, timeline_response]):
-        state = vpm.fetch_issue_closure_state(154, repo=None)
-    assert state == vpm.IssueClosureState(154, is_closed=True, closed_via_commit=False)
-
-
-def test_fetch_issue_closure_state_uses_the_most_recent_closed_event() -> None:
-    """When an issue was closed, reopened, and closed again, only the latest closure counts.
-
-    The first closure here is merge-linked but the issue was later reopened and
-    then closed a second time manually; the manual (most recent) closure must be
-    the one that determines closed_via_commit, not the earlier merge-linked one.
-    """
-
-    state_response = subprocess.CompletedProcess([], 0, stdout='{"state": "CLOSED"}', stderr="")
-    timeline_response = subprocess.CompletedProcess(
-        [],
-        0,
-        stdout=_timeline_pages(
-            [
-                {"event": "closed", "commit_id": "abc123"},
-                {"event": "reopened"},
-                {"event": "closed", "commit_id": None},
-            ]
-        ),
-        stderr="",
-    )
-    # Same two-call sequence as the other fetch_issue_closure_state tests: state
-    # check first, then the timeline once state is confirmed CLOSED.
-    with patch.object(subprocess, "run", side_effect=[state_response, timeline_response]):
-        state = vpm.fetch_issue_closure_state(38, repo=None)
-    assert state.closed_via_commit is False
-
-
-def test_fetch_issue_closure_state_passes_explicit_repo_directly_in_the_endpoint() -> None:
-    """With an explicit repo, the timeline endpoint embeds it directly (gh api has no --repo flag)."""
-
-    state_response = subprocess.CompletedProcess([], 0, stdout='{"state": "CLOSED"}', stderr="")
-    timeline_response = subprocess.CompletedProcess(
-        [], 0, stdout=_timeline_pages([{"event": "closed", "commit_id": "abc123"}]), stderr=""
-    )
-    # Capture the actual gh invocations to inspect the timeline call's endpoint below.
+    # Both issues are open (no timeline reads); the snapshot carries them both.
     with patch.object(
-        subprocess, "run", side_effect=[state_response, timeline_response]
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_pr_payload(body="Closes #38. Closes #40.")),
+            _completed(_issue_payload()),
+            _completed(_issue_payload()),
+            _quota(4988),
+            _completed({"items": [_complete_item(38), _complete_item(40)]}),
+            _quota(4985),
+        ],
     ) as mock_run:
-        vpm.fetch_issue_closure_state(38, repo="Jared-Godar/ecg_anomaly_detection")
-    timeline_call_args = mock_run.call_args_list[1].args[0]
-    assert "repos/Jared-Godar/ecg_anomaly_detection/issues/38/timeline" in timeline_call_args
-    assert "--paginate" in timeline_call_args
-    assert "--slurp" in timeline_call_args
+        exit_code = vpm.main(["--pr-number", "65", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 0
+    # Exactly one board-wide item-list across the whole run.
+    snapshot_reads = [call for call in mock_run.call_args_list if "item-list" in call.args[0]]
+    assert len(snapshot_reads) == 1
 
 
-def test_fetch_issue_closure_state_raises_on_gh_failure() -> None:
-    """A failing `gh issue view` state check is translated into MetadataValidationError."""
+def test_main_stops_with_exit_three_before_the_snapshot_when_quota_is_low(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A preflight below the threshold exits 3 without fetching the Project snapshot.
 
-    # gh exits non-zero when the issue number doesn't exist.
-    with (
-        patch.object(
-            subprocess,
-            "run",
-            side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="issue not found"),
-        ),
-        pytest.raises(vpm.MetadataValidationError, match="issue not found"),
+    The quota condition must not masquerade as a metadata violation (exit 1)
+    or an unreadable-project failure (exit 2/strict violation): it is shared-
+    pool infrastructure with its own exit code and "quota:" prefix.
+    """
+
+    # The preflight (and the report after it) see a nearly drained pool.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_pr_payload()),
+            _completed(_issue_payload()),
+            _quota(12),
+            _quota(12),
+        ],
+    ) as mock_run:
+        exit_code = vpm.main(
+            [
+                "--pr-number",
+                "65",
+                "--repo",
+                "Jared-Godar/ecg_anomaly_detection",
+                "--strict-project-checks",
+                "--min-graphql-quota",
+                "50",
+            ]
+        )
+    assert exit_code == 3
+    assert "quota:" in capsys.readouterr().err
+    # The expensive snapshot must never have been requested.
+    for call in mock_run.call_args_list:
+        assert "item-list" not in call.args[0]
+
+
+def test_main_maps_a_primary_rate_limit_to_exit_three(capsys: pytest.CaptureFixture) -> None:
+    """Primary rate-limit exhaustion exits 3, distinct from ordinary fetch failures (exit 2)."""
+
+    exhausted = subprocess.CalledProcessError(
+        1, ["gh"], stderr="GraphQL: API rate limit already exceeded for user ID 16855088."
+    )
+    # The very first read hits the drained pool; no preflight ever ran, so no
+    # consumption report is expected either.
+    with patch.object(subprocess, "run", side_effect=exhausted):
+        exit_code = vpm.main(["--pr-number", "65", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 3
+    assert "quota:" in capsys.readouterr().err
+
+
+def test_main_warns_and_skips_project_checks_when_not_strict(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Without --strict-project-checks, an unreadable Project degrades to a warning.
+
+    The PR-level checks still enforce; only the Project field checks are
+    skipped -- preserving the token-rollout behavior documented in the module
+    docstring across the issue #173 refactor.
+    """
+
+    scope_error = subprocess.CalledProcessError(1, ["gh"], stderr="insufficient scope")
+    # The snapshot read fails after a passing preflight; the report still runs.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_pr_payload()),
+            _completed(_issue_payload()),
+            _quota(4988),
+            scope_error,
+            _quota(4988),
+        ],
     ):
-        vpm.fetch_issue_closure_state(999999, repo=None)
+        exit_code = vpm.main(["--pr-number", "65", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 0
+    assert "skipping Project field checks" in capsys.readouterr().err
+
+
+def test_main_flags_a_manually_closed_issue_from_the_shared_overview(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A closing issue closed by a non-merge event is warned about, reusing the overview.
+
+    The closure stage must draw the issue's closed state from the overview
+    (one native read total) and spend its own gh call only on the timeline.
+    """
+
+    # The issue is closed, so the sequence gains exactly one timeline read.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_pr_payload()),
+            _completed(_issue_payload(state="closed")),
+            _timeline_pages([{"event": "closed", "commit_id": None}]),
+            _quota(4988),
+            _completed({"items": [_complete_item(38)]}),
+            _quota(4985),
+        ],
+    ) as mock_run:
+        exit_code = vpm.main(["--pr-number", "65", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 0
+    assert "non-merge event" in capsys.readouterr().err
+    # Still exactly one native read of the issue itself (the timeline endpoint
+    # is a different resource path and is allowed its own single read).
+    issue_reads = [
+        call
+        for call in mock_run.call_args_list
+        if any(arg.endswith("issues/38") for arg in call.args[0])
+    ]
+    assert len(issue_reads) == 1
