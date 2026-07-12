@@ -13,14 +13,14 @@ protected `test` partition, its shards, labels, predictions, aggregates, or metr
 
 ## Protected benchmark evaluation
 
-The `test` partition is reserved for a future, separately reviewed benchmark. Test evaluation is
-disabled by default. The repository has no supported held-out benchmark execution command, and the
-governance policy does not enable one. Any future implementation must require explicit opt-in and
-enforce the eligibility, immutable lineage, approval, rerun, disclosure, and archival controls in
-[Benchmark governance](benchmark-governance.md).
+The `test` partition remains disabled by default and may be accessed only by the separately
+reviewed, explicitly enabled command under the eligibility, immutable lineage, approval, rerun,
+disclosure, and archival controls in [Benchmark governance](benchmark-governance.md). Issue #73
+completed one governed execution; its aggregate evidence is recorded in
+[Held-out evaluation](held-out-evaluation.md).
 
-No benchmark metrics exist as part of this policy change. Adding test scoring requires a separate
-change with synthetic, data-independent tests and review of its access and artifact boundaries.
+Protected results may not be used for model or configuration iteration. Any rerun remains limited
+to the policy's documented pre-result infrastructure-failure or invalidating-defect conditions.
 
 ## Interpretation limits
 

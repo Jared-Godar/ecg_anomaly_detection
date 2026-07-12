@@ -125,10 +125,11 @@ No metric value is asserted in this card. Validation values are generated locall
 manifest and reproducibility evidence. They are not a final benchmark, evidence of test-set or
 population generalization, or evidence of clinical or medical utility.
 
-The indexed test partition remains protected and unopened by the supported evaluator. A future
-held-out evaluation requires a separate implementation and explicit approval under the
-[evaluation policy](docs/evaluation-policy.md) and
-[benchmark governance](docs/benchmark-governance.md). Governance alone does not authorize access.
+The indexed test partition remains protected from routine evaluation. Issue #73 completed one
+explicitly approved execution under the [evaluation policy](docs/evaluation-policy.md) and
+[benchmark governance](docs/benchmark-governance.md); the aggregate result and limitations are
+recorded in [held-out evaluation](docs/held-out-evaluation.md). Governance alone does not authorize
+further access.
 
 The saved 2022 notebook results are separate historical outputs. Their random beat-window split
 could place windows from the same record, including overlapping windows, on both sides of the split.

@@ -1,0 +1,82 @@
+name: held-out-evaluation
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository_root:
+        description: "Repository root (leave blank to use workspace root)"
+        required: false
+        default: "."
+      dataset_index:
+        description: "Path to dataset index JSON (relative to repository root)"
+        required: true
+      model:
+        description: "Path to frozen baseline model JSON (relative to repository root)"
+        required: true
+      training_metadata:
+        description: "Path to training metadata JSON (relative to repository root)"
+        required: true
+      held_out_config:
+        description: "Path to held-out execution config TOML"
+        required: false
+        default: "configs/evaluation-heldout.toml"
+      policy:
+        description: "Path to benchmark policy TOML"
+        required: false
+        default: "configs/benchmark-policy-v1.toml"
+      approval_record:
+        description: "Path to the verified approval record JSON"
+        required: true
+      output:
+        description: "Destination path for held-out metrics JSON"
+        required: true
+      disclosure:
+        description: "Destination path for disclosure evidence JSON"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate-held-out:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install locked environment
+        run: uv sync --locked
+
+      - name: Run held-out evaluation
+        env:
+          REPOSITORY_ROOT: ${{ inputs.repository_root }}
+          DATASET_INDEX: ${{ inputs.dataset_index }}
+          MODEL: ${{ inputs.model }}
+          TRAINING_METADATA: ${{ inputs.training_metadata }}
+          HELD_OUT_CONFIG: ${{ inputs.held_out_config }}
+          POLICY: ${{ inputs.policy }}
+          APPROVAL_RECORD: ${{ inputs.approval_record }}
+          OUTPUT: ${{ inputs.output }}
+          DISCLOSURE: ${{ inputs.disclosure }}
+        run: |
+          uv run ecg-data evaluate-held-out \
+            --repository-root "$REPOSITORY_ROOT" \
+            --dataset-index "$DATASET_INDEX" \
+            --model "$MODEL" \
+            --training-metadata "$TRAINING_METADATA" \
+            --held-out-config "$HELD_OUT_CONFIG" \
+            --policy "$POLICY" \
+            --approval-record "$APPROVAL_RECORD" \
+            --output "$OUTPUT" \
+            --disclosure "$DISCLOSURE"

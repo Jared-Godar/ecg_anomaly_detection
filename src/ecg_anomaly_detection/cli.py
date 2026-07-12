@@ -29,6 +29,12 @@ from ecg_anomaly_detection.evaluation import (
     evaluate_threshold_sweep_from_index,
     load_threshold_sweep_config,
 )
+from ecg_anomaly_detection.held_out_config import HeldOutConfigError, load_held_out_config
+from ecg_anomaly_detection.held_out_evaluation import (
+    HeldOutEvaluationError,
+    evaluate_held_out_from_index,
+    load_approval_record,
+)
 from ecg_anomaly_detection.inventory import (
     InventoryError,
     create_inventory,
@@ -284,6 +290,23 @@ def build_parser() -> argparse.ArgumentParser:
     approval_parser.add_argument("--approval", type=Path, required=True)
     approval_parser.add_argument("--output", type=Path, required=True)
 
+    held_out_parser = subparsers.add_parser(
+        "evaluate-held-out",
+        help=(
+            "execute the reviewed held-out evaluation protocol once against the protected "
+            "test partition, gated by a verified approval record"
+        ),
+    )
+    held_out_parser.add_argument("--repository-root", type=Path, default=Path.cwd())
+    held_out_parser.add_argument("--dataset-index", type=Path, required=True)
+    held_out_parser.add_argument("--model", type=Path, required=True)
+    held_out_parser.add_argument("--training-metadata", type=Path, required=True)
+    held_out_parser.add_argument("--held-out-config", type=Path, required=True)
+    held_out_parser.add_argument("--policy", type=Path, required=True)
+    held_out_parser.add_argument("--approval-record", type=Path, required=True)
+    held_out_parser.add_argument("--output", type=Path, required=True)
+    held_out_parser.add_argument("--disclosure", type=Path, required=True)
+
     threshold_sweep_parser = subparsers.add_parser(
         "evaluate-threshold-sweep",
         help=(
@@ -420,6 +443,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         if options.command == "validate-benchmark-policy":
             # Single-stage progress banner (#61): this command's whole body is one
             # unit of work, unlike run-pipeline's multi-stage sequence above.
+            # Keep the governed execution within the standard progress-reporting lifecycle.
             with reporter.stage("validate-benchmark-policy", 1, 1):
                 policy = load_benchmark_policy(options.policy)
                 print(f"validated benchmark policy {policy.policy_id} version {policy.version}")
@@ -429,6 +453,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         if options.command == "record-benchmark-approval":
             # Single-stage progress banner (#61): this command's whole body is one
             # unit of work.
+            # Keep the governed execution within the standard progress-reporting lifecycle.
             with reporter.stage("record-benchmark-approval", 1, 1):
                 record = record_benchmark_approval(
                     options.repository_root,
@@ -442,11 +467,39 @@ def main(arguments: Sequence[str] | None = None) -> int:
                     f"in {options.output}"
                 )
             return 0
+        # evaluate-held-out is the one-shot governance-gated command that opens the
+        # protected test partition.  It fails closed at every step before touching data.
+        if options.command == "evaluate-held-out":
+            # Keep the governed execution within the standard progress-reporting lifecycle.
+            with reporter.stage("evaluate-held-out", 1, 1):
+                held_out_config = load_held_out_config(
+                    options.held_out_config, allow_execution=True
+                )
+                policy = load_benchmark_policy(options.policy, allow_test_evaluation=True)
+                approval_record = load_approval_record(options.approval_record)
+                result = evaluate_held_out_from_index(
+                    options.repository_root,
+                    options.dataset_index,
+                    options.model,
+                    options.training_metadata,
+                    held_out_config,
+                    policy,
+                    approval_record,
+                    options.output,
+                    options.disclosure,
+                )
+                print(
+                    f"held-out evaluation complete: {result.window_count} test windows, "
+                    f"{result.record_count} records; metrics {options.output}, "
+                    f"disclosure {options.disclosure}"
+                )
+            return 0
         # This sweep runs exclusively over the indexed validation partition (see
         # evaluation.py's SUPPORTED_PARTITION); it never opens the protected test data.
         if options.command == "evaluate-threshold-sweep":
             # Single-stage progress banner (#61): this command's whole body is one
             # unit of work.
+            # Keep the governed execution within the standard progress-reporting lifecycle.
             with reporter.stage("evaluate-threshold-sweep", 1, 1):
                 sweep_config = load_threshold_sweep_config(options.config)
                 result = evaluate_threshold_sweep_from_index(
@@ -467,6 +520,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         if options.command == "index-dataset":
             # Single-stage progress banner (#61): this command's whole body is one
             # unit of work.
+            # Keep the governed execution within the standard progress-reporting lifecycle.
             with reporter.stage("index-dataset", 1, 1):
                 index = create_dataset_index(
                     options.repository_root,
@@ -505,6 +559,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         if options.command == "create-run-manifest":
             # Single-stage progress banner (#61): this command's whole body is one
             # unit of work.
+            # Keep the governed execution within the standard progress-reporting lifecycle.
             with reporter.stage("create-run-manifest", 1, 1):
                 manifest = create_run_manifest(
                     options.repository_root,
@@ -571,6 +626,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         if options.command == "split-windows":
             # Single-stage progress banner (#61): this command's whole body is one
             # unit of work.
+            # Keep the governed execution within the standard progress-reporting lifecycle.
             with reporter.stage("split-windows", 1, 1):
                 split_config = load_split_config(options.split_config)
                 metadata = load_window_metadata(_resolve_input_paths(options.input))
@@ -604,6 +660,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         if options.command == "acquire":
             # Single-stage progress banner (#61): this command's whole body is one
             # unit of work.
+            # Keep the governed execution within the standard progress-reporting lifecycle.
             with reporter.stage("acquire", 1, 1):
                 result = acquire_dataset(
                     config,
@@ -618,6 +675,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         elif options.command == "inventory":
             # Single-stage progress banner (#61): this command's whole body is one
             # unit of work.
+            # Keep the governed execution within the standard progress-reporting lifecycle.
             with reporter.stage("inventory", 1, 1):
                 manifest = create_inventory(config, options.data_dir)
                 write_manifest(manifest, options.output)
@@ -625,6 +683,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         elif options.command == "verify":
             # Single-stage progress banner (#61): this command's whole body is one
             # unit of work.
+            # Keep the governed execution within the standard progress-reporting lifecycle.
             with reporter.stage("verify", 1, 1):
                 manifest = read_manifest(options.manifest)
                 verify_inventory(config, options.data_dir, manifest)
@@ -632,6 +691,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         elif options.command == "validate-record":
             # Single-stage progress banner (#61): this command's whole body is one
             # unit of work.
+            # Keep the governed execution within the standard progress-reporting lifecycle.
             with reporter.stage("validate-record", 1, 1):
                 record = load_wfdb_record(config, options.data_dir, options.record_id)
                 report = validate_record(config, record.signal, record.annotations)
@@ -640,6 +700,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         elif options.command == "map-annotations":
             # Single-stage progress banner (#61): this command's whole body is one
             # unit of work.
+            # Keep the governed execution within the standard progress-reporting lifecycle.
             with reporter.stage("map-annotations", 1, 1):
                 record = load_wfdb_record(config, options.data_dir, options.record_id)
                 validate_record(config, record.signal, record.annotations)
@@ -650,6 +711,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         elif options.command == "extract-windows":
             # Single-stage progress banner (#61): this command's whole body is one
             # unit of work.
+            # Keep the governed execution within the standard progress-reporting lifecycle.
             with reporter.stage("extract-windows", 1, 1):
                 record = load_wfdb_record(config, options.data_dir, options.record_id)
                 validate_record(config, record.signal, record.annotations)
@@ -671,6 +733,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
         ConfigurationError,
         DatasetIndexError,
         EvaluationError,
+        HeldOutConfigError,
+        HeldOutEvaluationError,
         InventoryError,
         LocalArtifactLifecycleError,
         PipelineError,
