@@ -2,9 +2,10 @@
 
 This document is the authoritative design and content specification for the four
 documentation diagrams tracked by #103 (asset replacement) and #104 (generation
-workflow). It exists so that any contributor or agent session can produce or revise
-the diagrams without access to the original visual references, and so the visual
-system stays consistent across all four assets.
+workflow), plus the public-notebook lineage diagram tracked by #194. It exists so
+that any contributor or agent session can produce or revise the diagrams without
+access to the original visual references, and so the visual system stays consistent
+across all five assets.
 
 **Diagrams 2 (Local Flow and Artifact Zones) and 3 (Governance Status Lifecycle)
 are the maintainer-approved reference implementations** (both signed off
@@ -456,13 +457,63 @@ rsvg-convert --zoom 2 --format png --output docs/diagrams/exports/<name>.png doc
   a post-merge job that sets status to Merged. Dashed lines mark manual
   maintainer steps such as catalog review and view configuration."
 
+## Diagram 5 — Modern Pipeline and Evidence Lineage (approved 2026-07-13)
+
+- **Host**: `notebooks/01-narrative-walkthrough.ipynb`, in the repository-purpose
+  and modernization-context section.
+- **Files**: `src/modern-pipeline-lineage.dot` (flow with baked-in caption) and
+  `src/modern-pipeline-lineage-legend.dot`; primary export
+  `reports/figures/modern-pipeline-lineage.svg`.
+- **Export-location exception**: this SVG predates the diagram workflow and is the
+  deliberately allowlisted repository-owned figure embedded by the supported public
+  notebook. Issue #194 explicitly requires redesigning that established path. Keep
+  the stable notebook reference and tracked allowlist rather than duplicating or
+  moving the asset; this is the sole exception to the normal
+  `docs/diagrams/exports/` location for these documentation diagrams.
+- **Approved compose placement**: legend upper-right in the empty area above the
+  validation-only stage (`--right-inset 4 --top-inset 82`).
+- **Semantics**: a versioned configuration, tested-package, and CLI control plane
+  drives `acquire + inventory` → `validate + map annotations` → `extract labeled
+  windows` → `subject-aware split + dataset index` → training on the training
+  partition only → evaluation on the validation partition only. Selected stages
+  record operational and reproducibility evidence, which feeds an auditable run
+  manifest and artifact lineage. The protected test partition branches from the
+  grouped split/index, remains indexed, and is explicitly unopened and unreported.
+- **Positioning**: title, subtitle, caption, and protected-test wording must retain
+  the research/educational boundary. Validation evidence is not clinical or
+  benchmark evidence and must not imply demonstrated generalization.
+- **Caption**: "Modern Pipeline and Evidence Lineage. Versioned controls drive a
+  local, subject-aware workflow from acquisition through training and
+  validation-only evaluation. Evidence from each stage is linked in an auditable
+  run manifest; the protected test partition stays unopened. This is educational
+  pipeline evidence, not clinical or benchmark evidence."
+- **Alt text**: "Flow diagram of the modern pipeline and evidence lineage. Versioned
+  configuration, tested package contracts, and CLI orchestration drive acquisition
+  and inventory, validation and annotation mapping, labeled-window extraction,
+  subject-aware splitting and dataset indexing, training-only fitting, and
+  validation-only evaluation. Generated evidence feeds an auditable run manifest.
+  The protected test partition is indexed but remains unopened and unreported."
+- **Reproduction** (run from repository root):
+
+  ```fish
+  dot -Tsvg docs/diagrams/src/modern-pipeline-lineage.dot \
+    -o /tmp/modern-pipeline-lineage.svg
+  dot -Tsvg docs/diagrams/src/modern-pipeline-lineage-legend.dot \
+    -o /tmp/modern-pipeline-lineage-legend.svg
+  python3 docs/diagrams/compose_inset.py /tmp/modern-pipeline-lineage.svg \
+    /tmp/modern-pipeline-lineage-legend.svg \
+    reports/figures/modern-pipeline-lineage.svg \
+    --right-inset 4 --top-inset 82
+  python3 docs/diagrams/pad_svg.py reports/figures/modern-pipeline-lineage.svg
+  ```
+
 ## Review workflow
 
-Drafts are iterated on this branch with rendered previews shared for maintainer
-review. **No pull request is opened until the maintainer has explicitly approved
-the image quality of the complete four-diagram set.** All four diagrams have
-that approval as of 2026-07-11, which cleared doc integration (swapping the
-ASCII blocks for image references with captions and alt text) and the PR.
+Drafts are iterated on their feature branches with rendered previews shared for
+maintainer review. **No pull request is opened until the maintainer has explicitly
+approved the image quality of the relevant diagram set.** The original four diagrams
+were approved on 2026-07-11; diagram 5 was separately approved on 2026-07-13 before
+its tracked source and export were integrated.
 
 ## History: what was tried and rejected on diagram 3, and why
 

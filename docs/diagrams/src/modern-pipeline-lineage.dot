@@ -1,0 +1,57 @@
+digraph modern_pipeline_lineage {
+  bgcolor="#000C1E"
+  rankdir=TB
+  fontname="Helvetica,Arial,sans-serif"
+  labelloc=t
+  labeljust=c
+  fontsize=18
+  fontcolor="#FFFFFF"
+  margin="0.6,0.5"
+  label=<<B>MODERN PIPELINE &amp; EVIDENCE LINEAGE</B><BR/><BR/><FONT COLOR="#00D4E8" POINT-SIZE="13">Supported local research workflow with protected evaluation boundaries</FONT><BR/><BR/><BR/>>
+  nodesep=0.62
+  ranksep=0.72
+
+  node [shape=box style="rounded,filled" fontname="Helvetica,Arial,sans-serif" fontcolor="#FFFFFF" color="#00D4E8" fillcolor="#0A1B33" penwidth=2 margin="0.25,0.15" fontsize=12]
+  edge [color="#00D4E8" penwidth=1.5]
+
+  Control [label="Versioned Configuration + Tested Package Contracts + CLI Orchestration" fillcolor="#122238" color="#4A6584" fontcolor="#B9C7DA"]
+
+  AcquireInventory [label="Acquire + Inventory"]
+  ValidateMap [label="Validate + Map\nAnnotations"]
+  ExtractWindows [label="Extract Labeled\nWindows"]
+  SplitIndex [label="Subject-Aware Split\n+ Dataset Index"]
+  Training [label="Train on\nTraining Only"]
+  ValidationEval [label="Evaluate on\nValidation Only"]
+
+  ProtectedTest [label="Protected Test Partition\nIndexed, Unopened, Unreported" fillcolor="#2A1F0A" color="#F5A623" fontcolor="#FFD28A"]
+
+  Evidence [label="Generated Operational + Reproducibility Evidence\nprovenance · validation reports · split diagnostics · digests\nenvironment · runtime · resources · training metadata · validation metrics" fillcolor="#0A1B33" color="#8FE3F0" fontcolor="#8FE3F0" style="rounded,filled,dashed"]
+  RunManifest [label="Auditable Run Manifest\n+ Artifact Lineage" fillcolor="#00506B" color="#00E5FF"]
+
+  { rank=same; AcquireInventory; ValidateMap; ExtractWindows }
+  { rank=same; SplitIndex; Training; ValidationEval }
+  { rank=same; ProtectedTest; Evidence; RunManifest }
+
+  Control -> AcquireInventory
+  AcquireInventory -> ValidateMap
+  ValidateMap -> ExtractWindows
+  ExtractWindows -> SplitIndex
+  SplitIndex -> Training
+  Training -> ValidationEval
+
+  SplitIndex -> ProtectedTest [style=dashed color="#F5A623" arrowhead=vee label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="4" BGCOLOR="#000C1E"><TR><TD><FONT COLOR="#FFD28A" POINT-SIZE="10">Indexed Only</FONT></TD></TR></TABLE>>]
+
+  AcquireInventory -> Evidence [style=dashed color="#4A6584" arrowhead=vee]
+  SplitIndex -> Evidence [style=dashed color="#4A6584" arrowhead=vee]
+  ValidationEval -> Evidence [style=dashed color="#4A6584" arrowhead=vee]
+  Evidence -> RunManifest
+
+  Caption [shape=none margin=0 label=<
+<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="12" COLOR="#8A8F98" BGCOLOR="#FFFFFF">
+<TR><TD ALIGN="LEFT"><FONT COLOR="#000000" POINT-SIZE="11" FACE="Helvetica,Arial,sans-serif"><B>Modern Pipeline and Evidence Lineage.</B> Versioned controls drive a local, subject-aware workflow from<BR ALIGN="LEFT"/>acquisition through training and validation-only evaluation. Evidence from each stage is linked in an auditable<BR ALIGN="LEFT"/>run manifest; the protected test partition stays unopened. This is educational pipeline evidence, not clinical<BR ALIGN="LEFT"/>or benchmark evidence.<BR ALIGN="LEFT"/></FONT></TD></TR>
+</TABLE>
+>]
+
+  Evidence -> Caption [style=invis]
+  RunManifest -> Caption [style=invis]
+}

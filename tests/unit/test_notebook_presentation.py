@@ -70,6 +70,8 @@ def test_public_notebook_visual_assets_are_linked() -> None:
     assert "../docs/assets/ecg-notebook-narrative-walkthrough-banner.png" in combined_markdown
     assert "../docs/assets/ecg-gradient-boosting-validation-banner.png" in combined_markdown
     assert "../reports/figures/modern-pipeline-lineage.svg" in combined_markdown
+    assert "../docs/diagrams/src/modern-pipeline-lineage.dot" in combined_markdown
+    assert "../docs/diagrams/design-spec.md" in combined_markdown
 
 
 @pytest.mark.parametrize("notebook_path", PUBLIC_NOTEBOOKS, ids=lambda path: path.stem)
