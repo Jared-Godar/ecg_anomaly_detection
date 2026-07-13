@@ -44,6 +44,10 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   explains the split and training seeds it already surfaces, and notebook 02 explains its fixed
   `random_state=0` — in every case so repeated local runs reproduce the same subject partitions,
   the same fitted models, and the same validation metrics. Seed values themselves are unchanged.
+- Added a recovery note to the Step 0 notebook for the rare transient PhysioNet download timeout,
+  explaining that the failure is a network hiccup rather than a broken notebook and that a re-run
+  restarts the atomic download cleanly. The deliberate defensive handling (graceful messaging and
+  optional connectivity retries) is tracked separately in #201.
 
 ### Fixed
 
