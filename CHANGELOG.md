@@ -30,18 +30,12 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   scoring, makes successful repository path resolution visible, and emits a qualified minute-scale
   elapsed heartbeat during an otherwise silent fit. All three notebooks now open with a concise,
   conversational task overview, qualified first-run/rerun timing, and compact jump links; detailed
-  version history is preserved in bottom appendices. Notebook 00 also compares local VS
-  Code/Jupyter, GitHub Codespaces, and hosted Google Colab, then stores an interactive profile
-  choice consumed by repository preparation, locked dependency bootstrap, diagnostics, and the
-  CLI invocation; `ipywidgets` is now a direct locked notebook dependency with a plain assignment
-  fallback. Successful hosted bootstrap now captures verbose dependency export and installation
-  output in a temporary runtime log. Hosted dependency replacement now proves a new kernel process
-  identity across restart before verifying NumPy, SciPy, scikit-learn, Matplotlib, and the editable
-  project in the active process, preventing mixed compiled-package state. Notebook 00's final continuity
-  cell and notebooks 01/02's opening continuity cells are no-ops for persistent local/Codespaces
-  checkouts; Colab instead uses a private, versioned, digest-verified Google Drive handoff tied to
-  the exact source commit. The handoff transports only required evidence and train/validation
-  shards, excluding raw acquisition files and protected-test shard content.
+  version history is preserved in bottom appendices. The supported workflow now stays within one
+  local VS Code/Jupyter checkout using its locked `.venv` kernel. Notebook 00 verifies and retains
+  generated state in that checkout, while notebooks 01 and 02 begin with visible local continuity
+  confirmations before independently checking their required artifacts; no selector, cross-runtime
+  copy, upload, external-storage handoff, or programmatic kernel restart remains. Optional
+  web-runtime integration is deferred to #200 instead of being represented as supported by #194.
   Expectations remain deliberately approximate and measured times remain observational,
   with no changes to model inputs, parameters, metrics, evaluation boundaries, saved outputs, or
   artifact policy.

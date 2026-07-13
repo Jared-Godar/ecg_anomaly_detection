@@ -173,8 +173,10 @@ already had a docstring), and 330 standalone comment lines. The completed #151 a
 same 31 code cells and 39 definitions (no definitions were added or removed), 2,347 source lines,
 and 689 standalone comment lines. Subsequent maintained notebook work remains under the same gate.
 The current Issue #194 inventory contains 37 total code cells; two are Bash magics intentionally
-skipped by the Python AST audit, leaving 35 audited Python cells, 3,285 Python source lines, 48
-definitions, and 872 standalone comment lines.
+skipped by the Python AST audit, leaving 35 audited Python cells, 2,533 Python source lines, 40
+definitions, and 773 standalone comment lines. The reduction from the earlier in-progress count
+reflects removal of an unvalidated cross-runtime setup path; the supported local execution,
+progress-reporting, artifact-verification, and evaluation-boundary commentary remains audited.
 
 `notebooks/local/` and `archive/original_2022/` remain excluded from this policy, matching the
 repository-wide scope above. The protected held-out test partition was not opened, inspected, or

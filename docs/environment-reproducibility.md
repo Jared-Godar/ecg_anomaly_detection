@@ -21,7 +21,7 @@ Run the smallest command that supports the work being performed:
 |---|---|---|
 | Core package and CLI | `uv sync --locked` | Package runtime dependencies (`numpy`, `wfdb`) |
 | Repository engineering | `uv sync --locked --dev` | Core plus tests, coverage, type checking, and hooks |
-| Supported notebooks | `uv sync --locked --group notebooks` | Core plus IPython, Jupyter, kernel, widget selector, plotting, scikit-learn, and static notebook validation infrastructure |
+| Supported notebooks | `uv sync --locked --group notebooks` | Core plus IPython, Jupyter, kernel, plotting, scikit-learn, and static notebook validation infrastructure |
 | Local model experiments | `uv sync --locked --group notebooks --group experiments` | Notebook stack (already includes scikit-learn) plus LightGBM and XGBoost |
 
 The `dev` group must contain repository engineering tools only. Notebook infrastructure belongs in
@@ -51,66 +51,36 @@ The executable path must end in this repository's `.venv/bin/python`. Validate o
 with the group on every `uv run` command so `uv` selects the intended environment:
 
 ```fish
-uv run --group notebooks python -c "import IPython, ipykernel, ipywidgets, matplotlib, matplotlib_inline, nbformat, sklearn; print('notebooks ok')"
+uv run --group notebooks python -c "import IPython, ipykernel, matplotlib, matplotlib_inline, nbformat, sklearn; print('notebooks ok')"
 uv run --group notebooks --group experiments python -c "import lightgbm, xgboost; print('experiments ok')"
 ```
 
-## Choose a notebook execution location
+## Run the supported local notebook workflow
 
-The first executable section of notebook 00 stores an execution profile used by every later
-environment-sensitive cell. VS Code and JupyterLab are interfaces rather than separate execution
-locations: when either selects this checkout's `.venv`, use the `local` profile.
+The supported public workflow is one local repository checkout opened in VS Code or JupyterLab
+with that checkout's `.venv` kernel. Notebook 00 synchronizes the locked `notebooks` group, runs
+the governed pipeline through `uv run`, and leaves ignored generated state in the checkout.
+Notebooks 01 and 02 reuse that same state in place after independently verifying their required
+artifacts; no archive, copy, upload, or external storage transition is part of the workflow.
 
-| Profile | Choose it when | What notebook 00 does |
-|---|---|---|
-| `local` (recommended) | The repository is cloned on the user's computer and durable ignored artifacts are useful | Keeps the checkout in place, syncs the locked `notebooks` group into `.venv`, and runs the CLI through `uv run` |
-| `codespaces` | A browser-hosted Linux workspace is preferable to local Python setup | Keeps the codespace checkout in place and uses the same locked `.venv` path as local execution |
-| `colab` | A disposable hosted trial is acceptable and private Google Drive storage is available for transitions | Clones the public repository into `/content/ecg_anomaly_detection` when absent, installs the locked notebook dependency set into the hosted system environment, restarts the kernel once before compiled-package imports, invokes the installed CLI directly, and exports a bounded private handoff after Step 0 |
+From the repository root:
 
-The selector defaults to `auto`: it detects Colab first, then Codespaces, and otherwise selects
-local. A visible dropdown can override that choice before continuing. If widgets are unavailable,
-set `REQUESTED_EXECUTION_PROFILE` to `local`, `codespaces`, or `colab` and rerun the selector. The
-preparation cell rejects a Colab choice outside an actual Colab runtime and refuses to overwrite an
-ambiguous existing `/content/ecg_anomaly_detection` path.
+```fish
+uv sync --locked --group notebooks
+uv run --group notebooks jupyter lab notebooks/00-environment-setup-and-artifact-generation.ipynb
+```
 
-Colab can attach notebooks 00, 01, and 02 to different disposable VMs. An in-memory dropdown
-variable and files under `/content` therefore cannot be the cross-notebook continuity contract.
-After Step 0 succeeds, notebook 00's final continuity cell explicitly mounts the reviewer's private
-Google Drive and writes a versioned ZIP plus `latest.json` under
-`MyDrive/ecg-anomaly-detection/notebook-handoffs/`. The manifest records the selected `colab`
-profile, exact repository commit, run ID, file sizes, and SHA-256 digests. It includes only the Step
-0 status, downstream indexes/manifests, optional validation baseline, and train/validation waveform
-shards. Raw acquisition files and protected-test shards, metrics, and predictions are excluded.
+Run notebooks 00, 01, and 02 in order. Keep the same checkout and select the registered project
+kernel in each notebook. Generated source data and run artifacts remain ignored local files; they
+are not committed data, release artifacts, benchmark evidence, or protected-test evidence. The
+notebook time ranges are qualified planning guidance because download speed, local cache state,
+CPU, memory, disk, and system load vary.
 
-The opening continuity cell in notebooks 01 and 02 mounts the same private Drive, verifies the
-pointer and archive digest, checks out the exact recorded commit, restores every member through
-digest/size and partition-boundary checks, and refuses to overwrite different generated state.
-The same cells are read-only no-ops in local Jupyter/VS Code and Codespaces because those profiles
-already share a persistent checkout. The Drive archive is private user-owned transport state, not
-a tracked repository artifact, supported benchmark artifact, or distribution mechanism.
+Optional web-runtime integration is not currently supported or documented as a user workflow.
+Future evaluation, including explicit cost disclosure and cross-notebook continuity, is tracked in
+[Issue #200](https://github.com/Jared-Godar/ecg_anomaly_detection/issues/200).
 
-The execution profile changes environment and repository-location arguments only. All profiles use
-the same tracked dataset, annotation, window, grouped-split, training, and validation-evaluation
-configs. Generated source data and run artifacts remain ignored runtime-local files; they are not
-committed or benchmark evidence. A Codespaces filesystem can persist across stop/start but is
-removed when the codespace is deleted, while each hosted Colab VM and its `/content` files are
-ephemeral. The private handoff preserves only the bounded downstream state described above; it does
-not make the VM, raw data, or kernel state persistent. Runtime resources and availability can vary,
-so the notebook's time ranges are qualified planning guidance rather than guarantees.
-
-The hosted bootstrap captures complete `uv export`, installation, and fresh-process import detail
-in `/tmp/ecg-notebook-bootstrap.log` and prints only phase-level status in the notebook. A failed
-hosted phase stops and points to that complete temporary log. After a successful install, the
-calling kernel process identity (PID plus Linux process start time) is recorded in
-`/content/.ecg-notebook-bootstrap.json`, and readiness is withheld until a different post-restart
-kernel verifies NumPy, SciPy, scikit-learn, Matplotlib, and the editable repository package. This
-prevents the mixed compiled-package state that can result from
-replacing NumPy/SciPy files beneath a live process. Both files are diagnostic runtime state, are not
-repository artifacts, and disappear with the Colab VM.
-
-Platform references: [VS Code Jupyter kernel selection](https://code.visualstudio.com/docs/datascience/jupyter-kernel-management),
-[GitHub Codespaces lifecycle](https://docs.github.com/en/codespaces/about-codespaces/understanding-the-codespace-lifecycle),
-and [Google Colab FAQ](https://research.google.com/colaboratory/faq.html).
+Platform reference: [VS Code Jupyter kernel selection](https://code.visualstudio.com/docs/datascience/jupyter-kernel-management).
 
 ## Register and select the notebook kernel
 
@@ -148,7 +118,7 @@ checkpoints, local data, generated artifacts, models, or machine-specific config
 
 ## Troubleshooting
 
-- Missing `IPython`, `ipykernel`, `ipywidgets`, `matplotlib`, `matplotlib_inline`, or `sklearn`: sync and run
+- Missing `IPython`, `ipykernel`, `matplotlib`, `matplotlib_inline`, or `sklearn`: sync and run
   with `--group notebooks`; do not install the package globally.
 - Missing `lightgbm` or `xgboost`: add `--group experiments` together with the notebook group for
   local playground work.
@@ -159,11 +129,5 @@ checkpoints, local data, generated artifacts, models, or machine-specific config
 - Import succeeds in a terminal but fails in a notebook: the terminal and notebook are using
   different interpreters. Select the registered project kernel rather than system, Homebrew,
   Conda, or an IDE-hidden Python.
-- A Colab notebook asks for a restart after dependency setup: wait for reconnection, then run that
-  notebook again from the top. The runtime-local PID marker prevents another installation and the
-  opening cell verifies the restarted kernel before downstream imports.
-- Notebook 01 or 02 reports a missing Colab handoff: return to notebook 00's original VM, verify
-  Step 0, and run its final continuity cell. A normal repository-relative notebook link may open a
-  separate VM; `/content` from notebook 00 is not expected to appear there.
 - A package disappears after `uv sync`: declare it in the correct group or select its existing
   group. Do not repair the environment with an unrecorded `pip install`.

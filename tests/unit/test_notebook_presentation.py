@@ -5,7 +5,6 @@ from __future__ import annotations
 import html
 import re
 import struct
-import tomllib
 from collections import defaultdict
 from pathlib import Path
 
@@ -25,14 +24,6 @@ PUBLIC_NOTEBOOKS = (
 # Keep execution-UX assertions anchored to the ordered public workflow without
 # duplicating repository-relative paths outside PUBLIC_NOTEBOOKS.
 STEP0_NOTEBOOK, STEP1_NOTEBOOK, STEP2_NOTEBOOK = PUBLIC_NOTEBOOKS
-# The direct widget dependency makes the selector available in the supported
-# notebook environment instead of depending accidentally on Jupyter's transitive set.
-PROJECT_CONFIGURATION = REPOSITORY_ROOT / "pyproject.toml"
-# Hosted dependency commands live in a tested source module so notebook cells stay
-# readable while retaining exact lock/install/restart assertions here.
-HOSTED_BOOTSTRAP_IMPLEMENTATION = (
-    REPOSITORY_ROOT / "src/ecg_anomaly_detection/hosted_notebook_runtime.py"
-)
 # The approved Step 1/Step 2 banners must retain notebook 00's exact raster
 # contract, so future replacements cannot silently drift in size or PNG mode.
 BANNER_PATHS = (
@@ -341,38 +332,24 @@ def test_step0_preserves_streaming_with_qualified_runtime_guidance() -> None:
     assert "Environment bootstrap complete after" in combined_code
     assert "time.monotonic() - bootstrap_started" in combined_code
 
-    # The hosted path delegates exact lock/install work to a tested helper, requires a
-    # process-identity-proven clean restart, then verifies imports in the active kernel.
+    # Bootstrap remains one local project-environment path; it does not install into
+    # the kernel's system environment or create a second checkout.
     bootstrap_cells = [
-        cell.source for cell in code_cells if "scripts/bootstrap_hosted_notebook.py" in cell.source
+        cell.source
+        for cell in code_cells
+        if "Bootstrap the supported local notebook environment" in cell.source
     ]
     assert len(bootstrap_cells) == 1
     bootstrap_source = bootstrap_cells[0]
-    # Check each restart/current-kernel verification boundary independently.
-    for restart_contract in (
-        "hosted.returncode not in {0, 75}",
-        "application.kernel.do_shutdown(True)",
-        "import numpy",
-        "import scipy",
-        "import sklearn",
-        "expected_source not in package_origin.parents",
+    # Verify every local bootstrap boundary independently so one surviving command
+    # cannot hide a removed environment check.
+    for local_bootstrap_contract in (
+        'bootstrap_mode = os.environ.get("ECG_NOTEBOOK_BOOTSTRAP_MODE", "project-venv")',
+        'subprocess.run([uv_executable, "sync", "--group", "notebooks"]',
+        '[uv_executable, "run", "ecg-data", "--help"]',
+        'raise RuntimeError(f"Unsupported notebook bootstrap mode: {bootstrap_mode}")',
     ):
-        assert restart_contract in bootstrap_source
-
-    hosted_implementation = HOSTED_BOOTSTRAP_IMPLEMENTATION.read_text(encoding="utf-8")
-    # Exact helper commands preserve locked hashes, system-kernel targeting, editable
-    # project installation, and a retained complete stdout/stderr log.
-    for helper_contract in (
-        '"export"',
-        '"--locked"',
-        '"--no-default-groups"',
-        '"--require-hashes"',
-        '"--system"',
-        '"--editable"',
-        "stdout=log",
-        "stderr=subprocess.STDOUT",
-    ):
-        assert helper_contract in hosted_implementation
+        assert local_bootstrap_contract in bootstrap_source
 
     pipeline_cells = [cell.source for cell in code_cells if "def stream_pipeline" in cell.source]
     assert len(pipeline_cells) == 1
@@ -395,112 +372,89 @@ def test_step0_preserves_streaming_with_qualified_runtime_guidance() -> None:
     assert "pipeline_runner_ready" in pipeline_source
 
 
-def test_step0_execution_selector_drives_profile_sensitive_cells() -> None:
-    """Step 0 stores one environment choice and consumes it without changing pipeline policy."""
+def test_step0_uses_one_explicit_local_execution_contract() -> None:
+    """Step 0 supports the project checkout without runtime selectors or hosted mutation."""
     markdown = _markdown(STEP0_NOTEBOOK)
     code_cells = _code_cells(STEP0_NOTEBOOK)
     combined_code = "\n".join(cell.source for cell in code_cells)
 
-    # Public guidance must explain the three supported locations and their persistence
-    # tradeoffs before asking a new user to choose one.
-    # Check each decision aid independently so removing one profile cannot hide behind
-    # the remaining table prose.
+    # Public guidance identifies the supported editor/kernel contract before any
+    # dependency or data work begins and points experimental browser work elsewhere.
     for guidance in (
-        "Local checkout — VS Code or JupyterLab (recommended)",
-        "GitHub Codespaces — VS Code in a browser",
-        "Google Colab hosted runtime",
-        "files are ephemeral",
+        "supported local checkout",
+        "repository's `.venv` interpreter",
+        "Issue #200",
     ):
         assert guidance in markdown
 
-    # The selector keeps a deterministic assignment fallback while offering an actual
-    # dropdown in the locked notebook environment.
-    selector_cells = [cell.source for cell in code_cells if "EXECUTION_PROFILES" in cell.source]
-    assert len(selector_cells) == 1
-    selector_source = selector_cells[0]
-    assert 'REQUESTED_EXECUTION_PROFILE = "auto"' in selector_source
-    assert "widgets.Dropdown(" in selector_source
-    assert "activate_execution_profile" in selector_source
-    # Require every concrete selector value so one profile cannot disappear silently.
-    for profile in ('"local"', '"codespaces"', '"colab"'):
-        assert profile in selector_source
-
-    # Profile preparation is guarded: only a real Colab runtime may create the hosted
-    # checkout, and an existing ambiguous path is never overwritten.
-    preparation_cells = [
-        cell.source for cell in code_cells if "PUBLIC_REPOSITORY_URL" in cell.source
+    # The confirmation cell fixes one local environment and later operations use the
+    # checkout's locked dependency group and package CLI.
+    confirmation_cells = [
+        cell.source
+        for cell in code_cells
+        if "Confirm the supported local execution contract" in cell.source
     ]
-    assert len(preparation_cells) == 1
-    preparation_source = preparation_cells[0]
-    assert 'if EXECUTION_PROFILE == "colab"' in preparation_source
-    assert 'if "google.colab" not in sys.modules' in preparation_source
-    assert '["git", "clone", "--depth", "1"' in preparation_source
-    assert "not a valid checkout" in preparation_source
-
-    # Later environment-sensitive operations consume the exported choice. The locked
-    # configs, grouped split, and validation-only evaluation arguments remain one path.
+    assert len(confirmation_cells) == 1
+    assert 'EXECUTION_ENVIRONMENT = "local checkout"' in confirmation_cells[0]
+    assert '"execution_environment": EXECUTION_ENVIRONMENT' in confirmation_cells[0]
+    assert '"bootstrap_mode": "project-venv"' in confirmation_cells[0]
     assert "ECG_NOTEBOOK_BOOTSTRAP_MODE" in combined_code
     assert "uv sync --group notebooks" in combined_code
-    assert "scripts/bootstrap_hosted_notebook.py" in combined_code
-    assert "application.kernel.do_shutdown(True)" in combined_code
-    assert 'if os.environ.get("ECG_NOTEBOOK_BOOTSTRAP_MODE") == "hosted-system"' in combined_code
+    assert 'PIPELINE_COMMAND = [\n    "uv",\n    "run",\n    "ecg-data"' in combined_code
     assert combined_code.count('"--evaluation-config"') == 1
     assert combined_code.count('"configs/evaluation-baseline-v1.toml"') == 1
+    # No public code cell retains a hosted selector, clone, external-storage transfer,
+    # or programmatic kernel restart after the local-only scope decision.
+    for removed_contract in (
+        "google.colab",
+        "CODESPACES",
+        "widgets.Dropdown",
+        "PUBLIC_REPOSITORY_URL",
+        "bootstrap_hosted_notebook.py",
+        "notebook_handoff.py",
+        "application.kernel.do_shutdown",
+    ):
+        assert removed_contract not in combined_code
 
 
-def test_notebook_group_declares_widget_selector_dependency() -> None:
-    """The interactive selector dependency is direct, bounded, and reproducible."""
-    project = tomllib.loads(PROJECT_CONFIGURATION.read_text(encoding="utf-8"))
-    notebook_dependencies = project["dependency-groups"]["notebooks"]
-
-    assert "ipywidgets>=8.1,<9" in notebook_dependencies
-
-
-def test_public_notebook_continuity_is_one_bottom_export_and_one_top_restore() -> None:
-    """Persistent checkouts no-op while Colab uses one bounded export/restore surface."""
+def test_public_notebook_continuity_reuses_one_local_checkout_without_copying() -> None:
+    """All three notebooks reuse generated local state without transfer or restoration."""
 
     step0_cells = _code_cells(STEP0_NOTEBOOK)
-    export_cells = [
-        cell.source for cell in step0_cells if "Preserve verified Step 0 continuity" in cell.source
+    confirmation_cells = [
+        cell.source for cell in step0_cells if "Confirm verified Step 0 continuity" in cell.source
     ]
-    assert len(export_cells) == 1
-    export_source = export_cells[0]
-    # The final Step 0 control branches once: persistent hosts print a no-op, while
-    # Colab explicitly mounts Drive and invokes the tested bounded archive helper.
-    for export_contract in (
-        'if EXECUTION_PROFILE != "colab"',
+    assert len(confirmation_cells) == 1
+    confirmation_source = confirmation_cells[0]
+    # Require each no-copy and protected-partition field in Step 0's handoff summary.
+    for local_contract in (
+        '"status": "local_checkout_ready"',
         '"action": "none"',
-        "Shared checkout retained; no handoff export is needed",
-        "from google.colab import drive",
-        '"scripts/notebook_handoff.py"',
-        '"create"',
-        '"protected_test_shards_copied": False',
+        '"generated_state_copied": False',
+        '"protected_test_partition_opened": False',
+        "downstream notebooks reuse verified state in place",
     ):
-        assert export_contract in export_source
+        assert local_contract in confirmation_source
 
-    # Both downstream notebooks expose the same single opening transition cell and
-    # keep local/Codespaces on the existing checkout without archive operations.
+    # Both downstream notebooks expose the same single opening confirmation and keep
+    # all generated state in place before their strict artifact prerequisites run.
     for notebook_path in (STEP1_NOTEBOOK, STEP2_NOTEBOOK):
-        restore_cells = [
+        local_cells = [
             cell.source
             for cell in _code_cells(notebook_path)
-            if "Resume the execution environment" in cell.source
+            if "Confirm the supported local checkout and project kernel" in cell.source
         ]
-        assert len(restore_cells) == 1
-        restore_source = restore_cells[0]
-        # Each copy must retain the full no-op, restore, restart, and protected boundary.
-        for restore_contract in (
-            "if not running_in_colab",
-            '"action": "none"',
-            "Shared checkout detected; no handoff import is needed",
-            "from google.colab import drive",
-            '"restore"',
-            "continuity_sha256(archive_path)",
-            "scripts/bootstrap_hosted_notebook.py",
-            "application.kernel.do_shutdown(True)",
-            '"protected_test_shards_restored": False',
+        assert len(local_cells) == 1
+        local_source = local_cells[0]
+        # The two downstream confirmations must expose the same local safety contract.
+        for local_contract in (
+            '"status": "local_checkout_ready"',
+            '"action": "reuse_generated_state_in_place"',
+            '"generated_state_copied": False',
+            '"protected_test_partition_opened": False',
+            "Step 0 state remains in place",
         ):
-            assert restore_contract in restore_source
+            assert local_contract in local_source
 
 
 def test_reviewed_notebook_summaries_expose_paths_channel_and_record_exclusions() -> None:

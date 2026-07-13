@@ -12,44 +12,25 @@ This directory uses a small, ordered public notebook workflow.
 | 1 | [`01-narrative-walkthrough.ipynb`](./01-narrative-walkthrough.ipynb) | Supported modernization narrative: architecture, data lifecycle, governance, reproducibility, and repository positioning. |
 | 2 | [`02-high-performing-gradient-boosting-validation.ipynb`](./02-high-performing-gradient-boosting-validation.ipynb) | Streamlined validation-only gradient boosting example using generated Step 0 artifacts. |
 
-## Choose where to run
+## Supported local execution
 
-Notebook 00 begins with a profile selector and carries that stored choice through repository
-preparation, dependency bootstrap, runtime diagnostics, and pipeline invocation:
+Run the complete 00 → 01 → 02 walkthrough from one local repository checkout in VS Code or
+JupyterLab. Sync the locked notebook dependencies, select that checkout's `.venv` kernel in every
+notebook, and keep the same checkout open across all three steps:
 
-| Profile | Recommended use | Persistence and setup |
-|---|---|---|
-| Local checkout in VS Code or JupyterLab | Recommended for the complete 00 → 01 → 02 walkthrough | Uses the checkout's locked `.venv`; ignored data and artifacts remain until the user removes them |
-| GitHub Codespaces | Browser-hosted VS Code when local Python setup is undesirable | Uses the checkout's locked `.venv`; saved files remain until the codespace is deleted |
-| Hosted Google Colab | Disposable browser trial with private Google Drive available | Clones into each hosted VM, installs the locked notebook dependencies, requires one safe kernel restart per fresh VM, and uses a bounded private Drive handoff between notebooks; raw and protected-test shards are excluded |
+```fish
+uv sync --locked --group notebooks
+uv run --group notebooks jupyter lab notebooks/00-environment-setup-and-artifact-generation.ipynb
+```
 
-Run the selector cell, choose one profile, and then continue. **Run All** safely auto-detects
-Codespaces or Colab and otherwise selects local. If the widget cannot render, edit the cell's plain
-`REQUESTED_EXECUTION_PROFILE` fallback. The choice changes setup mechanics only: dataset configs,
-pipeline stages, grouped splitting, validation-only evaluation, and artifact policy remain the
-same. See [environment reproducibility](../docs/environment-reproducibility.md#choose-a-notebook-execution-location)
-for the decision details and official platform references.
+Notebook 00 ends with a visible local continuity confirmation. Notebooks 01 and 02 begin with a
+matching confirmation before independently verifying the Step 0 files they need. Generated state
+is reused in place; the notebooks do not copy it, upload it, or open the protected test partition.
+See [environment reproducibility](../docs/environment-reproducibility.md#run-the-supported-local-notebook-workflow)
+for kernel registration and troubleshooting.
 
-## Cross-notebook continuity
-
-Notebook 00 ends with one continuity cell, and notebooks 01 and 02 each begin with one matching
-cell. In local VS Code/Jupyter and Codespaces, these cells only confirm that the persistent checkout
-already contains Step 0 state; they do not copy or rewrite anything. This no-op path is the
-recommended complete walkthrough.
-
-Colab may open each notebook in a different disposable VM, so `/content` and the selector's Python
-variable cannot carry state to the next notebook. Notebook 00 therefore mounts the reviewer's
-private Google Drive after successful Step 0 verification and writes a versioned, digest-bearing
-handoff. The archive contains required status/index/manifest evidence, the optional validation
-baseline, and train/validation shards only. It excludes raw acquisition files and all protected-test
-shards, metrics, and predictions. The opening cell in notebooks 01/02 verifies the archive and
-exact source commit before restoring it into a fresh checkout.
-
-Each new Colab VM installs the locked compiled dependency stack once and then restarts its kernel
-before importing NumPy, SciPy, scikit-learn, Matplotlib, or the editable project. After Colab
-reconnects, rerun that notebook from the top once; the install and verified restore are reused.
-The Drive handoff remains private user-owned transport state and is not committed repository data,
-benchmark evidence, or a redistribution artifact.
+Optional web-runtime integration is not a supported path in these notebooks. It remains a future
+enhancement tracked by [Issue #200](https://github.com/Jared-Godar/ecg_anomaly_detection/issues/200).
 
 ## Boundary
 
@@ -81,10 +62,6 @@ Long or locally variable phases use concise, immediately flushed progress feedba
 qualified expectations for dependency bootstrap and first-run pipeline generation while retaining
 the CLI's per-stage stream and one integrity-verified acquisition line per configured record. Its
 actual pipeline invocation is kept in a short cell so live output remains visible beneath the call.
-On hosted Colab, complete locked-dependency export, installation, and fresh-process import details
-go to a temporary runtime log instead of flooding the cell; if a hosted phase fails, the cell stops
-and identifies that log. A successful install requests one kernel restart and verifies the compiled
-stack in the new process before any downstream import.
 Step 1 emits one start/completion pair only while scanning optional local run evidence. Step 2
 reports bounded load, fit, and validation-score phases, plus one qualified elapsed-time heartbeat
 per minute during the otherwise silent fit. Every estimate is deliberately approximate and names
