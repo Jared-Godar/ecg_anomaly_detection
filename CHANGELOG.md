@@ -15,8 +15,9 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   01 and 02 now use approved banners consistent with notebook 00; cross-notebook and relevant
   policy references are repository-relative links; important prerequisites, protected-test
   boundaries, destructive-action warnings, and interpretation limits use a shared accessible
-  callout treatment; and regression coverage validates local targets, visual-asset references,
-  and callout semantics. The notebook guide now documents a non-executing Jupyter HTML render
+  callout treatment; and regression coverage validates local targets, banner dimensions/PNG
+  structure/alt text, role-consistent callout styling, and lineage palette/claim semantics. The
+  notebook guide now documents a non-executing Jupyter HTML render
   check for banners, the lineage diagram, links, and panels. The Step 1 lineage diagram has also
   been redesigned in the approved dark Graphviz visual system with a tracked source, composited
   legend, reproducible export workflow, explicit protected-test boundary, and visible source

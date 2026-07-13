@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import html
 import re
+import struct
+from collections import defaultdict
 from pathlib import Path
 
 import nbformat
@@ -21,9 +24,29 @@ PUBLIC_NOTEBOOKS = (
 # Keep execution-UX assertions anchored to the ordered public workflow without
 # duplicating repository-relative paths outside PUBLIC_NOTEBOOKS.
 STEP0_NOTEBOOK, STEP1_NOTEBOOK, STEP2_NOTEBOOK = PUBLIC_NOTEBOOKS
+# The approved Step 1/Step 2 banners must retain notebook 00's exact raster
+# contract, so future replacements cannot silently drift in size or PNG mode.
+BANNER_PATHS = (
+    REPOSITORY_ROOT / "docs/assets/ecg-first-time-environment-setup-banner.png",
+    REPOSITORY_ROOT / "docs/assets/ecg-notebook-narrative-walkthrough-banner.png",
+    REPOSITORY_ROOT / "docs/assets/ecg-gradient-boosting-validation-banner.png",
+)
+# The primary DOT file is the editable factual pipeline source.
+LINEAGE_SOURCE = REPOSITORY_ROOT / "docs/diagrams/src/modern-pipeline-lineage.dot"
+# The separate legend source is composited through the documented workflow.
+LINEAGE_LEGEND_SOURCE = REPOSITORY_ROOT / "docs/diagrams/src/modern-pipeline-lineage-legend.dot"
+# This stable allowlisted path is the SVG notebook 01 actually renders.
+LINEAGE_EXPORT = REPOSITORY_ROOT / "reports/figures/modern-pipeline-lineage.svg"
+# The approved local-flow export defines the visual palette Issue 194 reuses.
+REFERENCE_DIAGRAM = REPOSITORY_ROOT / "docs/diagrams/exports/local-flow-artifact-zones.svg"
+# PNG files always begin with this eight-byte signature before their IHDR chunk.
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 # Markdown and inline HTML are both supported in Jupyter Markdown cells. Extract both
 # forms so a visually correct link cannot silently point outside the repository tree.
 MARKDOWN_TARGET = re.compile(r"!?\[[^\]]*\]\(([^)\s]+)(?:\s+['\"].*?['\"])?\)")
+# Capture image alt text independently from general link extraction so banner
+# accessibility cannot regress while the target path itself still resolves.
+MARKDOWN_IMAGE = re.compile(r"!\[(?P<alt>[^\]]*)\]\((?P<target>[^)\s]+)")
 # Inline callout links use raw HTML, so inspect href/src attributes in addition to the
 # standard Markdown form above.
 HTML_TARGET = re.compile(r"(?:href|src)=[\"']([^\"']+)[\"']")
@@ -34,6 +57,9 @@ CALLOUT = re.compile(
     r'style="(?P<style>[^"]+)">(?P<body>.*?)</div>',
     re.DOTALL,
 )
+# Hex colors in exported SVGs are normalized to lowercase by Graphviz. Comparing
+# sets makes palette inheritance explicit without depending on element ordering.
+HEX_COLOR = re.compile(r"#[0-9a-f]{6}")
 
 
 def _markdown(notebook_path: Path) -> str:
@@ -46,6 +72,16 @@ def _code_cells(notebook_path: Path) -> tuple[nbformat.NotebookNode, ...]:
     """Return code cells from one public notebook in execution order."""
     notebook = nbformat.read(notebook_path, as_version=nbformat.NO_CONVERT)
     return tuple(cell for cell in notebook.cells if cell.cell_type == "code")
+
+
+def _png_ihdr(path: Path) -> tuple[int, int, int, int, int, int, int]:
+    """Return width, height, and five format fields from one PNG's IHDR chunk."""
+    header = path.read_bytes()[:29]
+    # A short file, wrong signature, or missing leading IHDR chunk is not the
+    # approved PNG asset contract and should fail with a path-specific message.
+    if len(header) != 29 or header[:8] != PNG_SIGNATURE or header[12:16] != b"IHDR":
+        raise ValueError(f"Not a PNG with a leading IHDR chunk: {path}")
+    return struct.unpack(">IIBBBBB", header[16:29])
 
 
 def _local_targets(markdown: str) -> set[str]:
@@ -83,6 +119,28 @@ def test_public_notebook_visual_assets_are_linked() -> None:
     assert "../docs/diagrams/design-spec.md" in combined_markdown
 
 
+def test_public_notebook_banners_preserve_raster_and_accessibility_contract() -> None:
+    """All approved banners remain 1280×640, 8-bit RGB PNGs with meaningful alt text."""
+    # IHDR color type 2 is truecolor RGB without alpha; compression, filtering,
+    # and interlace method 0 are the baseline notebook 00 asset conventions.
+    expected_ihdr = (1280, 640, 8, 2, 0, 0, 0)
+    assert {_png_ihdr(path) for path in BANNER_PATHS} == {expected_ihdr}
+
+    combined_markdown = "\n".join(_markdown(path) for path in PUBLIC_NOTEBOOKS)
+    images = {
+        match.group("target"): match.group("alt").strip()
+        for match in MARKDOWN_IMAGE.finditer(combined_markdown)
+    }
+    # Match by repository filename because each notebook references its banner
+    # relatively, while BANNER_PATHS above are absolute test-fixture paths.
+    for banner_path in BANNER_PATHS:
+        matching_alt_text = [
+            alt for target, alt in images.items() if target.endswith(banner_path.name)
+        ]
+        assert len(matching_alt_text) == 1
+        assert len(matching_alt_text[0]) >= 40
+
+
 @pytest.mark.parametrize("notebook_path", PUBLIC_NOTEBOOKS, ids=lambda path: path.stem)
 def test_public_notebook_callouts_share_accessible_structure(notebook_path: Path) -> None:
     """Important panels expose semantic roles, labels, contrast colors, and visible headings."""
@@ -101,6 +159,53 @@ def test_public_notebook_callouts_share_accessible_structure(notebook_path: Path
         assert "color:" in style
         assert "line-height: 1.5" in style
         assert '<strong style="display: block;' in body
+
+
+def test_public_notebook_callout_styles_are_consistent_by_semantic_role() -> None:
+    """Every alert shares one style and every note shares one style across the workflow."""
+    styles_by_role: defaultdict[str, set[str]] = defaultdict(set)
+    # Aggregate all panels before asserting so a one-off drift in any notebook is
+    # compared against the same role's treatment everywhere else.
+    for notebook_path in PUBLIC_NOTEBOOKS:
+        # Record each panel independently so multiple panels in one notebook cannot
+        # hide a local style drift behind another notebook's matching panel.
+        for match in CALLOUT.finditer(_markdown(notebook_path)):
+            styles_by_role[match.group("role")].add(match.group("style"))
+
+    assert set(styles_by_role) == {"alert", "note"}
+    assert all(len(styles) == 1 for styles in styles_by_role.values())
+
+
+def test_lineage_source_and_export_preserve_reference_style_and_boundaries() -> None:
+    """The tracked lineage system retains the reference palette and factual claim limits."""
+    reference_svg = REFERENCE_DIAGRAM.read_text(encoding="utf-8")
+    lineage_svg = LINEAGE_EXPORT.read_text(encoding="utf-8")
+    # Graphviz encodes punctuation such as hyphens as numeric XML entities; decode
+    # them before comparing rendered human-readable semantics with DOT labels.
+    readable_lineage_svg = html.unescape(lineage_svg)
+    lineage_source = LINEAGE_SOURCE.read_text(encoding="utf-8")
+    legend_source = LINEAGE_LEGEND_SOURCE.read_text(encoding="utf-8")
+
+    # The modern lineage export inherits every color in the approved local-flow
+    # diagram, with amber additions reserved for the protected boundary.
+    assert set(HEX_COLOR.findall(reference_svg)) <= set(HEX_COLOR.findall(lineage_svg))
+
+    # Check both editable source and public export: source-only wording could fail
+    # to render, while export-only wording could become impossible to regenerate.
+    for semantic_text in (
+        "Subject-Aware Split",
+        "Training Only",
+        "Validation Only",
+        "Protected Test Partition",
+        "Unopened, Unreported",
+        "educational pipeline evidence",
+        "not clinical",
+        "benchmark evidence",
+    ):
+        assert semantic_text.lower() in lineage_source.lower()
+        assert semantic_text.lower() in readable_lineage_svg.lower()
+    assert "Protected Boundary" in legend_source
+    assert 'id="modern-pipeline-lineage-legend-inset"' in lineage_svg
 
 
 def test_step2_long_phases_use_concise_qualified_progress_feedback() -> None:
