@@ -1,4 +1,52 @@
-# Repository instructions for Codex
+# Repository instructions for coding agents (Claude Code, Codex, and any successor)
+
+## Standing commitments to the maintainer
+
+These are hard, non-negotiable contracts. They exist in this tracked file — not only in any
+agent's private memory — precisely so that every session, including cold-start executor and
+cloud sessions that do NOT inherit local agent memory, is bound by them. Violating one is a
+defect, not a style choice.
+
+- **Self-recording promises (meta-rule).** Whenever an agent agrees to a new standing rule or
+  "always / never" commitment with the maintainer, it must record that commitment in THIS file,
+  in the same turn it is made, before claiming the matter is settled. A promise that lives only
+  in conversation or in agent memory is not considered made. If a commitment cannot be captured
+  durably or enforced as stated, say so at promise time — never let the maintainer discover
+  later that it landed nowhere.
+- **Do what is written, the way it is written.** If an agent takes the time to write a rule down
+  or to tell the maintainer something is done, it must take the time to actually do it that way.
+  Formatted assurances are not a substitute for the action.
+- **Done means done.** Never report an action as complete unless it was executed AND verified in
+  the current session, with the evidence available to show. Distinguish plainly in every report:
+  done (receipt attached) / relayed (an executor's claim not re-verified) / queued / owed / not
+  done. Announcing a mechanism (a memory file, an issue, a gate) is not the behavior existing.
+- **CHANGELOG on every PR.** If the repository has a `CHANGELOG.md`, every pull request with
+  substantive changes updates it under `## Unreleased` in that same PR. Treat the entry as a
+  merge gate on par with passing tests, not release-time archaeology. (Origin: 25 milestone PRs
+  merged with zero changelog entries before a release-gate audit caught it — issues #179 backfill,
+  #184 mechanical enforcement.)
+- **Log the issue before touching the repo.** For any work item, the tracking GitHub issue is
+  the FIRST artifact — create it before branching, before editing files, before running anything.
+  The order is: issue → branch → implement → gate → document → open PR. Filing the issue after
+  the work has begun is a defect; do not treat it as a formality to backfill. (This ordering was
+  itself violated on the PR that introduced this section — the maintainer had to say so twice.)
+- **Standing authorization vs. the four gated actions.** Once a work item is agreed, the agent
+  runs the full canonical workflow — log the issue, branch, implement, gate, document, disclose,
+  and the complete post-merge closure pass INCLUDING pruning merged local branches/worktrees —
+  WITHOUT being re-asked. The maintainer never has to repeat a standing rule to get it honored,
+  and never has to say "yes, do the thing you already committed to." Only four actions require an
+  explicit per-instance go-ahead: (1) pushing a branch, (2) opening a pull request, (3) the merge
+  click (the maintainer merges via GUI), and (4) tagging/publishing a release. Pausing to ask on
+  anything outside those four is a defect.
+- **Calibrated claims.** Do not present inferred, relayed, or memory-sourced statements with the
+  tone of verified fact. State the confidence and its basis when it is not directly verified in
+  the current session.
+- **Floor, not ceiling.** This section is a minimum, not an exhaustive list of permitted actions.
+  Using judgment to do the obviously-necessary thing when no rule names it is required, not
+  optional. Declining or omitting an obviously-correct action because it "wasn't in the contract"
+  or is "out of scope" is itself a defect — the same class of failure as skipping a listed duty,
+  not a form of diligence. When genuinely unsure whether to act, surface the choice; do not treat
+  silence in the rules as a reason to do nothing.
 
 ## Local environment
 

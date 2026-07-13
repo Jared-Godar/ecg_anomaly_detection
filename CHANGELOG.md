@@ -17,6 +17,16 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Added a "Standing commitments to the maintainer" section to `AGENTS.md` capturing hard
+  cross-session contracts — self-recording of new promises, done-means-done reporting, a
+  CHANGELOG entry on every substantive PR, the standing-authorization-vs-four-gated-actions
+  rule (only push, open-PR, merge, and release-tag require an explicit go-ahead), and calibrated
+  claim reporting — so cold-start executor and cloud sessions that do not inherit local agent
+  memory are bound by them, a "log the issue before touching the repo" ordering rule (issue →
+  branch → implement → gate → document → PR), and a "floor, not ceiling" clause making clear the
+  section is a minimum and that declining an obviously-correct action because it is unlisted is
+  itself a defect. Also generalized the file's title from Codex-specific to any coding agent.
+
 ### Documentation
 
 ### Security
