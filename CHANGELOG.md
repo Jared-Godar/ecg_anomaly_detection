@@ -35,7 +35,13 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   choice consumed by repository preparation, locked dependency bootstrap, diagnostics, and the
   CLI invocation; `ipywidgets` is now a direct locked notebook dependency with a plain assignment
   fallback. Successful hosted bootstrap now captures verbose dependency export and installation
-  output in a temporary runtime log, while failures replay complete diagnostics before stopping.
+  output in a temporary runtime log. Hosted dependency replacement now proves a new kernel process
+  identity across restart before verifying NumPy, SciPy, scikit-learn, Matplotlib, and the editable
+  project in the active process, preventing mixed compiled-package state. Notebook 00's final continuity
+  cell and notebooks 01/02's opening continuity cells are no-ops for persistent local/Codespaces
+  checkouts; Colab instead uses a private, versioned, digest-verified Google Drive handoff tied to
+  the exact source commit. The handoff transports only required evidence and train/validation
+  shards, excluding raw acquisition files and protected-test shard content.
   Expectations remain deliberately approximate and measured times remain observational,
   with no changes to model inputs, parameters, metrics, evaluation boundaries, saved outputs, or
   artifact policy.

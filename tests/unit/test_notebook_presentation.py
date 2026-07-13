@@ -28,6 +28,11 @@ STEP0_NOTEBOOK, STEP1_NOTEBOOK, STEP2_NOTEBOOK = PUBLIC_NOTEBOOKS
 # The direct widget dependency makes the selector available in the supported
 # notebook environment instead of depending accidentally on Jupyter's transitive set.
 PROJECT_CONFIGURATION = REPOSITORY_ROOT / "pyproject.toml"
+# Hosted dependency commands live in a tested source module so notebook cells stay
+# readable while retaining exact lock/install/restart assertions here.
+HOSTED_BOOTSTRAP_IMPLEMENTATION = (
+    REPOSITORY_ROOT / "src/ecg_anomaly_detection/hosted_notebook_runtime.py"
+)
 # The approved Step 1/Step 2 banners must retain notebook 00's exact raster
 # contract, so future replacements cannot silently drift in size or PNG mode.
 BANNER_PATHS = (
@@ -332,30 +337,42 @@ def test_step0_preserves_streaming_with_qualified_runtime_guidance() -> None:
 
     # Bootstrap keeps one expectation and one measured completion instead of
     # printing dependency-level estimates that would quickly become inaccurate.
-    assert "first installs vary with network and cache" in combined_code
-    assert "Environment bootstrap complete after %s" in combined_code
-    assert "bootstrap_elapsed" in combined_code
+    assert "first installs vary with network and cache" in combined_code.lower()
+    assert "Environment bootstrap complete after" in combined_code
+    assert "time.monotonic() - bootstrap_started" in combined_code
 
-    # The hosted path keeps a successful first install readable despite uv export's
-    # requirements-sized stdout. Every verbose command writes to one runtime-local log,
-    # and a strict failure replays that complete log before exiting.
+    # The hosted path delegates exact lock/install work to a tested helper, requires a
+    # process-identity-proven clean restart, then verifies imports in the active kernel.
     bootstrap_cells = [
-        cell.source for cell in code_cells if "hosted_bootstrap_log_path" in cell.source
+        cell.source for cell in code_cells if "scripts/bootstrap_hosted_notebook.py" in cell.source
     ]
     assert len(bootstrap_cells) == 1
     bootstrap_source = bootstrap_cells[0]
-    # Check each verbose command independently so a later refactor cannot leave one
-    # dependency phase streaming thousands of successful lines into the notebook.
-    for captured_command in (
-        'uv export --locked --no-default-groups --group notebooks --no-emit-project --format requirements-txt --output-file "$requirements_path" >>"$hosted_bootstrap_log_path" 2>&1',
-        'uv pip install --system --require-hashes --requirements "$requirements_path" >>"$hosted_bootstrap_log_path" 2>&1',
-        'uv pip install --system --no-deps --editable . >>"$hosted_bootstrap_log_path" 2>&1',
-        'ecg-data --help >>"$hosted_bootstrap_log_path" 2>&1',
+    # Check each restart/current-kernel verification boundary independently.
+    for restart_contract in (
+        "hosted.returncode not in {0, 75}",
+        "application.kernel.do_shutdown(True)",
+        "import numpy",
+        "import scipy",
+        "import sklearn",
+        "expected_source not in package_origin.parents",
     ):
-        assert captured_command in bootstrap_source
-    assert 'cat "$hosted_bootstrap_log_path"' in bootstrap_source
-    assert bootstrap_source.count("replay_hosted_bootstrap_log") == 5
-    assert "Detailed hosted dependency output captured at %s" in bootstrap_source
+        assert restart_contract in bootstrap_source
+
+    hosted_implementation = HOSTED_BOOTSTRAP_IMPLEMENTATION.read_text(encoding="utf-8")
+    # Exact helper commands preserve locked hashes, system-kernel targeting, editable
+    # project installation, and a retained complete stdout/stderr log.
+    for helper_contract in (
+        '"export"',
+        '"--locked"',
+        '"--no-default-groups"',
+        '"--require-hashes"',
+        '"--system"',
+        '"--editable"',
+        "stdout=log",
+        "stderr=subprocess.STDOUT",
+    ):
+        assert helper_contract in hosted_implementation
 
     pipeline_cells = [cell.source for cell in code_cells if "def stream_pipeline" in cell.source]
     assert len(pipeline_cells) == 1
@@ -424,8 +441,8 @@ def test_step0_execution_selector_drives_profile_sensitive_cells() -> None:
     # configs, grouped split, and validation-only evaluation arguments remain one path.
     assert "ECG_NOTEBOOK_BOOTSTRAP_MODE" in combined_code
     assert "uv sync --group notebooks" in combined_code
-    assert "uv export --locked --no-default-groups --group notebooks" in combined_code
-    assert "uv pip install --system --require-hashes" in combined_code
+    assert "scripts/bootstrap_hosted_notebook.py" in combined_code
+    assert "application.kernel.do_shutdown(True)" in combined_code
     assert 'if os.environ.get("ECG_NOTEBOOK_BOOTSTRAP_MODE") == "hosted-system"' in combined_code
     assert combined_code.count('"--evaluation-config"') == 1
     assert combined_code.count('"configs/evaluation-baseline-v1.toml"') == 1
@@ -437,6 +454,53 @@ def test_notebook_group_declares_widget_selector_dependency() -> None:
     notebook_dependencies = project["dependency-groups"]["notebooks"]
 
     assert "ipywidgets>=8.1,<9" in notebook_dependencies
+
+
+def test_public_notebook_continuity_is_one_bottom_export_and_one_top_restore() -> None:
+    """Persistent checkouts no-op while Colab uses one bounded export/restore surface."""
+
+    step0_cells = _code_cells(STEP0_NOTEBOOK)
+    export_cells = [
+        cell.source for cell in step0_cells if "Preserve verified Step 0 continuity" in cell.source
+    ]
+    assert len(export_cells) == 1
+    export_source = export_cells[0]
+    # The final Step 0 control branches once: persistent hosts print a no-op, while
+    # Colab explicitly mounts Drive and invokes the tested bounded archive helper.
+    for export_contract in (
+        'if EXECUTION_PROFILE != "colab"',
+        '"action": "none"',
+        "Shared checkout retained; no handoff export is needed",
+        "from google.colab import drive",
+        '"scripts/notebook_handoff.py"',
+        '"create"',
+        '"protected_test_shards_copied": False',
+    ):
+        assert export_contract in export_source
+
+    # Both downstream notebooks expose the same single opening transition cell and
+    # keep local/Codespaces on the existing checkout without archive operations.
+    for notebook_path in (STEP1_NOTEBOOK, STEP2_NOTEBOOK):
+        restore_cells = [
+            cell.source
+            for cell in _code_cells(notebook_path)
+            if "Resume the execution environment" in cell.source
+        ]
+        assert len(restore_cells) == 1
+        restore_source = restore_cells[0]
+        # Each copy must retain the full no-op, restore, restart, and protected boundary.
+        for restore_contract in (
+            "if not running_in_colab",
+            '"action": "none"',
+            "Shared checkout detected; no handoff import is needed",
+            "from google.colab import drive",
+            '"restore"',
+            "continuity_sha256(archive_path)",
+            "scripts/bootstrap_hosted_notebook.py",
+            "application.kernel.do_shutdown(True)",
+            '"protected_test_shards_restored": False',
+        ):
+            assert restore_contract in restore_source
 
 
 def test_reviewed_notebook_summaries_expose_paths_channel_and_record_exclusions() -> None:

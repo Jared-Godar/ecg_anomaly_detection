@@ -65,7 +65,7 @@ locations: when either selects this checkout's `.venv`, use the `local` profile.
 |---|---|---|
 | `local` (recommended) | The repository is cloned on the user's computer and durable ignored artifacts are useful | Keeps the checkout in place, syncs the locked `notebooks` group into `.venv`, and runs the CLI through `uv run` |
 | `codespaces` | A browser-hosted Linux workspace is preferable to local Python setup | Keeps the codespace checkout in place and uses the same locked `.venv` path as local execution |
-| `colab` | A disposable hosted trial is acceptable | Clones the public repository into `/content/ecg_anomaly_detection` when absent, exports the locked notebook dependency set, installs it into the active hosted kernel, and invokes the installed CLI directly |
+| `colab` | A disposable hosted trial is acceptable and private Google Drive storage is available for transitions | Clones the public repository into `/content/ecg_anomaly_detection` when absent, installs the locked notebook dependency set into the hosted system environment, restarts the kernel once before compiled-package imports, invokes the installed CLI directly, and exports a bounded private handoff after Step 0 |
 
 The selector defaults to `auto`: it detects Colab first, then Codespaces, and otherwise selects
 local. A visible dropdown can override that choice before continuing. If widgets are unavailable,
@@ -73,18 +73,40 @@ set `REQUESTED_EXECUTION_PROFILE` to `local`, `codespaces`, or `colab` and rerun
 preparation cell rejects a Colab choice outside an actual Colab runtime and refuses to overwrite an
 ambiguous existing `/content/ecg_anomaly_detection` path.
 
+Colab can attach notebooks 00, 01, and 02 to different disposable VMs. An in-memory dropdown
+variable and files under `/content` therefore cannot be the cross-notebook continuity contract.
+After Step 0 succeeds, notebook 00's final continuity cell explicitly mounts the reviewer's private
+Google Drive and writes a versioned ZIP plus `latest.json` under
+`MyDrive/ecg-anomaly-detection/notebook-handoffs/`. The manifest records the selected `colab`
+profile, exact repository commit, run ID, file sizes, and SHA-256 digests. It includes only the Step
+0 status, downstream indexes/manifests, optional validation baseline, and train/validation waveform
+shards. Raw acquisition files and protected-test shards, metrics, and predictions are excluded.
+
+The opening continuity cell in notebooks 01 and 02 mounts the same private Drive, verifies the
+pointer and archive digest, checks out the exact recorded commit, restores every member through
+digest/size and partition-boundary checks, and refuses to overwrite different generated state.
+The same cells are read-only no-ops in local Jupyter/VS Code and Codespaces because those profiles
+already share a persistent checkout. The Drive archive is private user-owned transport state, not
+a tracked repository artifact, supported benchmark artifact, or distribution mechanism.
+
 The execution profile changes environment and repository-location arguments only. All profiles use
 the same tracked dataset, annotation, window, grouped-split, training, and validation-evaluation
 configs. Generated source data and run artifacts remain ignored runtime-local files; they are not
 committed or benchmark evidence. A Codespaces filesystem can persist across stop/start but is
-removed when the codespace is deleted, while a hosted Colab VM and its local files are ephemeral.
-Runtime resources and availability can vary, so the notebook's time ranges are qualified planning
-guidance rather than guarantees.
+removed when the codespace is deleted, while each hosted Colab VM and its `/content` files are
+ephemeral. The private handoff preserves only the bounded downstream state described above; it does
+not make the VM, raw data, or kernel state persistent. Runtime resources and availability can vary,
+so the notebook's time ranges are qualified planning guidance rather than guarantees.
 
-The hosted bootstrap captures successful `uv export` and installation detail in
-`/tmp/ecg-notebook-bootstrap.log` (or the runtime's `TMPDIR`) and prints only phase-level status in
-the notebook. A failed hosted phase replays the complete temporary log before stopping. The log is
-diagnostic runtime state, is not a repository artifact, and disappears with the Colab runtime.
+The hosted bootstrap captures complete `uv export`, installation, and fresh-process import detail
+in `/tmp/ecg-notebook-bootstrap.log` and prints only phase-level status in the notebook. A failed
+hosted phase stops and points to that complete temporary log. After a successful install, the
+calling kernel process identity (PID plus Linux process start time) is recorded in
+`/content/.ecg-notebook-bootstrap.json`, and readiness is withheld until a different post-restart
+kernel verifies NumPy, SciPy, scikit-learn, Matplotlib, and the editable repository package. This
+prevents the mixed compiled-package state that can result from
+replacing NumPy/SciPy files beneath a live process. Both files are diagnostic runtime state, are not
+repository artifacts, and disappear with the Colab VM.
 
 Platform references: [VS Code Jupyter kernel selection](https://code.visualstudio.com/docs/datascience/jupyter-kernel-management),
 [GitHub Codespaces lifecycle](https://docs.github.com/en/codespaces/about-codespaces/understanding-the-codespace-lifecycle),
@@ -137,5 +159,11 @@ checkpoints, local data, generated artifacts, models, or machine-specific config
 - Import succeeds in a terminal but fails in a notebook: the terminal and notebook are using
   different interpreters. Select the registered project kernel rather than system, Homebrew,
   Conda, or an IDE-hidden Python.
+- A Colab notebook asks for a restart after dependency setup: wait for reconnection, then run that
+  notebook again from the top. The runtime-local PID marker prevents another installation and the
+  opening cell verifies the restarted kernel before downstream imports.
+- Notebook 01 or 02 reports a missing Colab handoff: return to notebook 00's original VM, verify
+  Step 0, and run its final continuity cell. A normal repository-relative notebook link may open a
+  separate VM; `/content` from notebook 00 is not expected to appear there.
 - A package disappears after `uv sync`: declare it in the correct group or select its existing
   group. Do not repair the environment with an unrecorded `pip install`.
