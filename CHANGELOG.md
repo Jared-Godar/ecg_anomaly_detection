@@ -20,7 +20,12 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   check for banners, the lineage diagram, links, and panels. The Step 1 lineage diagram has also
   been redesigned in the approved dark Graphviz visual system with a tracked source, composited
   legend, reproducible export workflow, explicit protected-test boundary, and visible source
-  attribution.
+  attribution. All three public notebooks now give quiet, immediately flushed execution feedback:
+  Step 0 adds qualified bootstrap and first-run timing guidance around its existing streamed
+  pipeline stages, Step 1 bounds optional run-evidence discovery with one start/completion pair,
+  and Step 2 reports waveform loading, fixed-model fitting, and validation scoring. Expectations
+  remain deliberately approximate and measured times remain observational, with no changes to
+  model inputs, parameters, metrics, evaluation boundaries, saved outputs, or artifact behavior.
 
 ### Fixed
 

@@ -71,7 +71,9 @@ terminal, which is exactly the case for `notebooks/00-environment-setup-and-arti
 Step 0 cell: it runs this command through `subprocess.Popen` specifically so a reviewer can watch
 progress live. Without an explicit flush per line, every banner above would arrive in one batch at
 process exit instead of live. The notebook requires no changes to pick up this output — it already
-streams the CLI's combined stdout/stderr line by line.
+streams the CLI's combined stdout/stderr line by line. Before starting, Step 0 also gives a broad,
+qualified first-run expectation and names download speed, cache state, record count, CPU, and disk
+as variable factors; its measured completion line is runtime feedback, not benchmark evidence.
 
 ## Output layout
 

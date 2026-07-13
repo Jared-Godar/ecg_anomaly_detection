@@ -36,6 +36,19 @@ uv run python scripts/validate_curated_notebooks.py
 Pass `--keep-worktree` to copy the isolated worktree to `.notebook-validation-worktree/` (gitignored)
 before it is removed, for inspecting a local failure.
 
+## Runtime feedback
+
+Long or locally variable phases use concise, immediately flushed progress feedback. Step 0 reports
+qualified expectations for dependency bootstrap and first-run pipeline generation while retaining
+the CLI's existing per-stage/per-record stream. Step 1 emits one start/completion pair only while
+scanning optional local run evidence. Step 2 reports bounded load, fit, and validation-score phases.
+Every estimate is deliberately approximate and names the local factors that can change it; measured
+completion times are observational only and do not alter artifacts, model settings, or evidence.
+
+The committed public notebooks keep execution counts and outputs empty. Progress lines, metrics,
+plots, and generated run artifacts remain local to an explicit execution and are not saved into the
+tracked notebook files.
+
 ### Presentation rendering
 
 The public notebooks use repository-relative Markdown links and images so navigation, banners, the

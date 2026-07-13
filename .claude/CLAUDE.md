@@ -169,9 +169,10 @@ should never contain business logic itself; that belongs in the stage modules.
 - `archive/original_2022/` — preserved, unsupported historical notebooks/images; excluded from
   lint/format hooks (`ruff.toml`, `.pre-commit-config.yaml`) and must not be rewritten except via
   a dedicated, explicitly reviewed archival repair.
-- `notebooks/` (curated, 00→01→02) call supported package APIs and are execution-tested in CI
-  against synthetic data; `notebooks/local/` is an ignored, disposable experimentation sandbox
-  (not supported workflow input or benchmark evidence).
+- `notebooks/` (curated, 00→01→02) call supported package APIs, give bounded and qualified feedback
+  around locally variable execution phases, and are execution-tested in CI against synthetic data;
+  `notebooks/local/` is an ignored, disposable experimentation sandbox (not supported workflow
+  input or benchmark evidence).
 - `tests/{unit,integration,scripts}/` plus `tests/fixtures/` — only small synthetic or
   explicitly-redistributable fixtures; no real patient-derived ECG data.
 - `scripts/` — thin operational entry points (label sync, drift detection, notebook/project

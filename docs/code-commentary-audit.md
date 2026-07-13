@@ -170,8 +170,8 @@ are not Python and are skipped, rather than misreported as invalid-Python violat
 The pre-audit baseline recorded at issue intake was 3 curated notebooks, 31 Python code cells,
 1,939 source lines, 39 function/class definitions (0 undocumented — every existing definition
 already had a docstring), and 330 standalone comment lines. The completed audit contains the same
-31 code cells and 39 definitions (no definitions were added or removed), 2,261 source lines, and
-652 standalone comment lines.
+31 code cells and 39 definitions (no definitions were added or removed), 2,347 source lines, and
+689 standalone comment lines.
 
 `notebooks/local/` and `archive/original_2022/` remain excluded from this policy, matching the
 repository-wide scope above. The protected held-out test partition was not opened, inspected, or
