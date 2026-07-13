@@ -9,7 +9,7 @@ reviewable snapshot of the repository's source, configuration, documentation,
 and reproducibility contracts. They are not a distribution channel for data,
 models, benchmark results, or medical functionality.
 
-The package metadata is versioned `1.0.0`, tagged as the `v1.0.0` GitHub release.
+The package metadata is versioned `1.1.0`, tagged as the `v1.1.0` GitHub release.
 This policy documents how each release should be reviewed; it does not by
 itself authorize a future tag, GitHub release, or package publication -- each
 still requires separately authorized work.

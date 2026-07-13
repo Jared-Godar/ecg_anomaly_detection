@@ -10,7 +10,7 @@
 
 This repository preserves a 2022 educational experiment built on the public MIT-BIH Arrhythmia Database and incrementally replaces its notebook-bound workflow with tested package boundaries, versioned configuration, explicit lineage, and subject-aware data preparation.
 
-The repository is at its [`v1.0.0` release](https://github.com/Jared-Godar/ecg_anomaly_detection/releases/tag/v1.0.0). See the [changelog](CHANGELOG.md) for what shipped.
+The repository is at its [`v1.1.0` release](https://github.com/Jared-Godar/ecg_anomaly_detection/releases/tag/v1.1.0). See the [changelog](CHANGELOG.md) for what shipped.
 
 ## Important use limitation
 
@@ -71,7 +71,8 @@ distributed processing are not implemented.
 | Deterministic subject-aware split manifests | |
 | Model-ready index over immutable record shards | |
 | Run manifests and synthetic end-to-end coverage | |
-| Deterministic baseline training, validation metrics, and one governed held-out evaluation | Threshold analysis and generated figures (candidate follow-up) |
+| Deterministic baseline training, validation metrics, and one governed held-out evaluation | |
+| [Validation-only threshold sweep](docs/threshold-sweep-analysis.md) over the per-window centroid-distance margin (a raw squared distance, not a probability; no ROC/AUC or calibration claim) | Generated evaluation figures (candidate follow-up) |
 | Historical archive image attribution and provenance audit | |
 | Per-stage pipeline progress reporting for `run-pipeline` | |
 | Local run listing and purge helpers (`list-runs`/`purge-run`) | |
