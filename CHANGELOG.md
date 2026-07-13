@@ -33,8 +33,31 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   stripping, milestone checks, and branch/worktree pruning), milestone-verification discipline,
   diagnose-before-suppressing, and treating governance docs as negotiable rather than silently
   bypassed. Generalized the file's title from Codex-specific to any coding agent.
+- Mechanically enforced the per-PR changelog contract (#184): a new
+  `scripts/github/validate_changelog_update.py` gate, run as an `Enforce per-PR changelog
+  updates` job in `.github/workflows/metadata-governance.yml`, fails any pull request that
+  touches substantive paths (`src/`, `scripts/`, `docs/`, `configs/`, `.github/workflows/`)
+  without updating `CHANGELOG.md`; a genuinely entry-free pull request declares a visible
+  `changelog: not-needed -- <reason>` line in its body instead (markers quoted in code spans or
+  fenced blocks are ignored). REST-only, consuming no shared GraphQL quota; tests cover the
+  failure, exemption, and quoted-marker paths with mocked gh calls. `docs/governance/releases.md`
+  and `CONTRIBUTING.md` now document the continuous-changelog contract and the exemption
+  mechanism. Alongside this bundle (#182, handled as board edits with no repository diff),
+  divergent Project #5 Target Release values on delivered issue↔PR pairs were reconciled to
+  their curated pair-partner values with read-back verification.
 
 ### Documentation
+
+- Added a release-time changelog-coverage backstop to
+  `docs/governance/release-checklist.md` (#186): enumerate the full
+  `git log <last-release-tag>..main` commit range and confirm every commit's issue or pull
+  request is represented in the changelog section being frozen, mapping PR-citing commit
+  subjects to issue-citing entries before flagging gaps (the naive number match produced false
+  positives), complementing #184's per-PR gate by also catching direct commits.
+- Corrected `.claude/CLAUDE.md`'s directory-boundaries bullet (#183): the generated data,
+  artifact, and report zones track not only `.gitkeep` placeholders but also `data/README.md`
+  and the deliberately allowlisted `reports/figures/modern-pipeline-lineage.svg`, verified
+  against `git ls-files data artifacts reports`.
 
 ### Security
 

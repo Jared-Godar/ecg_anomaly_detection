@@ -154,6 +154,24 @@ The check validates two layers:
   issue is a member of the tracked Project and has every field in
   [Required fields](github-project.md#required-fields) populated.
 
+### Per-PR changelog gate
+
+The same workflow runs a second, independent job (`Enforce per-PR changelog updates`) executing
+`scripts/github/validate_changelog_update.py`, which mechanically enforces the standing
+CHANGELOG contract (issue #184; see [release governance](releases.md)): a pull request whose
+diff touches a substantive path (`src/`, `scripts/`, `docs/`, `configs/`,
+`.github/workflows/`) must also touch `CHANGELOG.md`, or declare a visible
+`changelog: not-needed -- <reason>` exemption line in its body. Marker text quoted inside
+fenced code blocks or inline code spans is ignored, so a pull request documenting the
+mechanism cannot exempt itself. The gate is REST-only (the pull request body and changed-file
+listing), so it needs no Project-scoped token and consumes no shared GraphQL quota. Exit codes
+mirror the metadata gate: 0 passed, 1 gate failed, 2 required data unreadable, 3 a rate-limit
+condition.
+
+```fish
+uv run python scripts/github/validate_changelog_update.py --pr-number 65
+```
+
 ### Token requirement and rollout
 
 Reading Project V2 field values requires a token with the `project` scope. The default
@@ -264,8 +282,11 @@ lookup and read-back, and the union-type and unset-field edge cases).
 `tests/scripts/test_detect_label_drift.py` and `tests/scripts/test_sync_github_labels.py` cover
 the two label-hygiene scripts that migrated onto the same layer in issue #175, including their
 observe-only preflight defaults (a drained pool must never block a manual hygiene run) and the
-distinct quota exit code. None of these calls the network; running them requires no GitHub
-token.
+distinct quota exit code. `tests/scripts/test_validate_changelog_update.py` covers the
+changelog gate (issue #184): the substantive-path classification, the exemption-marker rules
+(including that a marker quoted in code spans or fenced blocks is never honored), the
+failure/exemption/happy decision paths end to end, and the unreadable-data and rate-limit exit
+codes. None of these calls the network; running them requires no GitHub token.
 
 ## GraphQL quota stewardship
 
@@ -293,7 +314,8 @@ this table when upgrading `gh` majors.
 | `scripts/github/set_merged_project_status.py` | `gh api graphql` targeted PR-item lookup and Status read-back; `gh project field-list` / `item-edit` | GraphQL (~5 points/run; no full-board reads) |
 | `scripts/github/validate_project_metadata.py` | one `gh project item-list --limit 500` snapshot | GraphQL (measured live 2026-07-12: **203 points** for one snapshot -- GraphQL pricing scales with requested node counts, so this dominates the script's spend) |
 | `scripts/github/validate_project_metadata.py` | `gh api repos/.../pulls/N`, `.../issues/N`, `.../issues/N/timeline` | REST (moved off `gh pr view` / `gh issue view`, which are GraphQL-backed) |
-| all four scripts above and below | `gh api rate_limit` preflight/report | REST; the endpoint is documented as not counting against any quota |
+| `scripts/github/validate_changelog_update.py` | `gh api repos/.../pulls/N` and `.../pulls/N/files --paginate` (issue #184) | REST only -- zero GraphQL spend, so it runs no quota preflight; the primary REST rate limit still maps to exit code 3 |
+| the four `QuotaMonitor`-carrying scripts (`set_merged_project_status.py`, `validate_project_metadata.py`, `detect_label_drift.py`, `sync_github_labels.py`) | `gh api rate_limit` preflight/report | REST; the endpoint is documented as not counting against any quota |
 | `scripts/detect_label_drift.py` | `gh issue list` / `gh pr list --json` via the shared `run_gh` (issue #175) | GraphQL-backed listing; low frequency (manual/scheduled hygiene); observe-only preflight default (0) with before/after/consumed reporting and quota exit code 3 |
 | `scripts/sync_github_labels.py` | `gh label create --force` per manifest label via the shared `run_gh` (issue #175; the pre-migration inventory listed `label list`/`edit`, which the script never actually called) | REST mutations -- no GraphQL spend of its own; low frequency (manual); observe-only preflight default (0) with before/after/consumed reporting and quota exit code 3; `--dry-run` makes no `gh` calls at all |
 | `.github/workflows/*.yml` | no direct `gh` calls | -- (workflows only invoke the scripts above) |
