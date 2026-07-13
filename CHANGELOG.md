@@ -25,7 +25,14 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   memory are bound by them, a "log the issue before touching the repo" ordering rule (issue →
   branch → implement → gate → document → PR), and a "floor, not ceiling" clause making clear the
   section is a minimum and that declining an obviously-correct action because it is unlisted is
-  itself a defect. Also generalized the file's title from Codex-specific to any coding agent.
+  itself a defect. Also added "Canonical work-item workflow" and "Engineering discipline" sections
+  consolidating the previously-uncodified standing commitments — sync-before-branch, gate-every-
+  commit (incl. CHANGELOG and the commentary standard), exhaustive documentation sweep, scope and
+  deliberate-exemption disclosure, default-to-logging-issues, self-verification of PR readiness
+  with tooling, the full closure pass (read-back-verified lane transitions, `status:` label
+  stripping, milestone checks, and branch/worktree pruning), milestone-verification discipline,
+  diagnose-before-suppressing, and treating governance docs as negotiable rather than silently
+  bypassed. Generalized the file's title from Codex-specific to any coding agent.
 
 ### Documentation
 

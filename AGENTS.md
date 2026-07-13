@@ -48,6 +48,63 @@ defect, not a style choice.
   not a form of diligence. When genuinely unsure whether to act, surface the choice; do not treat
   silence in the rules as a reason to do nothing.
 
+## Canonical work-item workflow
+
+Run this whole sequence unprompted for every agreed work item. The maintainer should never have to
+name a step to get it done. Only the four gated actions in the standing commitments (push, open-PR,
+merge, release-tag) require an explicit go-ahead; everything else here is standing authorization.
+
+1. **Log the tracking issue first** — before branching or editing (see standing commitments).
+   Populate full metadata and add it to Project #5 with all nine fields.
+2. **Sync, then branch.** `git fetch` and confirm `git log --oneline main..origin/main` is empty
+   (fast-forward `main` first if not); then cut the feature branch. Re-run this drift check again
+   before finalizing/pushing an already-open PR — the serial-PR assumption does not hold.
+3. **Implement, and gate every commit** — `uv run pytest`, `uv run pyright`,
+   `uv run pre-commit run --all-files`, `git diff --check` all green before each commit. The
+   CHANGELOG entry (standing commitments) and the exhaustive code/notebook commentary standard
+   are part of this gate: run `scripts/check_code_commentary.py` and treat missing docstrings/
+   comments on any supported Python — including newly added scripts — as a gate failure.
+4. **Documentation pass** — an exhaustive `git ls-files "*.md"` sweep, not a guessed subset; also
+   check the previously merged PR for gaps it left behind.
+5. **Disclose scope decisions in the PR body** — what was deliberately excluded and why, and call
+   out any metadata left blank on purpose (e.g. no milestone) so a correct omission is not mistaken
+   for an oversight.
+6. **File issues for every gap or idea found**, by default — even unscheduled or unlikely-to-be-
+   acted-on ones; visibility over caution. When a closely-related gap surfaces mid-task, propose
+   folding it in rather than deferring it as "not original scope"; reserve caution for irreversible
+   or high-stakes calls.
+7. **On the maintainer's go-ahead: push and open the PR** with full metadata (assignee, labels,
+   milestone when applicable, Project #5 membership with all nine fields). Verify every piece with
+   `gh` afterward; never infer success from the creation command. Set the closing issue's own
+   `status:` label to `status: in-progress`.
+8. **Immediately verify PR-readiness with tooling yourself** — run `gh pr checks <N>` and
+   `uv run python scripts/github/validate_project_metadata.py --pr-number <N> --strict-project-checks`
+   and quote the actual result. Never say "let me know when CI is green." A cancelled duplicate
+   check can block the merge box after a real pass — re-run it or push an empty commit.
+9. **The maintainer merges via the GUI.** Do not merge.
+10. **Closure pass, unprompted, after the maintainer confirms merge:** verify via `gh` that the PR
+    is `MERGED` and every closed issue is `CLOSED`; set the PR Project status to `Merged` and each
+    issue to `Closed`, each confirmed with a read-back (never trust `project-status-sync`
+    automation alone — a known quirk can force `Closed` instead of `Merged`); **strip the
+    `status: in-progress` label from every closed issue** (`gh issue close` does not remove it);
+    check whether the milestone is now empty and close it only if genuinely so; `git switch main`
+    and `git pull --ff-only`; and **prune** — `git fetch --prune`, then delete every fully-merged
+    local branch with `git branch -D` (squash merges break `-d`'s ancestry check) and remove the
+    corresponding worktrees, not just the branch from the PR just closed.
+11. **Milestone discipline:** verify a work item's milestone live against the actual scope docs
+    (`docs/evaluation-policy.md`, `docs/benchmark-governance.md`) rather than pattern-matching;
+    an issue found mid-implementation of already-milestoned work should generally join that
+    milestone rather than default to unmilestoned.
+
+## Engineering discipline
+
+- **Diagnose before suppressing.** Prove the root cause of a warning or failure before silencing
+  it or editing global config; do not trade a real protection for cosmetic quiet, even under time
+  pressure.
+- **Governance docs are negotiable, not to be silently worked around.** When a real friction with
+  `AGENTS.md` or a governance doc surfaces, propose a case-specific update instead of quietly
+  routing around it.
+
 ## Local environment
 
 - The development host is macOS.
