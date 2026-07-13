@@ -39,6 +39,11 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   Expectations remain deliberately approximate and measured times remain observational,
   with no changes to model inputs, parameters, metrics, evaluation boundaries, saved outputs, or
   artifact policy.
+- Documented the public notebooks' fixed random seeds and their purpose for #194: notebook 00
+  explains that the versioned split and training configs both pin `seed = 2022`, notebook 01
+  explains the split and training seeds it already surfaces, and notebook 02 explains its fixed
+  `random_state=0` — in every case so repeated local runs reproduce the same subject partitions,
+  the same fitted models, and the same validation metrics. Seed values themselves are unchanged.
 
 ### Fixed
 
