@@ -26,6 +26,33 @@ runs this weekly (Monday 06:00 UTC) and on manual dispatch, using the default
 permissions, unlike the Project V2 field checks in
 [GitHub metadata automation](github-metadata-automation.md).
 
+### Exit codes and quota reporting
+
+The exit status is the triage contract for a failed run, whether manual or
+from the weekly `repository-hygiene.yml` schedule:
+
+| Exit code | Meaning |
+| --------- | ------- |
+| 0 | No label drift detected. |
+| 1 | Label drift detected on at least one checked item; every drifted item and its non-canonical labels are listed on stderr. |
+| 2 | Execution failure (`error:` prefix on stderr) — manifest load, authentication, or `gh` CLI error. |
+| 3 | GraphQL quota condition (`quota:` prefix on stderr) — transient shared-pool infrastructure, **not** label drift or a data problem; rerun after the hourly quota reset. |
+
+The `gh issue list` / `gh pr list` reads behind this check are GraphQL-backed,
+so every run draws on the shared 5000-points/hour GraphQL pool. Each run
+preflights that pool and prints a consumption report to stderr on success and
+failure alike, in the form
+`GraphQL quota: N before, N after, N consumed (limit 5000, resets at …)`.
+The preflight threshold, `--min-graphql-quota`, defaults to `0` — observe-only,
+so a manual hygiene run is never blocked by a merely busy pool; raising it
+makes the preflight itself stop the run with exit code 3 before any listing is
+fetched. Even at the default, an actually exhausted pool encountered mid-run
+still exits 3 rather than 2. If the consumption report itself cannot be
+fetched, the run prints a `warning:` line and keeps its real exit code — the
+best-effort report never masks the run's actual outcome. See
+[GitHub metadata automation § GraphQL quota stewardship](github-metadata-automation.md#graphql-quota-stewardship)
+for the shared pool's full transport and quota-spend inventory.
+
 A label can match the canonical *formatting* (a space after the colon) while
 still not being in the manifest — the check compares against the actual
 manifest set, not just a style pattern. Running this for the first time
