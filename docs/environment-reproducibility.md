@@ -81,6 +81,11 @@ removed when the codespace is deleted, while a hosted Colab VM and its local fil
 Runtime resources and availability can vary, so the notebook's time ranges are qualified planning
 guidance rather than guarantees.
 
+The hosted bootstrap captures successful `uv export` and installation detail in
+`/tmp/ecg-notebook-bootstrap.log` (or the runtime's `TMPDIR`) and prints only phase-level status in
+the notebook. A failed hosted phase replays the complete temporary log before stopping. The log is
+diagnostic runtime state, is not a repository artifact, and disappears with the Colab runtime.
+
 Platform references: [VS Code Jupyter kernel selection](https://code.visualstudio.com/docs/datascience/jupyter-kernel-management),
 [GitHub Codespaces lifecycle](https://docs.github.com/en/codespaces/about-codespaces/understanding-the-codespace-lifecycle),
 and [Google Colab FAQ](https://research.google.com/colaboratory/faq.html).

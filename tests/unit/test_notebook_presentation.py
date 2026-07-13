@@ -336,6 +336,27 @@ def test_step0_preserves_streaming_with_qualified_runtime_guidance() -> None:
     assert "Environment bootstrap complete after %s" in combined_code
     assert "bootstrap_elapsed" in combined_code
 
+    # The hosted path keeps a successful first install readable despite uv export's
+    # requirements-sized stdout. Every verbose command writes to one runtime-local log,
+    # and a strict failure replays that complete log before exiting.
+    bootstrap_cells = [
+        cell.source for cell in code_cells if "hosted_bootstrap_log_path" in cell.source
+    ]
+    assert len(bootstrap_cells) == 1
+    bootstrap_source = bootstrap_cells[0]
+    # Check each verbose command independently so a later refactor cannot leave one
+    # dependency phase streaming thousands of successful lines into the notebook.
+    for captured_command in (
+        'uv export --locked --no-default-groups --group notebooks --no-emit-project --format requirements-txt --output-file "$requirements_path" >>"$hosted_bootstrap_log_path" 2>&1',
+        'uv pip install --system --require-hashes --requirements "$requirements_path" >>"$hosted_bootstrap_log_path" 2>&1',
+        'uv pip install --system --no-deps --editable . >>"$hosted_bootstrap_log_path" 2>&1',
+        'ecg-data --help >>"$hosted_bootstrap_log_path" 2>&1',
+    ):
+        assert captured_command in bootstrap_source
+    assert 'cat "$hosted_bootstrap_log_path"' in bootstrap_source
+    assert bootstrap_source.count("replay_hosted_bootstrap_log") == 5
+    assert "Detailed hosted dependency output captured at %s" in bootstrap_source
+
     pipeline_cells = [cell.source for cell in code_cells if "def stream_pipeline" in cell.source]
     assert len(pipeline_cells) == 1
     pipeline_source = pipeline_cells[0]

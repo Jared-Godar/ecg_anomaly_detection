@@ -60,6 +60,9 @@ Long or locally variable phases use concise, immediately flushed progress feedba
 qualified expectations for dependency bootstrap and first-run pipeline generation while retaining
 the CLI's per-stage stream and one integrity-verified acquisition line per configured record. Its
 actual pipeline invocation is kept in a short cell so live output remains visible beneath the call.
+On hosted Colab, successful locked-dependency export and installation details go to a temporary
+runtime log instead of flooding the cell; if a hosted phase fails, the cell replays that complete
+log before stopping so the quieter success path does not remove actionable diagnostics.
 Step 1 emits one start/completion pair only while scanning optional local run evidence. Step 2
 reports bounded load, fit, and validation-score phases, plus one qualified elapsed-time heartbeat
 per minute during the otherwise silent fit. Every estimate is deliberately approximate and names

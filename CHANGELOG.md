@@ -34,7 +34,9 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   Code/Jupyter, GitHub Codespaces, and hosted Google Colab, then stores an interactive profile
   choice consumed by repository preparation, locked dependency bootstrap, diagnostics, and the
   CLI invocation; `ipywidgets` is now a direct locked notebook dependency with a plain assignment
-  fallback. Expectations remain deliberately approximate and measured times remain observational,
+  fallback. Successful hosted bootstrap now captures verbose dependency export and installation
+  output in a temporary runtime log, while failures replay complete diagnostics before stopping.
+  Expectations remain deliberately approximate and measured times remain observational,
   with no changes to model inputs, parameters, metrics, evaluation boundaries, saved outputs, or
   artifact policy.
 
