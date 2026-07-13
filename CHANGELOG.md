@@ -55,6 +55,12 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Fixed
 
+- Fixed the Step 1 and Step 2 notebooks' local-checkout kernel guard, which rejected the correct
+  uv-created `.venv` kernel: it resolved the interpreter symlink out to the base Python and then
+  failed its `.venv` membership check. The guard now compares the interpreter path lexically
+  (matching Step 0), so a correctly selected uv venv kernel is accepted while genuinely wrong
+  kernels are still refused. Added a regression test asserting the symlink-safe comparison.
+  Surfaced during the #194 walkthrough.
 - Hardened the shared GitHub CLI layer (`scripts/github/github_api.py`) against transient
   GitHub 5xx server errors (#190): `run_gh` now retries them on the same bounded 2s/5s/10s
   schedule it already used for the secondary rate limit, so a freshly opened pull request's

@@ -457,6 +457,27 @@ def test_public_notebook_continuity_reuses_one_local_checkout_without_copying() 
             assert local_contract in local_source
 
 
+def test_downstream_kernel_guard_accepts_symlinked_uv_venv() -> None:
+    """Step 1/2 kernel guards must accept uv's symlinked .venv interpreter, like Step 0."""
+    # uv creates the project .venv with the interpreter symlinked to a base Python that
+    # lives outside .venv. Resolving the interpreter (``.resolve()``) would follow that
+    # symlink out of .venv and falsely reject a correctly selected kernel, so both
+    # downstream guards must compare the interpreter path lexically instead.
+    for notebook_path in (STEP1_NOTEBOOK, STEP2_NOTEBOOK):
+        local_cells = [
+            cell.source
+            for cell in _code_cells(notebook_path)
+            if "Confirm the supported local checkout and project kernel" in cell.source
+        ]
+        assert len(local_cells) == 1
+        local_source = local_cells[0]
+        # The interpreter path must not be resolved through its venv symlink.
+        assert "Path(sys.executable).resolve()" not in local_source
+        # It must be compared lexically against the expected .venv directory instead.
+        assert "kernel_executable = Path(sys.executable).absolute()" in local_source
+        assert "kernel_executable.is_relative_to(expected_kernel_directory)" in local_source
+
+
 def test_reviewed_notebook_summaries_expose_paths_channel_and_record_exclusions() -> None:
     """Manual-review orientation cells retain the success details users found missing."""
 
