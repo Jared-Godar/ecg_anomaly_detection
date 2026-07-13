@@ -11,6 +11,14 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Changed
 
+- Improved the three supported public notebooks' presentation and navigation for #194: notebooks
+  01 and 02 now use approved banners consistent with notebook 00; cross-notebook and relevant
+  policy references are repository-relative links; important prerequisites, protected-test
+  boundaries, destructive-action warnings, and interpretation limits use a shared accessible
+  callout treatment; and regression coverage validates local targets, visual-asset references,
+  and callout semantics. The notebook guide now documents a non-executing Jupyter HTML render
+  check for banners, the lineage diagram, links, and panels.
+
 ### Fixed
 
 - Hardened the shared GitHub CLI layer (`scripts/github/github_api.py`) against transient

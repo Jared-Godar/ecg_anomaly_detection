@@ -35,3 +35,24 @@ uv run python scripts/validate_curated_notebooks.py
 
 Pass `--keep-worktree` to copy the isolated worktree to `.notebook-validation-worktree/` (gitignored)
 before it is removed, for inspecting a local failure.
+
+### Presentation rendering
+
+The public notebooks use repository-relative Markdown links and images so navigation, banners, the
+lineage diagram, and accessible HTML callout panels render from the notebook's repository location.
+To inspect the same Markdown through the supported Jupyter stack without executing cells, render
+temporary HTML copies beside the source notebooks. Keeping the temporary HTML in `notebooks/`
+during review is intentional: nbconvert preserves repository-relative Markdown image URLs, so the
+HTML must retain the source notebook's directory context while it is inspected.
+
+```fish
+uv run --group notebooks jupyter nbconvert --to html --output-dir notebooks \
+  notebooks/00-environment-setup-and-artifact-generation.ipynb \
+  notebooks/01-narrative-walkthrough.ipynb \
+  notebooks/02-high-performing-gradient-boosting-validation.ipynb
+```
+
+Open the temporary HTML files locally and confirm that each banner, the Step 1 lineage diagram,
+repository navigation links, and the callout headings are visible. These rendered files are review
+artifacts, not tracked documentation or execution evidence; remove them after review or move them
+under the ignored `notebooks/local/` sandbox.
