@@ -13,6 +13,15 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Fixed
 
+- Hardened the shared GitHub CLI layer (`scripts/github/github_api.py`) against transient
+  GitHub 5xx server errors (#190): `run_gh` now retries them on the same bounded 2s/5s/10s
+  schedule it already used for the secondary rate limit, so a freshly opened pull request's
+  momentarily uncomputed diff (observed as `Server Error ... (HTTP 500)` on the changelog
+  gate's first CI run) no longer fails a governance check on its first attempt. Primary
+  rate-limit classification stays fail-fast and 4xx caller errors are never retried; every
+  shared-layer consumer inherits the hardening. Also corrected `run_gh`'s docstring, which
+  named a nonexistent `GraphQLQuotaExhaustedError` instead of `PrimaryRateLimitError`.
+
 ### Removed
 
 ### Governance
