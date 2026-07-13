@@ -360,8 +360,11 @@ tooling should build on it rather than shelling out to `gh` directly:
 - **Distinguish quota from defects.** Primary (hours-long) rate-limit exhaustion and a failed
   preflight exit with code **3** and a `quota:` prefix -- never the metadata-violation (1) or
   data-read-failure (2) codes -- so CI output can never make a drained pool look like a broken
-  pull request. The transient secondary/abuse-detection throttle keeps its short bounded
-  retries (2s/5s/10s); the primary limit is never retried in-job.
+  pull request. The transient secondary/abuse-detection throttle and transient GitHub 5xx
+  server errors (issue #190: a freshly opened pull request's diff can be momentarily
+  uncomputed, surfacing as `Server Error ... (HTTP 500)`) share the same short bounded
+  retries (2s/5s/10s); the primary limit is never retried in-job, and 4xx caller errors
+  always fail fast.
 
 ### Recovery and local artifacts
 
