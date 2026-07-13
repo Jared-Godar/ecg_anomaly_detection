@@ -496,6 +496,7 @@ experiments = [
 notebooks = [
     { name = "ipykernel" },
     { name = "ipython" },
+    { name = "ipywidgets" },
     { name = "jupyter" },
     { name = "matplotlib" },
     { name = "matplotlib-inline" },
@@ -526,6 +527,7 @@ experiments = [
 notebooks = [
     { name = "ipykernel", specifier = ">=7.3.0" },
     { name = "ipython", specifier = ">=9.15.0" },
+    { name = "ipywidgets", specifier = ">=8.1,<9" },
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "matplotlib", specifier = ">=3.10,<4" },
     { name = "matplotlib-inline", specifier = ">=0.2.2" },

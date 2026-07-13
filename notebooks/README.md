@@ -12,6 +12,24 @@ This directory uses a small, ordered public notebook workflow.
 | 1 | [`01-narrative-walkthrough.ipynb`](./01-narrative-walkthrough.ipynb) | Supported modernization narrative: architecture, data lifecycle, governance, reproducibility, and repository positioning. |
 | 2 | [`02-high-performing-gradient-boosting-validation.ipynb`](./02-high-performing-gradient-boosting-validation.ipynb) | Streamlined validation-only gradient boosting example using generated Step 0 artifacts. |
 
+## Choose where to run
+
+Notebook 00 begins with a profile selector and carries that stored choice through repository
+preparation, dependency bootstrap, runtime diagnostics, and pipeline invocation:
+
+| Profile | Recommended use | Persistence and setup |
+|---|---|---|
+| Local checkout in VS Code or JupyterLab | Recommended for the complete 00 → 01 → 02 walkthrough | Uses the checkout's locked `.venv`; ignored data and artifacts remain until the user removes them |
+| GitHub Codespaces | Browser-hosted VS Code when local Python setup is undesirable | Uses the checkout's locked `.venv`; saved files remain until the codespace is deleted |
+| Hosted Google Colab | Disposable browser trial | Clones into the hosted VM and installs the locked notebook dependencies into its active kernel; runtime files are ephemeral and must be regenerated |
+
+Run the selector cell, choose one profile, and then continue. **Run All** safely auto-detects
+Codespaces or Colab and otherwise selects local. If the widget cannot render, edit the cell's plain
+`REQUESTED_EXECUTION_PROFILE` fallback. The choice changes setup mechanics only: dataset configs,
+pipeline stages, grouped splitting, validation-only evaluation, and artifact policy remain the
+same. See [environment reproducibility](../docs/environment-reproducibility.md#choose-a-notebook-execution-location)
+for the decision details and official platform references.
+
 ## Boundary
 
 Generated datasets, processed indexes, run manifests, metrics, and trained models are local artifacts and should remain ignored by Git unless a future issue explicitly changes that policy.
@@ -40,14 +58,21 @@ before it is removed, for inspecting a local failure.
 
 Long or locally variable phases use concise, immediately flushed progress feedback. Step 0 reports
 qualified expectations for dependency bootstrap and first-run pipeline generation while retaining
-the CLI's existing per-stage/per-record stream. Step 1 emits one start/completion pair only while
-scanning optional local run evidence. Step 2 reports bounded load, fit, and validation-score phases.
-Every estimate is deliberately approximate and names the local factors that can change it; measured
-completion times are observational only and do not alter artifacts, model settings, or evidence.
+the CLI's per-stage stream and one integrity-verified acquisition line per configured record. Its
+actual pipeline invocation is kept in a short cell so live output remains visible beneath the call.
+Step 1 emits one start/completion pair only while scanning optional local run evidence. Step 2
+reports bounded load, fit, and validation-score phases, plus one qualified elapsed-time heartbeat
+per minute during the otherwise silent fit. Every estimate is deliberately approximate and names
+the local factors that can change it; measured completion times are observational only and do not
+alter artifacts, model settings, or evidence.
 
 The committed public notebooks keep execution counts and outputs empty. Progress lines, metrics,
 plots, and generated run artifacts remain local to an explicit execution and are not saved into the
 tracked notebook files.
+
+Each notebook opens with a conversational purpose statement, qualified first-run/rerun timing, and
+one compact line of in-notebook jump links for returning users. Detailed version history is
+preserved in a Markdown appendix at the bottom instead of competing with the first-run workflow.
 
 ### Presentation rendering
 

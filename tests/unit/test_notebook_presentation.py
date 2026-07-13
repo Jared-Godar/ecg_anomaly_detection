@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import re
 import struct
+import tomllib
 from collections import defaultdict
 from pathlib import Path
 
@@ -24,6 +25,9 @@ PUBLIC_NOTEBOOKS = (
 # Keep execution-UX assertions anchored to the ordered public workflow without
 # duplicating repository-relative paths outside PUBLIC_NOTEBOOKS.
 STEP0_NOTEBOOK, STEP1_NOTEBOOK, STEP2_NOTEBOOK = PUBLIC_NOTEBOOKS
+# The direct widget dependency makes the selector available in the supported
+# notebook environment instead of depending accidentally on Jupyter's transitive set.
+PROJECT_CONFIGURATION = REPOSITORY_ROOT / "pyproject.toml"
 # The approved Step 1/Step 2 banners must retain notebook 00's exact raster
 # contract, so future replacements cannot silently drift in size or PNG mode.
 BANNER_PATHS = (
@@ -60,6 +64,9 @@ CALLOUT = re.compile(
 # Hex colors in exported SVGs are normalized to lowercase by Graphviz. Comparing
 # sets makes palette inheritance explicit without depending on element ordering.
 HEX_COLOR = re.compile(r"#[0-9a-f]{6}")
+# Compact jump links use native Markdown heading fragments so they remain useful in
+# both static GitHub rendering and interactive notebook frontends.
+IN_NOTEBOOK_TARGET = re.compile(r"(?<!!)\[[^\]]+\]\(#([^)]+)\)")
 
 
 def _markdown(notebook_path: Path) -> str:
@@ -72,6 +79,23 @@ def _code_cells(notebook_path: Path) -> tuple[nbformat.NotebookNode, ...]:
     """Return code cells from one public notebook in execution order."""
     notebook = nbformat.read(notebook_path, as_version=nbformat.NO_CONVERT)
     return tuple(cell for cell in notebook.cells if cell.cell_type == "code")
+
+
+def _heading_anchor(heading: str) -> str:
+    """Return the GitHub-style fragment generated for one Markdown heading.
+
+    Args:
+        heading: Heading text without leading ``#`` characters.
+
+    Returns:
+        Lowercase fragment with punctuation removed and spaces changed to hyphens.
+    """
+
+    # Retain word characters and literal hyphens, matching the headings used by these
+    # notebooks; removing punctuation before replacing spaces preserves the double
+    # hyphen around an em dash that GitHub emits for the Step 2 prerequisite heading.
+    normalized = re.sub(r"[^\w\- ]", "", heading.lower())
+    return normalized.replace(" ", "-")
 
 
 def _png_ihdr(path: Path) -> tuple[int, int, int, int, int, int, int]:
@@ -105,6 +129,52 @@ def test_public_notebook_local_targets_resolve(notebook_path: Path) -> None:
     ]
 
     assert unresolved == []
+
+
+@pytest.mark.parametrize("notebook_path", PUBLIC_NOTEBOOKS, ids=lambda path: path.stem)
+def test_public_notebook_openings_are_task_oriented_and_history_is_appendix(
+    notebook_path: Path,
+) -> None:
+    """Each notebook welcomes users, qualifies runtime, offers compact jumps, and ends with history.
+
+    Args:
+        notebook_path: One supported public notebook in workflow order.
+    """
+
+    notebook = nbformat.read(notebook_path, as_version=nbformat.NO_CONVERT)
+    markdown_cells = tuple(cell.source for cell in notebook.cells if cell.cell_type == "markdown")
+    # Find the title/overview cell rather than assuming whether the banner has its own
+    # cell: notebook 00 separates it, while notebooks 01/02 combine banner and title.
+    overview = next(source for source in markdown_cells if "# Step " in source)
+
+    assert "Welcome!" in overview
+    assert "**Jump to:**" in overview
+    assert any(
+        qualifier in overview
+        for qualifier in ("not guarantees", "rather than promising", "without pretending")
+    )
+    assert notebook.cells[-1].cell_type == "markdown"
+    assert notebook.cells[-1].source.startswith("## Appendix: Version history and change log")
+    assert sum("Version history and change log" in source for source in markdown_cells) == 1
+
+
+@pytest.mark.parametrize("notebook_path", PUBLIC_NOTEBOOKS, ids=lambda path: path.stem)
+def test_public_notebook_jump_links_match_native_heading_fragments(notebook_path: Path) -> None:
+    """Every compact in-notebook jump target corresponds to a real Markdown heading.
+
+    Args:
+        notebook_path: One supported public notebook in workflow order.
+    """
+
+    markdown = _markdown(notebook_path)
+    headings = {
+        _heading_anchor(match.group(1).strip())
+        for match in re.finditer(r"^#{1,6}\s+(.+)$", markdown, re.MULTILINE)
+    }
+    targets = set(IN_NOTEBOOK_TARGET.findall(markdown))
+
+    assert targets
+    assert targets <= headings
 
 
 def test_public_notebook_visual_assets_are_linked() -> None:
@@ -232,9 +302,12 @@ def test_step2_long_phases_use_concise_qualified_progress_feedback() -> None:
         assert matching_cells[0].count("_stage.detail(") == 1
         assert qualifying_text in matching_cells[0]
 
-    # No interim reporter notes are needed: three start lines and three measured
-    # completion lines are the complete runtime-feedback surface.
+    # Stage banners remain bounded, while only the observed seven-minute fit receives
+    # one restrained minute-scale heartbeat context. Per-shard/per-iteration notes stay off.
     assert combined_code.count("NOTEBOOK_PROGRESS.stage(") == 3
+    assert combined_code.count("NOTEBOOK_PROGRESS.heartbeat(") == 1
+    assert '"[2/3] fit fixed gradient boosting model"' in combined_code
+    assert "interval_seconds=60.0" in combined_code
     assert "NOTEBOOK_PROGRESS.note(" not in combined_code
 
     # Progress must remain observational: lock the fixed estimator configuration
@@ -272,6 +345,98 @@ def test_step0_preserves_streaming_with_qualified_runtime_guidance() -> None:
     assert "Download speed, cache state, record count, CPU, and disk vary" in pipeline_source
     assert 'print(line, end="", flush=True)' in pipeline_source
     assert "Pipeline process ended after" in pipeline_source
+    # The expensive call must remain in its own short cell so VS Code does not place
+    # live output hundreds of source lines below the visible execution point.
+    invocation_cells = [
+        cell.source for cell in code_cells if "run_governed_pipeline()" in cell.source
+    ]
+    assert len(invocation_cells) == 2
+    actual_invocation = min(invocation_cells, key=len)
+    assert len(actual_invocation.splitlines()) <= 12
+    assert actual_invocation.rstrip().endswith("run_governed_pipeline()")
+    assert "pipeline_runner_ready" in pipeline_source
+
+
+def test_step0_execution_selector_drives_profile_sensitive_cells() -> None:
+    """Step 0 stores one environment choice and consumes it without changing pipeline policy."""
+    markdown = _markdown(STEP0_NOTEBOOK)
+    code_cells = _code_cells(STEP0_NOTEBOOK)
+    combined_code = "\n".join(cell.source for cell in code_cells)
+
+    # Public guidance must explain the three supported locations and their persistence
+    # tradeoffs before asking a new user to choose one.
+    # Check each decision aid independently so removing one profile cannot hide behind
+    # the remaining table prose.
+    for guidance in (
+        "Local checkout — VS Code or JupyterLab (recommended)",
+        "GitHub Codespaces — VS Code in a browser",
+        "Google Colab hosted runtime",
+        "files are ephemeral",
+    ):
+        assert guidance in markdown
+
+    # The selector keeps a deterministic assignment fallback while offering an actual
+    # dropdown in the locked notebook environment.
+    selector_cells = [cell.source for cell in code_cells if "EXECUTION_PROFILES" in cell.source]
+    assert len(selector_cells) == 1
+    selector_source = selector_cells[0]
+    assert 'REQUESTED_EXECUTION_PROFILE = "auto"' in selector_source
+    assert "widgets.Dropdown(" in selector_source
+    assert "activate_execution_profile" in selector_source
+    # Require every concrete selector value so one profile cannot disappear silently.
+    for profile in ('"local"', '"codespaces"', '"colab"'):
+        assert profile in selector_source
+
+    # Profile preparation is guarded: only a real Colab runtime may create the hosted
+    # checkout, and an existing ambiguous path is never overwritten.
+    preparation_cells = [
+        cell.source for cell in code_cells if "PUBLIC_REPOSITORY_URL" in cell.source
+    ]
+    assert len(preparation_cells) == 1
+    preparation_source = preparation_cells[0]
+    assert 'if EXECUTION_PROFILE == "colab"' in preparation_source
+    assert 'if "google.colab" not in sys.modules' in preparation_source
+    assert '["git", "clone", "--depth", "1"' in preparation_source
+    assert "not a valid checkout" in preparation_source
+
+    # Later environment-sensitive operations consume the exported choice. The locked
+    # configs, grouped split, and validation-only evaluation arguments remain one path.
+    assert "ECG_NOTEBOOK_BOOTSTRAP_MODE" in combined_code
+    assert "uv sync --group notebooks" in combined_code
+    assert "uv export --locked --no-default-groups --group notebooks" in combined_code
+    assert "uv pip install --system --require-hashes" in combined_code
+    assert 'if os.environ.get("ECG_NOTEBOOK_BOOTSTRAP_MODE") == "hosted-system"' in combined_code
+    assert combined_code.count('"--evaluation-config"') == 1
+    assert combined_code.count('"configs/evaluation-baseline-v1.toml"') == 1
+
+
+def test_notebook_group_declares_widget_selector_dependency() -> None:
+    """The interactive selector dependency is direct, bounded, and reproducible."""
+    project = tomllib.loads(PROJECT_CONFIGURATION.read_text(encoding="utf-8"))
+    notebook_dependencies = project["dependency-groups"]["notebooks"]
+
+    assert "ipywidgets>=8.1,<9" in notebook_dependencies
+
+
+def test_reviewed_notebook_summaries_expose_paths_channel_and_record_exclusions() -> None:
+    """Manual-review orientation cells retain the success details users found missing."""
+
+    step1_code = "\n".join(cell.source for cell in _code_cells(STEP1_NOTEBOOK))
+
+    # Window config must explain why 48 configured records can yield 46 processed
+    # records: both named channel selection and explicit record exclusions are visible.
+    assert '"channel_name": windowing.channel_name' in step1_code
+    assert '"excluded_record_ids": list(windowing.exclude_record_ids)' in step1_code
+    # Repository path discovery assigns one summary and leaves it as the cell's final
+    # expression, giving VS Code/Jupyter a visible success confirmation.
+    path_cells = [
+        cell.source
+        for cell in _code_cells(STEP2_NOTEBOOK)
+        if "repository_paths_summary" in cell.source
+    ]
+    assert len(path_cells) == 1
+    assert '"repository_paths_ready": True' in path_cells[0]
+    assert path_cells[0].rstrip().endswith("repository_paths_summary")
 
 
 def test_step1_limits_progress_to_variable_local_evidence_discovery() -> None:

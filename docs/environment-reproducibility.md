@@ -21,7 +21,7 @@ Run the smallest command that supports the work being performed:
 |---|---|---|
 | Core package and CLI | `uv sync --locked` | Package runtime dependencies (`numpy`, `wfdb`) |
 | Repository engineering | `uv sync --locked --dev` | Core plus tests, coverage, type checking, and hooks |
-| Supported notebooks | `uv sync --locked --group notebooks` | Core plus IPython, Jupyter, kernel, plotting, scikit-learn, and static notebook validation infrastructure |
+| Supported notebooks | `uv sync --locked --group notebooks` | Core plus IPython, Jupyter, kernel, widget selector, plotting, scikit-learn, and static notebook validation infrastructure |
 | Local model experiments | `uv sync --locked --group notebooks --group experiments` | Notebook stack (already includes scikit-learn) plus LightGBM and XGBoost |
 
 The `dev` group must contain repository engineering tools only. Notebook infrastructure belongs in
@@ -51,9 +51,39 @@ The executable path must end in this repository's `.venv/bin/python`. Validate o
 with the group on every `uv run` command so `uv` selects the intended environment:
 
 ```fish
-uv run --group notebooks python -c "import IPython, ipykernel, matplotlib, matplotlib_inline, nbformat, sklearn; print('notebooks ok')"
+uv run --group notebooks python -c "import IPython, ipykernel, ipywidgets, matplotlib, matplotlib_inline, nbformat, sklearn; print('notebooks ok')"
 uv run --group notebooks --group experiments python -c "import lightgbm, xgboost; print('experiments ok')"
 ```
+
+## Choose a notebook execution location
+
+The first executable section of notebook 00 stores an execution profile used by every later
+environment-sensitive cell. VS Code and JupyterLab are interfaces rather than separate execution
+locations: when either selects this checkout's `.venv`, use the `local` profile.
+
+| Profile | Choose it when | What notebook 00 does |
+|---|---|---|
+| `local` (recommended) | The repository is cloned on the user's computer and durable ignored artifacts are useful | Keeps the checkout in place, syncs the locked `notebooks` group into `.venv`, and runs the CLI through `uv run` |
+| `codespaces` | A browser-hosted Linux workspace is preferable to local Python setup | Keeps the codespace checkout in place and uses the same locked `.venv` path as local execution |
+| `colab` | A disposable hosted trial is acceptable | Clones the public repository into `/content/ecg_anomaly_detection` when absent, exports the locked notebook dependency set, installs it into the active hosted kernel, and invokes the installed CLI directly |
+
+The selector defaults to `auto`: it detects Colab first, then Codespaces, and otherwise selects
+local. A visible dropdown can override that choice before continuing. If widgets are unavailable,
+set `REQUESTED_EXECUTION_PROFILE` to `local`, `codespaces`, or `colab` and rerun the selector. The
+preparation cell rejects a Colab choice outside an actual Colab runtime and refuses to overwrite an
+ambiguous existing `/content/ecg_anomaly_detection` path.
+
+The execution profile changes environment and repository-location arguments only. All profiles use
+the same tracked dataset, annotation, window, grouped-split, training, and validation-evaluation
+configs. Generated source data and run artifacts remain ignored runtime-local files; they are not
+committed or benchmark evidence. A Codespaces filesystem can persist across stop/start but is
+removed when the codespace is deleted, while a hosted Colab VM and its local files are ephemeral.
+Runtime resources and availability can vary, so the notebook's time ranges are qualified planning
+guidance rather than guarantees.
+
+Platform references: [VS Code Jupyter kernel selection](https://code.visualstudio.com/docs/datascience/jupyter-kernel-management),
+[GitHub Codespaces lifecycle](https://docs.github.com/en/codespaces/about-codespaces/understanding-the-codespace-lifecycle),
+and [Google Colab FAQ](https://research.google.com/colaboratory/faq.html).
 
 ## Register and select the notebook kernel
 
@@ -91,7 +121,7 @@ checkpoints, local data, generated artifacts, models, or machine-specific config
 
 ## Troubleshooting
 
-- Missing `IPython`, `ipykernel`, `matplotlib`, `matplotlib_inline`, or `sklearn`: sync and run
+- Missing `IPython`, `ipykernel`, `ipywidgets`, `matplotlib`, `matplotlib_inline`, or `sklearn`: sync and run
   with `--group notebooks`; do not install the package globally.
 - Missing `lightgbm` or `xgboost`: add `--group experiments` together with the notebook group for
   local playground work.

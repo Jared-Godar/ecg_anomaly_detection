@@ -15,9 +15,11 @@ import pytest
 import ecg_anomaly_detection.acquisition as acquisition
 from ecg_anomaly_detection.acquisition import (
     AcquisitionError,
+    AcquisitionRecordProgress,
     Fetcher,
     TransferResult,
     acquire_dataset,
+    format_acquisition_record_progress,
 )
 from ecg_anomaly_detection.config import DatasetConfig, ExpectedSourceFile
 
@@ -90,6 +92,8 @@ def test_acquisition_downloads_then_reuses_verified_files(
     payloads = _payloads(dataset_config)
     calls: list[str] = []
     fetcher = _fetcher(payloads, calls)
+    first_progress: list[AcquisitionRecordProgress] = []
+    second_progress: list[AcquisitionRecordProgress] = []
 
     first = acquire_dataset(
         dataset_config,
@@ -98,6 +102,7 @@ def test_acquisition_downloads_then_reuses_verified_files(
         Path("artifacts/acquisition.json"),
         fetcher=fetcher,
         clock=lambda: datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        progress_callback=first_progress.append,
     )
     second = acquire_dataset(
         dataset_config,
@@ -105,6 +110,7 @@ def test_acquisition_downloads_then_reuses_verified_files(
         Path("data/raw/synthetic/1.0.0"),
         Path("artifacts/acquisition.json"),
         fetcher=fetcher,
+        progress_callback=second_progress.append,
     )
 
     assert first.downloaded_file_count == 3
@@ -115,6 +121,14 @@ def test_acquisition_downloads_then_reuses_verified_files(
     assert first.manifest == second.manifest
     assert first.manifest.created_at_utc == "2026-01-02T03:04:05Z"
     assert all(not item.path.startswith("/") for item in first.manifest.files)
+    assert first_progress == [AcquisitionRecordProgress(1, 1, "100", 3, 0)]
+    assert second_progress == [AcquisitionRecordProgress(1, 1, "100", 0, 3)]
+    assert format_acquisition_record_progress(first_progress[0]) == (
+        "record 1/1 (100): downloaded and verified 3 files"
+    )
+    assert format_acquisition_record_progress(second_progress[0]) == (
+        "record 1/1 (100): verified 3 existing files"
+    )
 
 
 def test_acquisition_restores_only_missing_files_against_baseline(
@@ -134,12 +148,24 @@ def test_acquisition_restores_only_missing_files_against_baseline(
     manifest_path = repository / "artifacts" / "acquisition.json"
     acquire_dataset(dataset_config, repository, data_dir, manifest_path, fetcher=fetcher)
     (data_dir / "100.dat").unlink()
+    progress: list[AcquisitionRecordProgress] = []
 
-    result = acquire_dataset(dataset_config, repository, data_dir, manifest_path, fetcher=fetcher)
+    result = acquire_dataset(
+        dataset_config,
+        repository,
+        data_dir,
+        manifest_path,
+        fetcher=fetcher,
+        progress_callback=progress.append,
+    )
 
     assert result.downloaded_file_count == 1
     assert result.reused_file_count == 2
     assert (data_dir / "100.dat").read_bytes() == payloads[dataset_config.download_url + "100.dat"]
+    assert progress == [AcquisitionRecordProgress(1, 1, "100", 1, 2)]
+    assert format_acquisition_record_progress(progress[0]) == (
+        "record 1/1 (100): downloaded and verified 1 missing file; verified 2 existing files"
+    )
 
 
 def test_acquisition_rejects_changed_existing_file(

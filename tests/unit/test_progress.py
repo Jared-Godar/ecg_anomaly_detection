@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from threading import Event
 
 import pytest
 
@@ -130,3 +131,79 @@ def test_each_line_is_flushed_immediately_so_a_subprocess_pipe_streams_live() ->
     reporter.note("record 1/3")
 
     assert snapshots == ["run starting\n", "run starting\n    record 1/3\n"]
+
+
+def test_heartbeat_reports_elapsed_status_without_running_the_operation_in_worker() -> None:
+    """A blocking main-thread operation receives a qualified heartbeat at the chosen cadence.
+
+    The signaling stream lets this test wait for an actual heartbeat write rather than
+    sleeping for an assumed amount of scheduler time. A one-millisecond cadence keeps
+    the unit test fast while production callers retain the default one-minute cadence.
+    """
+
+    heartbeat_written = Event()
+
+    class SignalingStream(io.StringIO):
+        """String stream that signals when the heartbeat text has been written."""
+
+        def write(self, text: str) -> int:
+            """Record text and signal when a heartbeat line reaches the stream.
+
+            Args:
+                text: String fragment written by ``print``.
+
+            Returns:
+                Number of characters accepted by ``io.StringIO.write``.
+            """
+
+            written = super().write(text)
+            # Signal only on the semantic heartbeat fragment, not print's trailing newline.
+            if "still running" in text:
+                heartbeat_written.set()
+            return written
+
+    stream = SignalingStream()
+    reporter = ProgressReporter(stream=stream)
+
+    # The wrapped body stays on this test's main thread; only observational waiting and
+    # output run in the reporter's daemon helper.
+    with reporter.heartbeat("[2/3] fit model", interval_seconds=0.001):
+        assert heartbeat_written.wait(timeout=1.0)
+
+    lines = stream.getvalue().splitlines()
+    assert lines
+    assert all(
+        line.startswith("[2/3] fit model: still running after ")
+        and line.endswith("(local completion time varies)")
+        for line in lines
+    )
+
+
+def test_heartbeat_fast_operation_and_silent_reporter_emit_nothing() -> None:
+    """Completing before one interval prints nothing, and stream=None stays thread-free/silent."""
+
+    stream = io.StringIO()
+    reporter = ProgressReporter(stream=stream)
+
+    # The body exits before the one-hour interval, so stop wakes the helper immediately
+    # and no speculative progress line is emitted.
+    with reporter.heartbeat("fast operation", interval_seconds=3600.0):
+        pass
+    # The silent reporter path should accept the same context-manager API without output.
+    with ProgressReporter(stream=None).heartbeat("silent operation"):
+        pass
+
+    assert stream.getvalue() == ""
+
+
+def test_heartbeat_rejects_nonpositive_interval() -> None:
+    """A zero or negative cadence fails before starting an unusable busy-loop worker."""
+
+    reporter = ProgressReporter(stream=io.StringIO())
+
+    # Entering the heartbeat context performs validation; no operation body should run.
+    with (
+        pytest.raises(ValueError, match="heartbeat interval must be positive"),
+        reporter.heartbeat("invalid", interval_seconds=0),
+    ):
+        raise AssertionError("unreachable heartbeat body")

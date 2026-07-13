@@ -74,6 +74,11 @@ and scoring, and often a few minutes for fitting on a typical laptop—while nam
 artifact-size, disk, dataset, and hardware factors that can change those timings. These are
 planning hints, not runtime guarantees or benchmark evidence.
 
+Because manual review observed a roughly seven-minute fit with no intermediate model output, the
+fit stage also prints one qualified elapsed-time heartbeat per minute until the unchanged blocking
+`model.fit` call returns. This cadence keeps the cell visibly active without enabling estimator
+iteration logs, estimating remaining time, or adding a second fit path.
+
 The feedback is observational only. It does not alter estimator settings, inputs, metrics,
 evaluation boundaries, or generated evidence, and it does not write timing or model artifacts.
 The tracked notebook retains empty outputs and null execution counts; progress appears only when

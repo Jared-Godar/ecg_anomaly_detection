@@ -9,7 +9,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from time import perf_counter
 
-from ecg_anomaly_detection.acquisition import AcquisitionError, acquire_dataset
+from ecg_anomaly_detection.acquisition import (
+    AcquisitionError,
+    acquire_dataset,
+    format_acquisition_record_progress,
+)
 from ecg_anomaly_detection.benchmark_approval import (
     BenchmarkApprovalError,
     record_benchmark_approval,
@@ -667,6 +671,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
                     options.repository_root,
                     options.data_dir,
                     options.output,
+                    # Match run-pipeline's record-level cadence so the standalone
+                    # acquisition command also remains visibly active without per-file noise.
+                    progress_callback=lambda item: reporter.note(
+                        format_acquisition_record_progress(item)
+                    ),
                 )
                 print(
                     f"acquired {result.downloaded_file_count} and reused "

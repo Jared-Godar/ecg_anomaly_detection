@@ -140,8 +140,8 @@ should never contain business logic itself; that belongs in the stage modules.
   interruption-tolerant hyperparameter search (checkpoints one candidate at a time).
 - `notebook_quality.py` — static checks (format/strip-outputs/lint) for the ignored
   `notebooks/local/` sandbox; never executes cells.
-- `progress.py` — per-stage progress banners with elapsed time, flushed per line so subprocess
-  consumers (including the Step 0 notebook) can stream it live.
+- `progress.py` — per-stage progress banners plus optional qualified elapsed heartbeats, serialized
+  and flushed per line so subprocess consumers and notebooks can stream useful updates live.
 
 ### Two non-obvious invariants that shape most changes
 

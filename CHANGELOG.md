@@ -23,10 +23,20 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   legend, reproducible export workflow, explicit protected-test boundary, and visible source
   attribution. All three public notebooks now give quiet, immediately flushed execution feedback:
   Step 0 adds qualified bootstrap and first-run timing guidance around its existing streamed
-  pipeline stages, Step 1 bounds optional run-evidence discovery with one start/completion pair,
-  and Step 2 reports waveform loading, fixed-model fitting, and validation scoring. Expectations
-  remain deliberately approximate and measured times remain observational, with no changes to
-  model inputs, parameters, metrics, evaluation boundaries, saved outputs, or artifact behavior.
+  pipeline stages, now including one downloaded/reused integrity update per configured acquisition
+  record and a short invocation cell that keeps live VS Code/Jupyter output in view. Step 1 bounds
+  optional run-evidence discovery with one start/completion pair and exposes configured channel and
+  record-exclusion context. Step 2 reports waveform loading, fixed-model fitting, and validation
+  scoring, makes successful repository path resolution visible, and emits a qualified minute-scale
+  elapsed heartbeat during an otherwise silent fit. All three notebooks now open with a concise,
+  conversational task overview, qualified first-run/rerun timing, and compact jump links; detailed
+  version history is preserved in bottom appendices. Notebook 00 also compares local VS
+  Code/Jupyter, GitHub Codespaces, and hosted Google Colab, then stores an interactive profile
+  choice consumed by repository preparation, locked dependency bootstrap, diagnostics, and the
+  CLI invocation; `ipywidgets` is now a direct locked notebook dependency with a plain assignment
+  fallback. Expectations remain deliberately approximate and measured times remain observational,
+  with no changes to model inputs, parameters, metrics, evaluation boundaries, saved outputs, or
+  artifact policy.
 
 ### Fixed
 

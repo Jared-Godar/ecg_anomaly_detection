@@ -38,7 +38,7 @@ The labels are simplified reference-annotation classes from a historical dataset
 | Lineage and auditability | Record identity retained through transformations; run manifests capture code, environment, configuration, inputs, and artifact digests |
 | Pipeline design | One configuration-driven command connects supported stages and isolates every run under a UUID |
 | Testability and automation | Synthetic fixtures, unit and integration tests, CI, formatting, linting, type checks, security scans, and dependency maintenance |
-| Execution visibility | Per-stage `run-pipeline` banners plus bounded, qualified start/completion feedback in the public notebooks, flushed so long local phases remain visible without noisy output |
+| Execution visibility | Per-stage `run-pipeline` banners, record-level acquisition updates, and bounded notebook feedback including a minute-scale model-fit heartbeat, all flushed without per-iteration noise |
 | Local artifact lifecycle management | `list-runs`/`purge-run` reclaim disk space from local run output on demand, by exact run ID only, without touching the shared dataset acquisition baseline or weakening create-only artifact guarantees |
 | Interruption-tolerant local experimentation | `ExperimentTracker` checkpoints long-running hyperparameter search loops one candidate at a time, so an interruption loses at most the in-progress candidate |
 | CLI usability without weakened contracts | `split-windows`/`index-dataset` accept a directory of shard artifacts as `--input`, with clear diagnostics on empty, missing, symlinked, or duplicate paths, and no change to lineage or schema behavior |
