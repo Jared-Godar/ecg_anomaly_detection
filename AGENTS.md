@@ -41,6 +41,13 @@ defect, not a style choice.
 - **Calibrated claims.** Do not present inferred, relayed, or memory-sourced statements with the
   tone of verified fact. State the confidence and its basis when it is not directly verified in
   the current session.
+- **Check outside-sandbox permission first.** When an authorization or permission barrier is
+  encountered, the first remediation step is to check whether the required permission is
+  available through the environment's approved out-of-sandbox mechanism. Do this before trying
+  workarounds or asking the maintainer to repeat an authorization they may already have granted.
+  Checking availability does not itself grant permission, bypass an approval requirement, or
+  broaden the action that the maintainer authorized; use the platform's normal approval flow when
+  the out-of-sandbox action still requires explicit consent.
 - **Floor, not ceiling.** This section is a minimum, not an exhaustive list of permitted actions.
   Using judgment to do the obviously-necessary thing when no rule names it is required, not
   optional. Declining or omitting an obviously-correct action because it "wasn't in the contract"

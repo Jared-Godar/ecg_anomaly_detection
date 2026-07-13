@@ -26,6 +26,11 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Required coding agents to check the environment's approved out-of-sandbox permission path as
+  the first remediation step after encountering an authorization barrier (#195), before trying
+  workarounds or asking the maintainer to repeat an existing authorization. The new standing
+  commitment explicitly preserves normal approval requirements and does not treat permission
+  availability as authorization or broaden the approved action.
 - Added a "Standing commitments to the maintainer" section to `AGENTS.md` capturing hard
   cross-session contracts — self-recording of new promises, done-means-done reporting, a
   CHANGELOG entry on every substantive PR, the standing-authorization-vs-four-gated-actions
