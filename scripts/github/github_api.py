@@ -5,10 +5,11 @@ Owns the GitHub CLI plumbing that `set_merged_project_status.py` and
 `validate_project_metadata.py` previously each duplicated, plus the GraphQL
 quota safeguards added by issue #173:
 
-- one `run_gh` wrapper with bounded secondary-rate-limit retries and fail-fast
-  primary-rate-limit classification (raised as the distinct
-  `PrimaryRateLimitError` so callers can separate an hours-long quota
-  drain from a genuine metadata defect or an ordinary command failure);
+- one `run_gh` wrapper with bounded retries for GitHub's transient conditions
+  (the secondary rate limit and, since issue #190, transient 5xx server
+  errors) and fail-fast primary-rate-limit classification (raised as the
+  distinct `PrimaryRateLimitError` so callers can separate an hours-long
+  quota drain from a genuine metadata defect or an ordinary command failure);
 - `QuotaMonitor`, a REST-based (`gh api rate_limit` -- free, the endpoint is
   documented not to count against any limit) GraphQL quota preflight with a
   configurable minimum-remaining threshold and before/after/consumed
@@ -85,6 +86,10 @@ DEFAULT_MINIMUM_GRAPHQL_QUOTA: int = 250
 # point-budget limit). These delays are deliberately small: the secondary
 # limit is documented to clear within seconds, so there is no benefit to a
 # long or exponential schedule, only to CI wall-clock time spent waiting.
+# Transient 5xx server errors (issue #190) share this same schedule: the
+# observed failure mode -- a freshly opened PR's diff momentarily uncomputed,
+# clearing within ~12 seconds -- has the same seconds-scale recovery profile,
+# so a separate schedule would add configuration without adding behavior.
 SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS: tuple[int, ...] = (2, 5, 10)
 
 
@@ -110,14 +115,38 @@ def _is_secondary_rate_limit_error(message: str) -> bool:
     return "secondary rate limit" in message.lower()
 
 
+def _is_transient_server_error(message: str) -> bool:
+    """True when gh's error text reports a transient GitHub 5xx server error.
+
+    Grounded in the live failure that motivated this classifier (issue #190,
+    the changelog gate's first CI run): `gh: Server Error: Sorry, this diff is
+    temporarily unavailable due to heavy server load. (HTTP 500)` -- a freshly
+    opened pull request's diff was momentarily uncomputed, and a manual rerun
+    passed 12 seconds later. gh surfaces 5xx responses either with the words
+    "server error" or with the status code itself ("HTTP 500", "HTTP 502",
+    ...), so both signals are checked. 4xx responses match neither substring
+    and keep failing fast: a genuine caller error (bad path, missing scope,
+    not found) must never be retried, only re-raised immediately.
+    """
+
+    lowered = message.lower()
+    # "http 5" matches every 5xx status code gh prints ("(HTTP 500)",
+    # "HTTP 502", ...) while matching no 4xx code, which keeps the
+    # retry strictly scoped to server-side failures.
+    return "server error" in lowered or "http 5" in lowered
+
+
 def run_gh(args: list[str], cwd: Path | None = None) -> str:
     """Run one fixed GitHub CLI command and return its captured output.
 
     Retries a bounded number of times, with short fixed delays, when gh
-    reports GitHub's transient secondary rate limit -- but never for the
-    primary (hours-long) rate limit, which raises the distinct
-    GraphQLQuotaExhaustedError immediately so callers can report it as
-    infrastructure rather than a defect in the work being validated.
+    reports one of GitHub's transient conditions -- the secondary rate limit
+    or a 5xx server error (issue #190) -- but never for the primary
+    (hours-long) rate limit, which raises the distinct PrimaryRateLimitError
+    immediately so callers can report it as infrastructure rather than a
+    defect in the work being validated. Ordinary failures (4xx, auth, bad
+    arguments) also fail fast: retrying a genuine caller error would only
+    delay the inevitable and mask the real defect.
 
     Args:
         args: The `gh` subcommand and its arguments (without the leading "gh" itself).
@@ -132,8 +161,9 @@ def run_gh(args: list[str], cwd: Path | None = None) -> str:
         The command's captured stdout.
     """
 
-    # The first attempt has no delay; each retry after a secondary-rate-limit
-    # failure waits progressively longer per SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS.
+    # The first attempt has no delay; each retry after a transient failure
+    # (secondary rate limit or 5xx server error) waits progressively longer
+    # per SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS.
     delays = (0, *SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS)
     # Walk the fixed attempt schedule rather than recursing, so the bound on
     # total attempts is visible directly from `delays` with no separate counter.
@@ -171,10 +201,13 @@ def run_gh(args: list[str], cwd: Path | None = None) -> str:
                     f"infrastructure condition, not a metadata defect: gh {' '.join(args)} "
                     f"failed: {message}"
                 ) from error
-            # Transient and documented to clear within seconds; loop around to
-            # the next (longer) delay instead of failing, unless this was
-            # already the last scheduled attempt.
-            if _is_secondary_rate_limit_error(message) and not is_last_attempt:
+            # Both transient conditions -- the secondary rate limit and a 5xx
+            # server error -- are documented/observed to clear within seconds;
+            # loop around to the next (longer) delay instead of failing,
+            # unless this was already the last scheduled attempt.
+            if (
+                _is_secondary_rate_limit_error(message) or _is_transient_server_error(message)
+            ) and not is_last_attempt:
                 continue
             raise GitHubApiError(f"gh {' '.join(args)} failed: {message}") from error
         else:
