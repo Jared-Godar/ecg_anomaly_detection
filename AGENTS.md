@@ -1,4 +1,109 @@
-# Repository instructions for Codex
+# Repository instructions for coding agents (Claude Code, Codex, and any successor)
+
+## Standing commitments to the maintainer
+
+These are hard, non-negotiable contracts. They exist in this tracked file — not only in any
+agent's private memory — precisely so that every session, including cold-start executor and
+cloud sessions that do NOT inherit local agent memory, is bound by them. Violating one is a
+defect, not a style choice.
+
+- **Self-recording promises (meta-rule).** Whenever an agent agrees to a new standing rule or
+  "always / never" commitment with the maintainer, it must record that commitment in THIS file,
+  in the same turn it is made, before claiming the matter is settled. A promise that lives only
+  in conversation or in agent memory is not considered made. If a commitment cannot be captured
+  durably or enforced as stated, say so at promise time — never let the maintainer discover
+  later that it landed nowhere.
+- **Do what is written, the way it is written.** If an agent takes the time to write a rule down
+  or to tell the maintainer something is done, it must take the time to actually do it that way.
+  Formatted assurances are not a substitute for the action.
+- **Done means done.** Never report an action as complete unless it was executed AND verified in
+  the current session, with the evidence available to show. Distinguish plainly in every report:
+  done (receipt attached) / relayed (an executor's claim not re-verified) / queued / owed / not
+  done. Announcing a mechanism (a memory file, an issue, a gate) is not the behavior existing.
+- **CHANGELOG on every PR.** If the repository has a `CHANGELOG.md`, every pull request with
+  substantive changes updates it under `## Unreleased` in that same PR. Treat the entry as a
+  merge gate on par with passing tests, not release-time archaeology. (Origin: 25 milestone PRs
+  merged with zero changelog entries before a release-gate audit caught it — issues #179 backfill,
+  #184 mechanical enforcement.)
+- **Log the issue before touching the repo.** For any work item, the tracking GitHub issue is
+  the FIRST artifact — create it before branching, before editing files, before running anything.
+  The order is: issue → branch → implement → gate → document → open PR. Filing the issue after
+  the work has begun is a defect; do not treat it as a formality to backfill. (This ordering was
+  itself violated on the PR that introduced this section — the maintainer had to say so twice.)
+- **Standing authorization vs. the four gated actions.** Once a work item is agreed, the agent
+  runs the full canonical workflow — log the issue, branch, implement, gate, document, disclose,
+  and the complete post-merge closure pass INCLUDING pruning merged local branches/worktrees —
+  WITHOUT being re-asked. The maintainer never has to repeat a standing rule to get it honored,
+  and never has to say "yes, do the thing you already committed to." Only four actions require an
+  explicit per-instance go-ahead: (1) pushing a branch, (2) opening a pull request, (3) the merge
+  click (the maintainer merges via GUI), and (4) tagging/publishing a release. Pausing to ask on
+  anything outside those four is a defect.
+- **Calibrated claims.** Do not present inferred, relayed, or memory-sourced statements with the
+  tone of verified fact. State the confidence and its basis when it is not directly verified in
+  the current session.
+- **Floor, not ceiling.** This section is a minimum, not an exhaustive list of permitted actions.
+  Using judgment to do the obviously-necessary thing when no rule names it is required, not
+  optional. Declining or omitting an obviously-correct action because it "wasn't in the contract"
+  or is "out of scope" is itself a defect — the same class of failure as skipping a listed duty,
+  not a form of diligence. When genuinely unsure whether to act, surface the choice; do not treat
+  silence in the rules as a reason to do nothing.
+
+## Canonical work-item workflow
+
+Run this whole sequence unprompted for every agreed work item. The maintainer should never have to
+name a step to get it done. Only the four gated actions in the standing commitments (push, open-PR,
+merge, release-tag) require an explicit go-ahead; everything else here is standing authorization.
+
+1. **Log the tracking issue first** — before branching or editing (see standing commitments).
+   Populate full metadata and add it to Project #5 with all nine fields.
+2. **Sync, then branch.** `git fetch` and confirm `git log --oneline main..origin/main` is empty
+   (fast-forward `main` first if not); then cut the feature branch. Re-run this drift check again
+   before finalizing/pushing an already-open PR — the serial-PR assumption does not hold.
+3. **Implement, and gate every commit** — `uv run pytest`, `uv run pyright`,
+   `uv run pre-commit run --all-files`, `git diff --check` all green before each commit. The
+   CHANGELOG entry (standing commitments) and the exhaustive code/notebook commentary standard
+   are part of this gate: run `scripts/check_code_commentary.py` and treat missing docstrings/
+   comments on any supported Python — including newly added scripts — as a gate failure.
+4. **Documentation pass** — an exhaustive `git ls-files "*.md"` sweep, not a guessed subset; also
+   check the previously merged PR for gaps it left behind.
+5. **Disclose scope decisions in the PR body** — what was deliberately excluded and why, and call
+   out any metadata left blank on purpose (e.g. no milestone) so a correct omission is not mistaken
+   for an oversight.
+6. **File issues for every gap or idea found**, by default — even unscheduled or unlikely-to-be-
+   acted-on ones; visibility over caution. When a closely-related gap surfaces mid-task, propose
+   folding it in rather than deferring it as "not original scope"; reserve caution for irreversible
+   or high-stakes calls.
+7. **On the maintainer's go-ahead: push and open the PR** with full metadata (assignee, labels,
+   milestone when applicable, Project #5 membership with all nine fields). Verify every piece with
+   `gh` afterward; never infer success from the creation command. Set the closing issue's own
+   `status:` label to `status: in-progress`.
+8. **Immediately verify PR-readiness with tooling yourself** — run `gh pr checks <N>` and
+   `uv run python scripts/github/validate_project_metadata.py --pr-number <N> --strict-project-checks`
+   and quote the actual result. Never say "let me know when CI is green." A cancelled duplicate
+   check can block the merge box after a real pass — re-run it or push an empty commit.
+9. **The maintainer merges via the GUI.** Do not merge.
+10. **Closure pass, unprompted, after the maintainer confirms merge:** verify via `gh` that the PR
+    is `MERGED` and every closed issue is `CLOSED`; set the PR Project status to `Merged` and each
+    issue to `Closed`, each confirmed with a read-back (never trust `project-status-sync`
+    automation alone — a known quirk can force `Closed` instead of `Merged`); **strip the
+    `status: in-progress` label from every closed issue** (`gh issue close` does not remove it);
+    check whether the milestone is now empty and close it only if genuinely so; `git switch main`
+    and `git pull --ff-only`; and **prune** — `git fetch --prune`, then delete every fully-merged
+    local branch with `git branch -D` (squash merges break `-d`'s ancestry check) and remove the
+    corresponding worktrees, not just the branch from the PR just closed.
+11. **Milestone discipline:** verify a work item's milestone live against the actual scope docs
+    (`docs/evaluation-policy.md`, `docs/benchmark-governance.md`) rather than pattern-matching;
+    an issue found mid-implementation of already-milestoned work should generally join that
+    milestone rather than default to unmilestoned.
+
+## Engineering discipline
+
+- **Diagnose before suppressing.** Prove the root cause of a warning or failure before silencing
+  it or editing global config; do not trade a real protection for cosmetic quiet, even under time
+  pressure.
+- **Governance docs are negotiable, not to be silently worked around.** When a real friction with
+  `AGENTS.md` or a governance doc surfaces, propose a case-specific update instead of quietly
+  routing around it.
 
 ## Local environment
 
