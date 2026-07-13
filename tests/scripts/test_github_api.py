@@ -169,6 +169,75 @@ def test_run_gh_raises_after_exhausting_secondary_rate_limit_retries() -> None:
     assert mock_run.call_count == 1 + len(gha.SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS)
 
 
+def test_run_gh_retries_then_succeeds_on_transient_server_error() -> None:
+    """A transient GitHub 5xx server error is retried and can recover (issue #190).
+
+    The stderr text is the verbatim failure from the changelog gate's first CI
+    run: a freshly opened PR's diff was momentarily uncomputed and a rerun
+    passed 12 seconds later, exactly the window the retry schedule covers.
+    """
+
+    server_error = subprocess.CalledProcessError(
+        1,
+        ["gh"],
+        stderr=(
+            "gh: Server Error: Sorry, this diff is temporarily unavailable "
+            "due to heavy server load. (HTTP 500)"
+        ),
+    )
+    # Fails once with the 5xx, then succeeds on the first retry.
+    with (
+        patch.object(subprocess, "run", side_effect=[server_error, _completed("ok")]) as mock_run,
+        patch.object(gha.time, "sleep") as mock_sleep,
+    ):
+        result = gha.run_gh(["api", "repos/o/r/pulls/189/files"])
+    assert result == "ok"
+    assert mock_run.call_count == 2
+    # The single retry uses the first entry of the shared backoff schedule.
+    assert [call.args[0] for call in mock_sleep.call_args_list] == [2]
+
+
+def test_run_gh_raises_after_exhausting_transient_server_error_retries() -> None:
+    """A 5xx that never clears still fails, after using every retry slot.
+
+    The stderr carries only the bare status-code signal ("HTTP 502", no
+    "server error" wording), pinning the classifier's second detection branch.
+    """
+
+    server_error = subprocess.CalledProcessError(1, ["gh"], stderr="gh: Bad Gateway (HTTP 502)")
+    # Every attempt fails the same way, so the retry schedule must exhaust
+    # completely before this raises -- as the base error class, since a 5xx is
+    # neither rate-limit condition.
+    with (
+        patch.object(subprocess, "run", side_effect=server_error) as mock_run,
+        patch.object(gha.time, "sleep"),
+        pytest.raises(gha.GitHubApiError, match="Bad Gateway"),
+    ):
+        gha.run_gh(["pr", "view", "155"])
+    # One initial attempt plus one retry per entry in the shared backoff schedule.
+    assert mock_run.call_count == 1 + len(gha.SECONDARY_RATE_LIMIT_RETRY_DELAYS_SECONDS)
+
+
+def test_run_gh_fails_fast_on_a_4xx_client_error_without_retry() -> None:
+    """A 4xx client error is never retried -- the 5xx classifier must not over-match.
+
+    This pins the narrowing from issue #190: retrying belongs to server-side
+    (5xx) failures only, and a genuine caller error (here a 404) must keep
+    failing on the first attempt exactly as before the retry was added.
+    """
+
+    not_found_error = subprocess.CalledProcessError(1, ["gh"], stderr="gh: Not Found (HTTP 404)")
+    # A 4xx matches neither transient classifier, so exactly one attempt runs.
+    with (
+        patch.object(subprocess, "run", side_effect=not_found_error) as mock_run,
+        patch.object(gha.time, "sleep") as mock_sleep,
+        pytest.raises(gha.GitHubApiError, match="Not Found"),
+    ):
+        gha.run_gh(["pr", "view", "99999"])
+    assert mock_run.call_count == 1
+    mock_sleep.assert_not_called()
+
+
 def test_run_gh_translates_a_missing_gh_binary_into_the_module_error() -> None:
     """A missing gh executable raises GitHubApiError, not a bare FileNotFoundError."""
 
