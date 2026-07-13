@@ -57,7 +57,12 @@ A pull request should:
 - remain small enough to review as one coherent modernization step;
 - distinguish implemented behavior from proposed architecture;
 - document new configuration, generated artifacts, and data contracts;
-- preserve dataset attribution and the non-clinical use limitation; and
+- preserve dataset attribution and the non-clinical use limitation;
+- update `CHANGELOG.md` under `## Unreleased` when it changes substantive paths
+  (`src/`, `scripts/`, `docs/`, `configs/`, `.github/workflows/`) -- enforced by
+  the `Enforce per-PR changelog updates` CI job; a pull request that genuinely
+  needs no entry declares a `changelog: not-needed -- <reason>` line in its body
+  instead (see [release governance](docs/governance/releases.md)); and
 - update the roadmap or status documentation when a capability materially changes.
 
 Any new data workflow should record source version, checksums, configuration, code revision,

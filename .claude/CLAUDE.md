@@ -163,7 +163,9 @@ should never contain business logic itself; that belongs in the stage modules.
   `scripts/` call into it; they don't reimplement it.
 - `configs/` — versioned, non-secret TOML pipeline configuration.
 - `data/{raw,external,interim,processed}/` and `artifacts/`, `reports/figures/` — all generated
-  and **gitignored**; only `.gitkeep` is tracked. Never commit source or derived ECG data.
+  and **gitignored**; the only tracked files are `.gitkeep` placeholders, `data/README.md`, and
+  the deliberately allowlisted `reports/figures/modern-pipeline-lineage.svg` (`.gitignore:144`).
+  Never commit source or derived ECG data.
 - `archive/original_2022/` — preserved, unsupported historical notebooks/images; excluded from
   lint/format hooks (`ruff.toml`, `.pre-commit-config.yaml`) and must not be rewritten except via
   a dedicated, explicitly reviewed archival repair.

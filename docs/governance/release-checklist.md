@@ -14,6 +14,19 @@ those actions are explicitly authorized in separate work.
   the proposed version.
 - [ ] Move relevant `Unreleased` entries under the proposed version without
   inventing a date.
+- [ ] Verify changelog coverage against the full commit range since the last
+  release tag, not only the milestone item list: enumerate
+  `git log --oneline <last-release-tag>..main` and confirm every commit's
+  issue or pull request is represented in the changelog section being frozen.
+  Map identifiers before flagging a gap -- commit subjects usually cite the
+  pull request number (from squash merges) while changelog entries usually
+  cite the issue number, so a naive number match produces false positives;
+  treat a commit and an entry as matched once its PR is mapped to the issue(s)
+  it closed. This range scan is the release-time backstop that complements the
+  per-PR changelog gate (`scripts/github/validate_changelog_update.py`, issue
+  #184): the per-PR gate prevents future decay, while the range scan also
+  catches direct commits and pre-enforcement history, which a per-PR gate
+  structurally cannot see (there is no pull request to gate).
 - [ ] Document breaking changes, migrations, compatibility effects, and known
   limitations.
 

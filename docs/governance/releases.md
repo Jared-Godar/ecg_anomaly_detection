@@ -53,9 +53,21 @@ summarize user-visible changes, compatibility effects, known limitations, and
 reproducibility implications without presenting historical or validation-only
 metrics as evidence of generalization.
 
-The changelog is prepared in the pull request that makes the repository ready
-for release. Tagging and publication remain separate, deliberate operations and
-must not occur as an incidental effect of merging a governance change.
+The changelog is prepared continuously, not at release time: every pull
+request with substantive changes updates `CHANGELOG.md` under `## Unreleased`
+in that same pull request (`AGENTS.md`, "Standing commitments"). This is
+mechanically enforced -- the `Enforce per-PR changelog updates` job in
+`.github/workflows/metadata-governance.yml` runs
+`scripts/github/validate_changelog_update.py`, which fails any pull request
+that touches a substantive path (`src/`, `scripts/`, `docs/`, `configs/`, or
+`.github/workflows/`) without also touching `CHANGELOG.md`. A pull request
+that genuinely needs no entry must say so explicitly and visibly with a
+`changelog: not-needed -- <reason>` line in its body; the gate records the
+exemption in its output instead of being bypassed silently (issue #184). The
+release pull request then only freezes the accumulated `Unreleased` entries
+under the proposed version. Tagging and publication remain separate,
+deliberate operations and must not occur as an incidental effect of merging a
+governance change.
 
 ## Artifact hygiene
 

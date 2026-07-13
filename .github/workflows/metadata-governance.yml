@@ -46,3 +46,33 @@ jobs:
             --pr-number "${{ github.event.pull_request.number }}" \
             --repo "${{ github.repository }}" \
             --strict-project-checks
+
+  changelog:
+    name: Enforce per-PR changelog updates
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+
+      - name: Create locked environment
+        run: uv sync --locked --dev
+
+      - name: Enforce per-PR changelog updates
+        env:
+          # The changelog gate is REST-only (this PR's body and changed-file listing),
+          # so the default GITHUB_TOKEN's read access suffices -- no Project-scoped
+          # PAT needed, and no GraphQL points consumed from the shared pool. See
+          # scripts/github/validate_changelog_update.py and issue #184.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          uv run python scripts/github/validate_changelog_update.py \
+            --pr-number "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}"
