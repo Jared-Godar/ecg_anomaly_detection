@@ -48,6 +48,10 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   explaining that the failure is a network hiccup rather than a broken notebook and that a re-run
   restarts the atomic download cleanly. The deliberate defensive handling (graceful messaging and
   optional connectivity retries) is tracked separately in #201.
+- Codified a **defensive-external-calls** engineering-discipline rule in `AGENTS.md`: external
+  calls (downloads, package installs, HTTP/API, remote CLIs) must retry transient failures with
+  backoff and, on exhaustion, exit gracefully with clear remediation instead of a raw traceback.
+  Surfaced by this PR's walkthrough; existing gaps are retrofitted under #201.
 
 ### Fixed
 

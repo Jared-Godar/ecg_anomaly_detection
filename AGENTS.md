@@ -105,6 +105,18 @@ merge, release-tag) require an explicit go-ahead; everything else here is standi
 
 ## Engineering discipline
 
+- **Defensively code every external call.** Any operation that leaves the process for a network or
+  external service — dataset/file downloads, package installs (`uv sync`/PyPI), HTTP/API requests,
+  remote CLIs, registry or container pulls — must (1) retry *transient* failures (timeouts,
+  connection resets, transient 5xx) a bounded number of times with backoff, while failing fast on
+  *permanent* errors (404, auth, digest/size mismatch) and never retrying a non-idempotent
+  operation in a way that risks duplication or corruption; and (2) on exhaustion, exit *gracefully*
+  — a clear, bounded message that names what failed, states plainly that it is an
+  external/connectivity condition rather than a code or setup defect, and gives concrete
+  remediation steps — never a raw traceback, especially on a user-facing surface such as the public
+  notebooks. Retries must preserve existing integrity guarantees (atomic commits, checksum
+  verification). New external calls meet this bar when written; known existing gaps are tracked and
+  retrofitted (#201 covers the Step 0 notebook's PhysioNet download and `uv sync` bootstrap).
 - **Diagnose before suppressing.** Prove the root cause of a warning or failure before silencing
   it or editing global config; do not trade a real protection for cosmetic quiet, even under time
   pressure.
