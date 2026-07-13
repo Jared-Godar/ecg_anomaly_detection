@@ -15,6 +15,22 @@ than forced onto the PR, so an issue's own milestone decision is the single
 source of truth and cannot drift out of sync the way a separate opt-out label
 could.
 
+Bot-authored dependency pull requests are a documented governed-exempt class
+(issue #193). A PR whose author login is listed in GOVERNED_BOT_AUTHORS *and*
+whose GitHub account type is Bot -- both conditions, never the login alone --
+is exempt from the milestone and closing-reference requirements: Dependabot
+dependency PRs are deliberately unmilestoned and have no tracking issue. The
+exemption is never a silent bypass (issue #184's design principle): instead of
+the linked-issue Project checks, the run validates the bot PR's *own* Project
+membership and nine-field completeness from the same single Project snapshot,
+still requires an assignee and type:*/area:* labels (supplied natively by
+.github/dependabot.yml), and prints an explicit notice naming the exemption in
+every log where it applies. First-run-redness caveat: a Dependabot-*triggered*
+run of this gate receives only Dependabot's restricted secrets, so the strict
+Project read fails until a later human/PAT-actor event re-runs the check --
+expected and self-correcting once the autofill workflow pushes the changelog
+commit.
+
 This intentionally does not attempt to validate issues at creation time. GitHub
 provides no clean rejection mechanism for issue creation comparable to a required
 pull-request status check, so issue-only metadata gaps remain a manual-review
@@ -107,6 +123,12 @@ _FIELD_JSON_KEYS: dict[str, str] = {
     name: name[0].lower() + name[1:] for name in REQUIRED_PROJECT_FIELDS
 }
 
+# The governed bot-author exemption class (issue #193). Membership requires
+# BOTH the exact login listed here AND the Bot account type reported by GitHub
+# (see is_governed_bot_pull_request); extending this tuple is a governance
+# decision (docs/governance/github-metadata-automation.md), not a convenience.
+GOVERNED_BOT_AUTHORS: tuple[str, ...] = ("dependabot[bot]",)
+
 # Matches GitHub's recognized closing keywords (close/closes/closed, fix/fixes/fixed,
 # resolve/resolves/resolved), case-insensitively, followed by an issue reference --
 # the same keyword set GitHub itself uses to auto-close an issue when a PR merges,
@@ -131,7 +153,13 @@ _INLINE_CODE_SPAN_PATTERN = re.compile(r"`[^`\n]*`")
 
 @dataclass(frozen=True, slots=True)
 class PullRequestMetadata:
-    """The subset of PR data this check cares about."""
+    """The subset of PR data this check cares about.
+
+    author and author_is_bot_account identify the governed bot-author class
+    (issue #193). Their defaults are deliberately conservative: an unknown
+    author ("") with a non-Bot account type can never be governed-exempt, so a
+    construction site that omits them always gets the full human-PR checks.
+    """
 
     number: int
     assignees: tuple[str, ...]
@@ -139,6 +167,8 @@ class PullRequestMetadata:
     labels: tuple[str, ...]
     body: str
     state: str
+    author: str = ""
+    author_is_bot_account: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,7 +187,12 @@ class IssueOverview:
 
 @dataclass(frozen=True, slots=True)
 class ProjectFieldReport:
-    """Whether an issue is tracked in the Project and which fields are missing."""
+    """Whether an item is tracked in the Project and which fields are missing.
+
+    issue_number is the tracked item's content number: an issue number on the
+    default linked-issue path, or the PR's own number on the governed-bot path
+    (see build_project_field_report's content_type parameter).
+    """
 
     issue_number: int
     is_project_member: bool
@@ -218,14 +253,34 @@ def _has_label_with_prefix(labels: Sequence[str], prefix: str) -> bool:
     return any(label.replace(" ", "").lower().startswith(normalized_prefix) for label in labels)
 
 
+def is_governed_bot_pull_request(pr: PullRequestMetadata) -> bool:
+    """Return whether a PR belongs to the governed bot-author exemption class (issue #193).
+
+    Membership requires BOTH an allowlisted login AND GitHub's Bot account type.
+    The type check is belt-and-braces against any future account-rename/spoof
+    vector: GitHub logins cannot contain brackets today, so a human account
+    named "dependabot[bot]" is currently impossible to register, but this check
+    must not rely on that staying true.
+    """
+    return pr.author in GOVERNED_BOT_AUTHORS and pr.author_is_bot_account
+
+
 def validate_pull_request(
-    pr: PullRequestMetadata, *, require_milestone: bool = True
+    pr: PullRequestMetadata,
+    *,
+    require_milestone: bool = True,
+    require_closing_reference: bool = True,
 ) -> tuple[str, ...]:
     """Return PR-level violations; an empty tuple means the PR-level checks pass.
 
     require_milestone defaults to True so every existing caller keeps the original,
     conservative behavior unless it explicitly opts out based on closing-issue state
     (see closing_issue_milestones_require_pr_milestone).
+
+    require_closing_reference likewise defaults to True so every existing caller
+    keeps the original behavior unless it explicitly opts out for the governed
+    bot-author class (see is_governed_bot_pull_request), whose dependency PRs
+    deliberately have no tracking issue to reference.
     """
     violations: list[str] = []
     # An unassigned PR has no clear owner accountable for addressing review feedback.
@@ -244,7 +299,9 @@ def validate_pull_request(
         violations.append("pull request is missing an area:* label")
     # No recognized closing keyword means this PR won't auto-close any issue on
     # merge, breaking the issue-tracking chain this governance model depends on.
-    if not extract_closing_issue_numbers(pr.body):
+    # Waived only for governed bot PRs (see this function's own docstring), whose
+    # compensating check happens in _run_validation instead.
+    if require_closing_reference and not extract_closing_issue_numbers(pr.body):
         violations.append("pull request body has no closing issue reference (e.g. 'Closes #123')")
     return tuple(violations)
 
@@ -264,19 +321,35 @@ def closing_issue_milestones_require_pr_milestone(milestones: Sequence[str | Non
 
 
 def build_project_field_report(
-    issue_number: int, project_items: Sequence[dict[str, Any]]
+    issue_number: int,
+    project_items: Sequence[dict[str, Any]],
+    *,
+    content_type: str = "Issue",
 ) -> ProjectFieldReport:
-    """Build a field-completeness report for one issue from an already-fetched item list."""
+    """Build a field-completeness report for one item from an already-fetched item list.
+
+    Args:
+        issue_number: The content number of the item to look for (an issue number,
+            or a PR number on the governed-bot path).
+        project_items: The Project's already-fetched item list (fetch_project_items).
+        content_type: The Project item content type to match ("Issue" by default;
+            "PullRequest" for the governed-bot compensating check, issue #193).
+            Matching on type as well as number matters because issues and PRs
+            share one numbering space in a GitHub repository.
+
+    Returns:
+        The item's membership and field-completeness report.
+    """
     matching = next(
         (
             item
             for item in project_items
-            if item.get("content", {}).get("type") == "Issue"
+            if item.get("content", {}).get("type") == content_type
             and item.get("content", {}).get("number") == issue_number
         ),
         None,
     )
-    # An issue absent from the Project's item list isn't tracked at all, so there's
+    # An item absent from the Project's item list isn't tracked at all, so there's
     # no point checking its individual field values -- membership itself is the violation.
     if matching is None:
         return ProjectFieldReport(issue_number, is_project_member=False, missing_fields=())
@@ -286,16 +359,28 @@ def build_project_field_report(
     return ProjectFieldReport(issue_number, is_project_member=True, missing_fields=missing)
 
 
-def validate_project_membership(report: ProjectFieldReport) -> tuple[str, ...]:
-    """Return violations for one issue's Project membership and field completeness."""
+def validate_project_membership(
+    report: ProjectFieldReport, *, subject: str = "issue"
+) -> tuple[str, ...]:
+    """Return violations for one item's Project membership and field completeness.
+
+    Args:
+        report: The item's membership/field report (build_project_field_report).
+        subject: The noun naming the item in violation messages -- "issue" by
+            default, "pull request" on the governed-bot path (issue #193), so a
+            violation always names what actually failed the check.
+
+    Returns:
+        The violations found, or an empty tuple when the item passes.
+    """
     # Non-membership and missing fields are reported as distinct, mutually exclusive
-    # violations -- a non-member issue has no field values to check yet.
+    # violations -- a non-member item has no field values to check yet.
     if not report.is_project_member:
-        return (f"issue #{report.issue_number} is not a member of the tracked Project",)
+        return (f"{subject} #{report.issue_number} is not a member of the tracked Project",)
     # Only reached for a confirmed Project member; report every missing field together.
     if report.missing_fields:
         return (
-            f"issue #{report.issue_number} is missing Project fields: "
+            f"{subject} #{report.issue_number} is missing Project fields: "
             + ", ".join(report.missing_fields),
         )
     return ()
@@ -330,10 +415,16 @@ def fetch_pull_request(pr_number: int, repo: str | None) -> PullRequestMetadata:
     pull-request reads off the shared GraphQL point pool entirely -- see this
     module's quota-stewardship docstring and issue #173. REST reports state in
     lowercase ("open"/"closed"), so it is normalized to the uppercase form the
-    rest of this module compares against.
+    rest of this module compares against. The author's login and account type
+    (REST's `user.login` / `user.type`) feed the governed bot-author check
+    (issue #193; see is_governed_bot_pull_request).
     """
     payload = json.loads(github_api.run_gh(["api", _rest_endpoint(f"pulls/{pr_number}", repo)]))
     milestone = payload.get("milestone")
+    # `user` is always present on a real REST PR payload; the defensive default
+    # keeps a hypothetical absence conservative (empty author, non-Bot type),
+    # which can never qualify for the governed bot-author exemption.
+    user = payload.get("user") or {}
     return PullRequestMetadata(
         number=payload["number"],
         assignees=tuple(assignee["login"] for assignee in payload.get("assignees", [])),
@@ -341,6 +432,8 @@ def fetch_pull_request(pr_number: int, repo: str | None) -> PullRequestMetadata:
         labels=tuple(label["name"] for label in payload.get("labels", [])),
         body=payload.get("body") or "",
         state=payload["state"].upper(),
+        author=user.get("login", ""),
+        author_is_bot_account=user.get("type") == "Bot",
     )
 
 
@@ -538,6 +631,21 @@ def _run_validation(args: argparse.Namespace, monitor: github_api.QuotaMonitor) 
         print(f"error: {error}", file=sys.stderr)
         return 2
 
+    # The governed bot-author class (issue #193): an allowlisted bot's dependency
+    # PRs are deliberately unmilestoned and reference no tracking issue, so those
+    # two requirements are waived below -- replaced by a compensating check on the
+    # PR's own Project membership, never silently bypassed (issue #184's design
+    # principle).
+    governed_bot = is_governed_bot_pull_request(pr)
+    # The exemption must be visible in every log where it applies, so this
+    # notice prints unconditionally on the bot path, before any stage runs.
+    if governed_bot:
+        print(
+            f"bot-authored pull request ({pr.author}): linked-issue and milestone "
+            "requirements governed-exempt per issue #193; enforcing the PR's own "
+            "Project membership and field completeness instead"
+        )
+
     closing_issues = extract_closing_issue_numbers(pr.body)
 
     # Each closing issue's native metadata is fetched exactly once and reused
@@ -562,12 +670,19 @@ def _run_validation(args: argparse.Namespace, monitor: github_api.QuotaMonitor) 
         require_milestone = closing_issue_milestones_require_pr_milestone(
             tuple(overview.milestone for overview in overviews.values())
         )
+    # The governed-bot waiver is applied after milestone inheritance so it wins
+    # regardless of closing-issue state: bot dependency PRs are deliberately
+    # unmilestoned per issue #193, full stop.
+    if governed_bot:
+        require_milestone = False
 
     warnings: list[str] = []
     # The premature-closure check (issue #158) only makes sense while this PR is
     # still open: once merged, GitHub's own automation is expected to have
     # closed the issue anyway, and once the PR itself is closed/abandoned there
-    # is no longer an open fix in flight for the check to protect.
+    # is no longer an open fix in flight for the check to protect. Governed bot
+    # PRs need no special-casing here: they have no closing issues, so this
+    # stage degrades to a natural no-op for them.
     if closing_issues and pr.state == "OPEN":
         # A failure here must never fail the whole run (see this check's own
         # non-blocking, observational design in issue #158) -- print a warning
@@ -588,12 +703,21 @@ def _run_validation(args: argparse.Namespace, monitor: github_api.QuotaMonitor) 
         else:
             warnings.extend(find_prematurely_closed_issues(closure_states))
 
-    violations = list(validate_pull_request(pr, require_milestone=require_milestone))
+    violations = list(
+        validate_pull_request(
+            pr,
+            require_milestone=require_milestone,
+            # Governed bot PRs have no tracking issue to reference (issue #193);
+            # the compensating Project check below replaces this requirement.
+            require_closing_reference=not governed_bot,
+        )
+    )
 
     # Project field checks only make sense when there's at least one closing issue
-    # to check them against; a PR with none already failed validate_pull_request's
-    # own closing-reference check above.
-    if closing_issues:
+    # to check them against (a PR with none already failed validate_pull_request's
+    # own closing-reference check above) -- or on the governed-bot path, where the
+    # compensating check validates the PR's own Project membership instead.
+    if closing_issues or governed_bot:
         # An unreadable Project (see fetch_project_items' own docstring) is handled
         # specially below rather than propagating like other GitHubApiErrors,
         # since the default GITHUB_TOKEN often lacks the scope to read it. The
@@ -620,11 +744,19 @@ def _run_validation(args: argparse.Namespace, monitor: github_api.QuotaMonitor) 
                     file=sys.stderr,
                 )
         else:
-            # Check every closing issue's Project membership/fields against the one
-            # already-fetched item list, rather than re-fetching per issue.
-            for issue_number in closing_issues:
-                report = build_project_field_report(issue_number, items)
-                violations.extend(validate_project_membership(report))
+            # Compensating check (issue #193, honoring issue #184's no-silent-
+            # bypass principle): with no linked issue to validate, a governed bot
+            # PR must itself be a tracked, field-complete Project member, checked
+            # against the same single snapshot the issue path uses.
+            if governed_bot:
+                report = build_project_field_report(pr.number, items, content_type="PullRequest")
+                violations.extend(validate_project_membership(report, subject="pull request"))
+            else:
+                # Check every closing issue's Project membership/fields against the
+                # one already-fetched item list, rather than re-fetching per issue.
+                for issue_number in closing_issues:
+                    report = build_project_field_report(issue_number, items)
+                    violations.extend(validate_project_membership(report))
 
     # Observational warnings (issue #158) are printed unconditionally, separately
     # from violations, and never affect the exit code -- they exist to surface an

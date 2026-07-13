@@ -1,0 +1,133 @@
+name: Dependabot autofill
+
+# SECURITY INVARIANT -- read before editing anything in this file.
+#
+# This workflow runs on `pull_request_target`, which executes in the BASE
+# repository's context with access to normal Actions secrets (including the
+# write-capable PROJECT_METADATA_TOKEN). That combination is safe here ONLY
+# because no step ever checks out, downloads, or executes content from the
+# pull request's HEAD:
+#
+#   * The only checkout below is the pull_request_target default -- the BASE
+#     ref. There is deliberately no `ref:` key pointing at the PR head.
+#   * The PR head's CHANGELOG.md is read as inert bytes over the REST API by
+#     scripts/github/autofill_dependabot_changelog.py; it is never written to
+#     disk inside this job and never interpreted as code.
+#   * The changelog entry content comes exclusively from the structured
+#     outputs of dependabot/fetch-metadata (which parses Dependabot's own
+#     commit metadata), never from files in the PR head.
+#
+# Adding ANY checkout of the PR head, or executing/importing anything derived
+# from it (scripts, configs, lockfiles, hooks), reintroduces remote code
+# execution with a write-capable PAT in scope. Do not do that; if the job ever
+# needs head content, redesign it first.
+on:
+  # zizmor: ignore[dangerous-triggers] -- pull_request_target is required so
+  # the write-capable PROJECT_METADATA_TOKEN secret is available for
+  # Dependabot-authored PRs; the invariant block above explains why this is
+  # safe: no PR-head content is ever checked out or executed.
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+# Key on the PR number, NOT github.ref: under pull_request_target, github.ref
+# is the BASE branch (refs/heads/main), so keying on it would serialize and
+# cancel runs across unrelated Dependabot PRs.
+concurrency:
+  group: dependabot-autofill-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# Re-trigger story (two workflows, two different secret rules -- both are
+# expected behavior, neither needs manual babysitting):
+#
+#   * THIS workflow uses pull_request_target. GitHub grants pull_request_target
+#     runs the repository's normal Actions secrets even when the triggering
+#     actor is dependabot[bot] (unlike plain pull_request), so the first run on
+#     `opened` already has PROJECT_METADATA_TOKEN and should succeed outright.
+#   * The sibling metadata-governance workflow uses plain pull_request. A
+#     Dependabot-triggered plain pull_request run receives only Dependabot
+#     secrets, so PROJECT_METADATA_TOKEN resolves empty there and its strict
+#     project checks fail on the first run. That first-run redness is expected
+#     and self-correcting: when this workflow's changelog commit lands on the
+#     PR head, the commit is authored via the classic PAT (a human account),
+#     which fires pull_request `synchronize` under that human actor -- the
+#     required gates re-run with normal secrets and turn green. A push made
+#     with GITHUB_TOKEN would NOT re-trigger workflows, which is one of the two
+#     reasons the PAT performs the contents PUT (the other being that
+#     GITHUB_TOKEN here is read-only).
+
+jobs:
+  autofill:
+    name: Autofill Dependabot PR metadata and changelog
+    # Gate on the immutable event payload, never github.actor: actor reflects
+    # whoever caused the latest event (e.g. a human re-running or pushing),
+    # while these payload fields pin the PR itself to a same-repo branch
+    # created by dependabot[bot] under its reserved dependabot/ prefix.
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && startsWith(github.event.pull_request.head.ref, 'dependabot/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    # One sequential job (not two) so the Project #5 board metadata is in
+    # place BEFORE the changelog push fires pull_request:synchronize and the
+    # metadata-governance gates re-run against it.
+    steps:
+      # BASE-ref checkout: the pull_request_target default. Do not add `ref:`.
+      # See the SECURITY INVARIANT block at the top of this file.
+      - name: Check out repository (base ref)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+
+      - name: Create locked environment
+        run: uv sync --locked --dev
+
+      # Structured metadata about the dependency bump, parsed from Dependabot's
+      # own commit message by Dependabot's own action. Its outputs are the ONLY
+      # PR-derived content that flows into the changelog entry. The read-only
+      # GITHUB_TOKEN suffices here -- visibly never the PAT.
+      - name: Fetch Dependabot update metadata
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # PROJECT_METADATA_TOKEN is a CLASSIC PAT (scopes: project + public_repo
+      # + read:org) -- fine-grained tokens cannot access user-owned Projects;
+      # docs/governance/github-metadata-automation.md is authoritative on the
+      # token's shape and scopes. All dynamic values cross into run: bodies as
+      # env vars expanded by the shell (quoted "$VAR"), never as ${{ }} inside
+      # the script text, so payload-controlled strings can't inject shell code.
+      - name: Sync Project #5 board metadata
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_METADATA_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: uv run python scripts/github/sync_dependabot_pr_metadata.py --pr-number "$PR_NUMBER" --repo "$REPO"
+
+      # Writes the changelog entry to the PR head branch via a REST contents
+      # PUT (no local checkout of the head). The PAT authors the commit so the
+      # push (a) is authorized -- public_repo grants the contents write this
+      # job's read-only GITHUB_TOKEN lacks -- and (b) fires
+      # pull_request:synchronize under the PAT's human owner, re-running the
+      # required gates with full secrets.
+      - name: Write changelog entry to the PR head branch
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_METADATA_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          UPDATED_DEPENDENCIES_JSON: ${{ steps.meta.outputs.updated-dependencies-json }}
+        run: uv run python scripts/github/autofill_dependabot_changelog.py --pr-number "$PR_NUMBER" --repo "$REPO" --head-ref "$HEAD_REF" --head-sha "$HEAD_SHA"

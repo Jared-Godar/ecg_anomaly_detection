@@ -204,6 +204,117 @@ def test_missing_milestone_still_fails_when_required() -> None:
     assert "pull request has no milestone" in violations
 
 
+def test_missing_closing_reference_still_fails_by_default() -> None:
+    """A human PR with no closing reference fails exactly as before issue #193.
+
+    require_closing_reference defaults to True, so the governed-bot waiver
+    changes nothing for every pre-existing caller: the closing-reference
+    requirement stays fully enforced unless a caller explicitly opts out.
+    """
+
+    pr = vpm.PullRequestMetadata(
+        number=7,
+        assignees=("x",),
+        milestone="M5",
+        labels=("type: documentation", "area: documentation"),
+        body="no reference here",
+        state="OPEN",
+    )
+    violations = vpm.validate_pull_request(pr)
+    assert any("closing issue reference" in v for v in violations)
+
+
+def test_missing_closing_reference_passes_when_not_required() -> None:
+    """With require_closing_reference=False, no closing-reference violation is reported.
+
+    This is the governed-bot waiver (issue #193): dependency PRs have no
+    tracking issue to reference, so _run_validation opts out for them and
+    substitutes the compensating Project-membership check instead.
+    """
+
+    pr = vpm.PullRequestMetadata(
+        number=8,
+        assignees=("x",),
+        milestone="M5",
+        labels=("type: dependencies", "area: ci-cd"),
+        body="Bumps actions/checkout from 4 to 5.",
+        state="OPEN",
+    )
+    violations = vpm.validate_pull_request(pr, require_closing_reference=False)
+    assert not any("closing issue reference" in v for v in violations)
+
+
+# --- is_governed_bot_pull_request (issue #193) ---------------------------------------
+
+
+def _pr_with_author(author: str, author_is_bot_account: bool) -> object:
+    """Build a minimal PullRequestMetadata carrying only the author identity under test.
+
+    Args:
+        author: The PR author's login.
+        author_is_bot_account: Whether GitHub reports the author's account type as Bot.
+
+    Returns:
+        A PullRequestMetadata whose non-author fields are valid but irrelevant here.
+    """
+
+    return vpm.PullRequestMetadata(
+        number=210,
+        assignees=("Jared-Godar",),
+        milestone=None,
+        labels=("type: dependencies", "area: ci-cd"),
+        body="Bumps actions/checkout from 4 to 5.",
+        state="OPEN",
+        author=author,
+        author_is_bot_account=author_is_bot_account,
+    )
+
+
+@pytest.mark.parametrize(
+    ("author", "is_bot", "expected"),
+    [
+        ("dependabot[bot]", True, True),
+        ("dependabot[bot]", False, False),
+        ("Jared-Godar", True, False),
+        ("", False, False),
+    ],
+)
+def test_is_governed_bot_pull_request_requires_both_login_and_bot_type(
+    author: str, is_bot: bool, expected: bool
+) -> None:
+    """Exemption requires BOTH the allowlisted login AND the Bot account type.
+
+    The account-type condition is belt-and-braces against a future account-
+    rename/spoof vector: a non-Bot account carrying the exact allowlisted
+    login must never qualify, and neither must an unlisted bot.
+
+    Args:
+        author: The PR author's login.
+        is_bot: Whether GitHub reports the author's account type as Bot.
+        expected: Whether the PR must be recognized as governed-exempt.
+    """
+
+    assert vpm.is_governed_bot_pull_request(_pr_with_author(author, is_bot)) is expected
+
+
+def test_default_author_fields_are_never_governed_exempt() -> None:
+    """A PullRequestMetadata built without author fields gets the conservative defaults.
+
+    The defaults ("" / False) exist so pre-issue-#193 construction sites keep
+    full human-PR semantics; this pins that they can never trip the exemption.
+    """
+
+    pr = vpm.PullRequestMetadata(
+        number=1,
+        assignees=("x",),
+        milestone="M5",
+        labels=("type: modernization", "area: cli"),
+        body="Closes #38",
+        state="OPEN",
+    )
+    assert vpm.is_governed_bot_pull_request(pr) is False
+
+
 # --- closing_issue_milestones_require_pr_milestone ----------------------------------
 
 
@@ -321,6 +432,37 @@ def test_a_matching_pull_request_item_is_not_mistaken_for_the_issue() -> None:
     assert report.is_project_member is False
 
 
+def test_a_pull_request_item_is_matched_when_asked_for_pull_requests() -> None:
+    """With content_type="PullRequest", the PR item is matched and a same-numbered issue is not.
+
+    This is the governed-bot compensating check's lookup (issue #193): issues
+    and PRs share one numbering space, so the type filter must work in both
+    directions, not just for the default issue path.
+    """
+
+    issue_item = {"content": {"type": "Issue", "number": 210}}
+    pr_item = {"content": {"type": "PullRequest", "number": 210}, "status": "In Progress"}
+    report = vpm.build_project_field_report(210, [issue_item, pr_item], content_type="PullRequest")
+    assert report.is_project_member is True
+    # The matched item carries only Status, so the other eight fields are missing --
+    # proving the field scan ran against the PR item, not the same-numbered issue.
+    assert "Workstream" in report.missing_fields
+    assert "Status" not in report.missing_fields
+
+
+def test_validate_project_membership_names_the_given_subject() -> None:
+    """With subject="pull request", violations name the PR rather than an issue.
+
+    The governed-bot path validates the PR's own membership, so its violation
+    messages must say "pull request #N", never "issue #N".
+    """
+
+    report = vpm.ProjectFieldReport(210, is_project_member=False, missing_fields=())
+    assert vpm.validate_project_membership(report, subject="pull request") == (
+        "pull request #210 is not a member of the tracked Project",
+    )
+
+
 # --- find_prematurely_closed_issues (issue #158) ------------------------------------
 
 
@@ -404,6 +546,41 @@ def _pr_payload(body: str = "Closes #38", state: str = "open") -> dict[str, obje
         "labels": [{"name": "type: modernization"}, {"name": "area: ci-cd"}],
         "body": body,
         "state": state,
+        "user": {"login": "Jared-Godar", "type": "User"},
+    }
+
+
+def _bot_pr_payload(
+    assignees: list[dict[str, str]] | None = None,
+    labels: list[dict[str, str]] | None = None,
+    user_type: str = "Bot",
+) -> dict[str, object]:
+    """Build a REST payload for a Dependabot-style dependency PR (issue #193).
+
+    Defaults model what .github/dependabot.yml supplies natively: an assignee
+    plus type:*/area:* labels, with no milestone and no closing reference in
+    the body -- the exact shape the governed-bot exemption is designed for.
+
+    Args:
+        assignees: REST assignee objects; defaults to one human assignee.
+        labels: REST label objects; defaults to a type:* and an area:* label.
+        user_type: REST's `user.type`; "Bot" by default, overridable to model a
+            non-Bot account carrying the allowlisted login.
+
+    Returns:
+        A dict shaped like `gh api repos/.../pulls/N` output.
+    """
+
+    return {
+        "number": 210,
+        "assignees": [{"login": "Jared-Godar"}] if assignees is None else assignees,
+        "milestone": None,
+        "labels": (
+            [{"name": "type: dependencies"}, {"name": "area: ci-cd"}] if labels is None else labels
+        ),
+        "body": "Bumps actions/checkout from 4 to 5.",
+        "state": "open",
+        "user": {"login": "dependabot[bot]", "type": user_type},
     }
 
 
@@ -448,18 +625,20 @@ def _quota(remaining: int) -> subprocess.CompletedProcess:
     )
 
 
-def _complete_item(number: int) -> dict[str, object]:
-    """Build a Project item for one issue with every required field populated.
+def _complete_item(number: int, content_type: str = "Issue") -> dict[str, object]:
+    """Build a Project item for one issue or PR with every required field populated.
 
     Args:
-        number: The GitHub issue number the item represents.
+        number: The GitHub issue/PR number the item represents.
+        content_type: The item's content type ("Issue" by default; "PullRequest"
+            for the governed-bot compensating check, issue #193).
 
     Returns:
         A dict shaped like one entry of `gh project item-list`'s items array.
     """
 
     return {
-        "content": {"type": "Issue", "number": number},
+        "content": {"type": content_type, "number": number},
         "status": "In Progress",
         "workstream": "Governance",
         "issue Type": "Governance",
@@ -476,8 +655,10 @@ def test_fetch_pull_request_parses_rest_output() -> None:
     """fetch_pull_request converts REST's JSON shape into a flat PullRequestMetadata.
 
     Confirms the nested assignee/milestone/label objects are reduced to the flat
-    strings validate_pull_request expects, and that REST's lowercase state is
-    normalized to the uppercase form the rest of the module compares against.
+    strings validate_pull_request expects, that REST's lowercase state is
+    normalized to the uppercase form the rest of the module compares against,
+    and that the author's login/account type are parsed for the governed-bot
+    check (issue #193).
     """
 
     # REST reports state lowercase; everything else nests objects like GraphQL did.
@@ -488,6 +669,10 @@ def test_fetch_pull_request_parses_rest_output() -> None:
     assert pr.milestone == "M5"
     assert "type: modernization" in pr.labels
     assert pr.state == "OPEN"
+    # user.login/user.type feed is_governed_bot_pull_request; a human account
+    # must parse as a non-Bot author.
+    assert pr.author == "Jared-Godar"
+    assert pr.author_is_bot_account is False
     # The read must be REST (gh api repos/...), with gh's own {owner}/{repo}
     # placeholders left for it to resolve when no explicit repo is given.
     assert mock_run.call_args_list[0].args[0] == ["gh", "api", "repos/{owner}/{repo}/pulls/65"]
@@ -519,6 +704,20 @@ def test_fetch_pull_request_raises_on_gh_failure() -> None:
         pytest.raises(_gha.GitHubApiError, match="pull request not found"),
     ):
         vpm.fetch_pull_request(999999, repo=None)
+
+
+def test_fetch_pull_request_parses_a_bot_author() -> None:
+    """A Dependabot REST payload parses to the bot login with the Bot account type set.
+
+    Both parsed fields are what is_governed_bot_pull_request keys on, so this
+    pins the exact user.login/user.type extraction for the governed-bot class.
+    """
+
+    # The bot payload reports user.type "Bot", unlike the human payload above.
+    with patch.object(subprocess, "run", return_value=_completed(_bot_pr_payload())):
+        pr = vpm.fetch_pull_request(210, repo=None)
+    assert pr.author == "dependabot[bot]"
+    assert pr.author_is_bot_account is True
 
 
 # --- fetch_issue_overview -------------------------------------------------------------
@@ -877,3 +1076,184 @@ def test_main_flags_a_manually_closed_issue_from_the_shared_overview(
         if any(arg.endswith("issues/38") for arg in call.args[0])
     ]
     assert len(issue_reads) == 1
+
+
+# --- main: governed bot-author path (issue #193) --------------------------------------
+
+
+def test_main_bot_pr_passes_without_closing_reference_or_milestone(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A board-complete Dependabot PR passes with no closing reference and no milestone.
+
+    The full governed-exempt happy path: assignee and type:/area: labels are
+    present, the PR's own Project item carries all nine fields, and the
+    exemption notice is printed. The mocked sequence also proves the
+    premature-closure stage degrades to a natural no-op (no timeline read) and
+    that no issue endpoint is ever touched.
+    """
+
+    # Sequence: PR read, quota preflight, the PR's own Project snapshot, quota
+    # report -- no issue reads and no timeline reads anywhere.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_bot_pr_payload()),
+            _quota(4988),
+            _completed({"items": [_complete_item(210, content_type="PullRequest")]}),
+            _quota(4985),
+        ],
+    ) as mock_run:
+        exit_code = vpm.main(["--pr-number", "210", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    # The exemption must be visible in every log where it applies (issue #193).
+    assert (
+        "bot-authored pull request (dependabot[bot]): linked-issue and milestone "
+        "requirements governed-exempt per issue #193; enforcing the PR's own "
+        "Project membership and field completeness instead"
+    ) in captured.out
+    # No stage may have consulted any issue endpoint: bot PRs have no closing
+    # issues, so both issue-consuming stages must no-op naturally.
+    for call in mock_run.call_args_list:
+        assert not any("issues/" in arg for arg in call.args[0])
+
+
+def test_main_bot_pr_not_on_the_board_fails(capsys: pytest.CaptureFixture) -> None:
+    """A governed bot PR absent from Project #5 fails the compensating membership check.
+
+    The exemption is not a bypass (issue #184's design principle): the PR's own
+    board membership replaces the linked-issue checks, so a bot PR that was
+    never added to the Project must fail, naming the PR itself.
+    """
+
+    # The snapshot contains no item for the PR (an unrelated issue only).
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_bot_pr_payload()),
+            _quota(4988),
+            _completed({"items": [_complete_item(38)]}),
+            _quota(4985),
+        ],
+    ):
+        exit_code = vpm.main(["--pr-number", "210", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 1
+    assert "pull request #210 is not a member of the tracked Project" in capsys.readouterr().err
+
+
+def test_main_bot_pr_with_missing_project_fields_fails_naming_them(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A governed bot PR tracked on the board but with unpopulated fields fails, naming them.
+
+    Field completeness is enforced with the same strictness semantics as the
+    issue path; a partially filled PR item is a violation, not a pass.
+    """
+
+    # The PR's item carries Status only; the other eight required fields are absent.
+    partial_item = {"content": {"type": "PullRequest", "number": 210}, "status": "In Progress"}
+    # The snapshot serves the partial item; the rest of the sequence is the
+    # standard bot-path quota bracketing around it.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_bot_pr_payload()),
+            _quota(4988),
+            _completed({"items": [partial_item]}),
+            _quota(4985),
+        ],
+    ):
+        exit_code = vpm.main(["--pr-number", "210", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 1
+    stderr = capsys.readouterr().err
+    assert "pull request #210 is missing Project fields:" in stderr
+    # Spot-check that specific absent fields are named while the present one is not.
+    assert "Target Release" in stderr
+    assert "Workstream" in stderr
+
+
+def test_main_bot_pr_missing_labels_and_assignee_fails(capsys: pytest.CaptureFixture) -> None:
+    """A governed bot PR without an assignee or type:/area: labels still fails those checks.
+
+    Only the milestone and closing-reference requirements are waived; the
+    dependabot.yml-supplied metadata (assignee, labels) remains mandatory.
+    """
+
+    # PR-level violations don't stop the Project stage, so the sequence still
+    # includes the snapshot reads; the board item itself is complete.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_bot_pr_payload(assignees=[], labels=[])),
+            _quota(4988),
+            _completed({"items": [_complete_item(210, content_type="PullRequest")]}),
+            _quota(4985),
+        ],
+    ):
+        exit_code = vpm.main(["--pr-number", "210", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 1
+    stderr = capsys.readouterr().err
+    assert "pull request has no assignee" in stderr
+    assert "pull request is missing a type:* label" in stderr
+    assert "pull request is missing an area:* label" in stderr
+    # The waived requirements must not resurface as violations on this path.
+    assert "pull request has no milestone" not in stderr
+    assert "closing issue reference" not in stderr
+
+
+def test_main_bot_login_without_bot_account_type_is_not_exempt(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A non-Bot account carrying the exact "dependabot[bot]" login gets full human checks.
+
+    The belt-and-braces account-type condition: the login alone must never
+    grant the exemption, so this PR fails the ordinary milestone and
+    closing-reference requirements like any other human PR.
+    """
+
+    # Only the PR read happens: with no closing issues and no exemption, the
+    # run reaches neither the issue stages nor the Project snapshot.
+    with patch.object(
+        subprocess, "run", side_effect=[_completed(_bot_pr_payload(user_type="User"))]
+    ):
+        exit_code = vpm.main(["--pr-number", "210", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "pull request has no milestone" in captured.err
+    assert "closing issue reference" in captured.err
+    # The exemption notice must not print for a non-exempt author.
+    assert "governed-exempt" not in captured.out
+
+
+def test_main_bot_pr_warns_and_skips_project_checks_when_not_strict(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """On the bot path, an unreadable Project degrades exactly as on the issue path.
+
+    Strictness semantics are identical for the compensating check: without
+    --strict-project-checks an unreadable board is a warning and the remaining
+    PR-level checks decide the outcome (a first Dependabot-triggered run of the
+    gate, holding only Dependabot's restricted secrets, hits the strict variant
+    of this -- the documented first-run-redness caveat).
+    """
+
+    scope_error = subprocess.CalledProcessError(1, ["gh"], stderr="insufficient scope")
+    # The snapshot read fails after a passing preflight; the report still runs.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_bot_pr_payload()),
+            _quota(4988),
+            scope_error,
+            _quota(4988),
+        ],
+    ):
+        exit_code = vpm.main(["--pr-number", "210", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 0
+    assert "skipping Project field checks" in capsys.readouterr().err

@@ -65,6 +65,11 @@ The existing Dependabot configuration manages GitHub Actions and pre-commit
 dependencies. Updates for both ecosystems are grouped weekly and scheduled for
 Monday at 09:00 America/New_York. Security updates take priority over routine
 maintenance updates, while still receiving review and repository validation.
+Dependabot pull requests pass the same required merge gates as human-authored
+changes — their changelog entries and board metadata are supplied by governed
+automation rather than gate exemptions; see [bot-authored pull
+requests](github-metadata-automation.md#bot-authored-dependabot-pull-requests)
+for the policy and the automation's security model.
 
 The project supports Python `>=3.12,<3.14`. Dependency changes should respect
 that range, retain lockfiles as reviewed reproducibility artifacts, and preserve

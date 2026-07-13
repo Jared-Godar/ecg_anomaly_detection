@@ -37,11 +37,11 @@ jobs:
       # docs/governance/github-project.md#automation. This step wins the
       # race explicitly, after the fact.
       #
-      # PROJECT_METADATA_TOKEN is a fine-grained PAT scoped to this repository
-      # with read-and-write Projects access (Account permissions) -- see
-      # docs/governance/github-metadata-automation.md. It is also used
-      # read-only by metadata-governance.yml; the write scope required here
-      # is a superset, so the same secret covers both.
+      # PROJECT_METADATA_TOKEN is a CLASSIC PAT (scopes: project + public_repo
+      # + read:org); fine-grained tokens cannot access user-owned Projects --
+      # see docs/governance/github-metadata-automation.md. The `project` scope
+      # is read-and-write, which this step needs; metadata-governance.yml uses
+      # the same secret read-only, so one token covers both.
       - name: Set Project #5 status to Merged
         env:
           GH_TOKEN: ${{ secrets.PROJECT_METADATA_TOKEN }}

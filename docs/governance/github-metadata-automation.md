@@ -189,8 +189,14 @@ Project #5 here is user-owned (`Jared-Godar`), so a classic token is the only su
 Scope it to `project` (read and write — needed by
 [`project-status-sync.yml`](../../.github/workflows/project-status-sync.yml), which reuses this
 same secret to explicitly set a merged pull request's Status field, see [GitHub Project
-governance](github-project.md#automation)) plus `public_repo` (this repository is public; grants
-the read access to pull requests and issues this gate itself needs) plus `read:org`. The last one
+governance](github-project.md#automation), and by
+`scripts/github/sync_dependabot_pr_metadata.py`, which populates a bot pull request's own board
+fields) plus `public_repo` (this repository is public; grants
+the read access to pull requests and issues this gate itself needs, and — since the bot-PR
+automation below — also authorizes the contents-API `PUT` that
+[`dependabot-autofill.yml`](../../.github/workflows/dependabot-autofill.yml) uses to write the
+auto-generated changelog entry to a Dependabot branch, see [Bot-authored (Dependabot) pull
+requests](#bot-authored-dependabot-pull-requests)) plus `read:org`. The last one
 is easy to miss: every `gh project` subcommand resolves `--owner` by querying both the user and
 organization GraphQL types, and a token without `read:org` fails that resolution with a
 misleading `unknown owner type` error — indistinguishable at a glance from an actual ownership
@@ -288,6 +294,144 @@ changelog gate (issue #184): the substantive-path classification, the exemption-
 failure/exemption/happy decision paths end to end, and the unreadable-data and rate-limit exit
 codes. None of these calls the network; running them requires no GitHub token.
 
+## Bot-authored (Dependabot) pull requests
+
+### Problem and chosen policy
+
+Both required merge gates were structurally unable to pass on a Dependabot pull request, and
+PR #192 demonstrated it live: the [metadata gate](#automated-pull-request-metadata-gate)
+requires an assignee, `type:*` and `area:*` labels, a milestone or an inherited waiver, a
+closing reference, and complete Project #5 fields — none of which Dependabot supplies — and the
+[changelog gate](#per-pr-changelog-gate) requires a `CHANGELOG.md` update that Dependabot never
+writes. Issue #193 evaluated the options and chose **automation, not exemption**: a governed
+workflow auto-generates the changelog entry on the bot's own branch, and companion automation
+populates the pull request's board metadata.
+
+Two deliberate non-exemptions bound this policy:
+
+- The changelog contract is **not** waived for bot authors. The entry is generated, but it must
+  exist in the pull request's diff for the gate to pass, exactly as for a human author
+  (issue #184's no-silent-bypass principle).
+- The metadata gate waives only the linked-issue and milestone checks for governed bot authors
+  (a dependency bump closes no issue and is deliberately unmilestoned). That waiver is
+  compensated, not free: the validator instead enforces the pull request's **own** Project #5
+  membership and all nine planning fields (see [the field-default table
+  below](#bot-pull-request-field-defaults)), so a bot pull request faces the same
+  complete-metadata bar, sourced differently.
+
+### Native metadata via `.github/dependabot.yml`
+
+Everything Dependabot can attach natively is configured declaratively rather than scripted:
+
+- **Labels** (per ecosystem, because the gate requires one `type:*` **and** one `area:*`
+  label): the `github-actions` ecosystem gets `dependency: external`, `type: maintenance`, and
+  `area: ci-cd`; the `pre-commit` ecosystem gets `dependency: external`, `type: maintenance`,
+  and `area: quality`.
+- **Assignee**: `Jared-Godar`, satisfying the gate's assignee requirement.
+- **Milestone**: deliberately none. Bot dependency pull requests are unmilestoned by design — a
+  milestone is a delivery commitment ([issue workflow](issue-workflow.md)), and routine
+  dependency currency is standing stewardship, not scheduled delivery. The validator's
+  governed-bot path waives milestone inheritance accordingly instead of forcing one.
+
+### Autofill workflow security model
+
+`.github/workflows/dependabot-autofill.yml` is the repository's only `pull_request_target`
+workflow, which makes its security model the load-bearing part of this policy. Under
+`pull_request_target` the workflow runs in the **base** repository context with normal Actions
+secrets available — a configuration that is famously dangerous when combined with untrusted
+pull-request content. It is safe here because of, and only because of, the following invariants,
+each auditable in the workflow file:
+
+- **(a) Triple identity gate on the immutable event payload.** The job runs only when
+  `github.event.pull_request.user.login == 'dependabot[bot]'`, the head repository is this
+  repository (no forks), and the head ref starts with `dependabot/`. The conditions read the
+  event payload, never `github.actor` — the actor is whoever caused the event (for example a
+  human pushing to the bot's branch or re-running the workflow) and is not evidence of
+  authorship.
+- **(b) Base-ref-only checkout.** The single `actions/checkout` step checks out the base branch
+  (the `pull_request_target` default) with `persist-credentials: false`. No step ever checks
+  out, downloads, or executes pull-request-head content; the head's `CHANGELOG.md` is read as
+  inert bytes over the REST contents API, never written to the runner's working tree.
+- **(c) Structured, allowlisted entry content.** The changelog entry text derives exclusively
+  from the SHA-pinned `dependabot/fetch-metadata` action's structured outputs, validated
+  against fail-closed regex allowlists before use, and every dynamic value crosses into `run:`
+  bodies via `env` — there is no `${{ }}` expression interpolation inside any `run:` body, so
+  no value can be re-parsed as shell.
+- **(d) Per-commit server-side authorship proof.** Before any write, the entry writer
+  (`scripts/github/autofill_dependabot_changelog.py`) verifies via the API that **every** commit on the pull request is authored by `dependabot[bot]` with
+  GitHub's `verification.verified` flag true. This defeats the residual insider vector the
+  identity gate alone cannot: a human with push access appending a commit (with forged
+  metadata) to a genuine `dependabot/**` branch.
+- **(e) One confined write path.** The only write is a contents-API `PUT` of `CHANGELOG.md` to
+  the head branch, authenticated by the classic `PROJECT_METADATA_TOKEN` PAT scoped into that
+  single trusted step's `env`. The workflow's `GITHUB_TOKEN` stays read-only throughout
+  (`contents: read`, `pull-requests: read`), and `fetch-metadata` visibly receives
+  `secrets.GITHUB_TOKEN`, never the PAT.
+- **(f) Idempotency terminates the loop.** The PAT-authored push re-triggers the workflow
+  (`synchronize`); the entry writer is a `(#N)`-keyed replace-or-insert, so the second run
+  finds its own entry current and makes no write, terminating the self-trigger loop. The same
+  property self-heals Dependabot's own force-pushed rebases, which discard the entry commit.
+- **(g) Mechanical enforcement against drift.** `scripts/check_privileged_workflow_safety.py`
+  re-verifies the structural invariants of every `pull_request_target` workflow, so a future
+  edit cannot quietly weaken them. Its five rules: (1) no `actions/checkout` step may set
+  `with.ref` to the pull request's head; (2) no `${{ }}` expression interpolation inside any
+  `run:` body — dynamic values must cross as `env`; (3) every job's `if:` must pin
+  `github.event.pull_request.user.login` and may never consult `github.actor`; (4)
+  `persist-credentials: false` on every checkout step; (5) a top-level `permissions:` block
+  must exist and must not grant `contents: write`, keeping the ambient `GITHUB_TOKEN`
+  read-only.
+
+Adding any pull-request-head checkout, or executing head-derived files, would reintroduce
+remote code execution with a write-capable PAT in scope. Do not do it; the safety checker
+exists to make that mistake loud.
+
+### Operational notes
+
+- **Why the PAT writes the entry.** A push authenticated by the workflow's own `GITHUB_TOKEN`
+  does not trigger new workflow runs, so the required gates would never re-evaluate the pull
+  request after the entry lands. The PAT-authored commit fires a `pull_request: synchronize`
+  event, re-running the required checks against the now-complete diff.
+- **First-run redness of the metadata gate is expected.** The metadata-governance workflow runs
+  on plain `pull_request`; when Dependabot triggers it, GitHub supplies only Dependabot's
+  secrets, so `PROJECT_METADATA_TOKEN` resolves empty and the strict Project read fails. The
+  autofill workflow itself is unaffected — `pull_request_target` receives normal secrets even
+  when Dependabot triggers it — and its changelog push re-runs the gates under a human-adjacent
+  actor with full secrets. The initial red check is self-correcting, not flakiness.
+- **Quota profile.** `scripts/github/sync_dependabot_pr_metadata.py` follows the
+  [consumption rules](#consumption-rules): one targeted PR-item lookup, an optional item-add
+  with a verifying re-lookup, one field-list schema read, and at most nine
+  `item-edit`/read-back pairs (skipping fields already curated) — roughly 15–25 points, guarded
+  by a preflight default of 50; it never takes a full-board snapshot.
+- **Never a required check.** `dependabot-autofill.yml` must not be added to branch
+  protection's required status checks: it runs only for Dependabot-authored pull requests, so
+  as a required check it would deadlock every human pull request, and its job is to feed the
+  existing required gates, not to be one.
+
+### Bot pull-request field defaults
+
+When the metadata sync runs, it adds the pull request to Project #5 (if absent) and populates
+exactly these nine fields. A field that already holds a value is preserved untouched — curation
+by the maintainer always wins over the defaults.
+
+| Field | Default | Rationale |
+|---|---|---|
+| Status | Review | A bot pull request arrives ready for maintainer review, never in Backlog |
+| Workstream | Stewardship | Dependency currency is standing repository stewardship |
+| Issue Type | Technical Debt | Version drift is debt paid down routinely |
+| Priority | Low | Routine grouped bumps; a security advisory escalates manually |
+| Risk | Low | SHA-pinned, gate-validated, human-merged changes |
+| Size | XS | A grouped version bump is the smallest reviewable unit |
+| Repository Area | ci-cd | Both managed ecosystems are CI/quality tooling |
+| Portfolio Signal | Operational Maturity | Automated dependency governance is itself the demonstrated signal |
+| Target Release | Stewardship | Unmilestoned by design; tracked in the standing stewardship lane |
+
+### Auto-merge: considered and deferred
+
+Issue #193's third scope item — enabling auto-merge for green bot pull requests — was
+considered and **deferred**. No auto-merge is configured: every bot pull request still requires
+the maintainer's explicit merge click, keeping a human decision on every change that reaches
+`main`. Revisiting that decision is tracked separately from this policy.
+
 ## GraphQL quota stewardship
 
 Issue #173 hardened the repository's governance automation against avoidable GraphQL
@@ -318,6 +462,8 @@ this table when upgrading `gh` majors.
 | the four `QuotaMonitor`-carrying scripts (`set_merged_project_status.py`, `validate_project_metadata.py`, `detect_label_drift.py`, `sync_github_labels.py`) | `gh api rate_limit` preflight/report | REST; the endpoint is documented as not counting against any quota |
 | `scripts/detect_label_drift.py` | `gh issue list` / `gh pr list --json` via the shared `run_gh` (issue #175) | GraphQL-backed listing; low frequency (manual/scheduled hygiene); observe-only preflight default (0) with before/after/consumed reporting and quota exit code 3 |
 | `scripts/sync_github_labels.py` | `gh label create --force` per manifest label via the shared `run_gh` (issue #175; the pre-migration inventory listed `label list`/`edit`, which the script never actually called) | REST mutations -- no GraphQL spend of its own; low frequency (manual); observe-only preflight default (0) with before/after/consumed reporting and quota exit code 3; `--dry-run` makes no `gh` calls at all |
+| `scripts/github/sync_dependabot_pr_metadata.py` | `gh api graphql` targeted PR-item lookup, optional item-add with verifying re-lookup, `gh project field-list`, up to nine `item-edit`/read-back pairs (issue #193) | GraphQL (~15-25 points/run; preflight default 50; no full-board reads) |
+| `scripts/github/autofill_dependabot_changelog.py` | `gh api repos/...` pull-request, commit, and contents reads plus the changelog contents `PUT` (issue #193) | REST only -- zero GraphQL spend |
 | `.github/workflows/*.yml` | no direct `gh` calls | -- (workflows only invoke the scripts above) |
 
 ### Consumption rules
