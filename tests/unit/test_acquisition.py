@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import http.client
 import os
 import urllib.error
 import urllib.request
@@ -408,6 +409,83 @@ def test_https_transport_streams_and_hashes_identity_response(
 
     assert output.read_bytes() == content
     assert result == TransferResult(len(content), hashlib.sha256(content).hexdigest())
+
+
+def test_https_transport_wraps_mid_body_truncation_as_transient(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """http.client.IncompleteRead from response.read() becomes TransientAcquisitionError (#206).
+
+    Protects the exception contract at the transport boundary: a connection that
+    drops mid-body on a known-Content-Length response surfaces from http.client
+    as IncompleteRead — an HTTPException, not an OSError or URLError — and
+    previously escaped acquisition's single-exception surface entirely. It must
+    be collapsed and classified transient so the bounded retry layer absorbs it.
+    """
+
+    url = "https://example.test/files/100.dat"
+
+    def fake_open(request: Any, timeout: float) -> _TruncatedResponse:
+        """Serve a fake response whose body ends before its advertised length.
+
+        Args:
+            request: The urllib Request _fetch_https_file constructed; unused
+                beyond satisfying _open_https_request's call shape.
+            timeout: The timeout value passed through from the caller; unused.
+
+        Returns:
+            A fake response that raises IncompleteRead partway through read().
+        """
+
+        del request, timeout
+        return _TruncatedResponse(url, b"synthetic-public-data")
+
+    monkeypatch.setattr(acquisition, "_open_https_request", fake_open)
+
+    # The truncation must surface as the retryable transient subtype, with the
+    # generic could-not-retrieve wording naming the affected URL.
+    with pytest.raises(TransientAcquisitionError, match="could not retrieve") as raised:
+        acquisition._fetch_https_file(url, tmp_path / "100.dat", 5.0, 1024)
+
+    # The original truncation evidence stays available on the cause chain for
+    # diagnosis, exactly like every other collapsed transport failure.
+    assert isinstance(raised.value.__cause__, http.client.IncompleteRead)
+
+
+def test_https_transport_collapses_other_protocol_errors_as_permanent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-truncation HTTP protocol error is collapsed but never classified transient.
+
+    http.client's other HTTPException values (here a malformed status line) are
+    protocol-level defects a wait cannot fix: they must still be collapsed into
+    AcquisitionError — restoring the module's single-exception contract instead
+    of escaping raw — but must not become TransientAcquisitionError, so the
+    retry layer fails fast on the first attempt.
+    """
+
+    def fake_open(request: Any, timeout: float) -> None:
+        """Raise a malformed-protocol failure in place of opening a connection.
+
+        Args:
+            request: The urllib Request _fetch_https_file constructed; unused
+                beyond satisfying _open_https_request's call shape.
+            timeout: The timeout value passed through from the caller; unused.
+        """
+
+        del request, timeout
+        raise http.client.BadStatusLine("not-a-status-line")
+
+    monkeypatch.setattr(acquisition, "_open_https_request", fake_open)
+
+    # The protocol failure must collapse into the module's own exception type...
+    with pytest.raises(AcquisitionError, match="could not retrieve") as raised:
+        acquisition._fetch_https_file(
+            "https://example.test/files/100.dat", tmp_path / "100.dat", 5.0, 1024
+        )
+
+    # ...but stay permanent: the transient subtype would grant it retries.
+    assert not isinstance(raised.value, TransientAcquisitionError)
 
 
 def test_https_transport_rejects_insecure_url_before_network(
@@ -839,13 +917,87 @@ def test_resume_redownload_retries_transient_failures(
     assert waits == [2.0]
 
 
+def test_acquire_dataset_retries_truncated_body_through_production_transport(
+    repository: Path, dataset_config: DatasetConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mid-body truncation from the real transport is retried once and then succeeds (#206).
+
+    Exercises the full production path end to end, with only the network seam
+    faked: acquire_dataset runs its default _fetch_https_file transport, whose
+    response.read() raises http.client.IncompleteRead on the first file's first
+    attempt. That truncation must be collapsed into TransientAcquisitionError,
+    absorbed by the bounded retry layer (exactly one 2s backoff wait through the
+    injectable sleep seam), and the eventually committed files must still pass
+    every staged integrity check byte for byte.
+    """
+
+    payloads = _payloads(dataset_config)
+    opened: list[str] = []
+    waits: list[float] = []
+
+    def fake_open(request: Any, timeout: float) -> _Response | _TruncatedResponse:
+        """Serve a truncated response on the first open and full responses after.
+
+        Args:
+            request: The urllib Request the production transport constructed;
+                its full_url selects which fixture payload to serve.
+            timeout: The timeout value passed through from the caller; unused.
+
+        Returns:
+            A truncating fake response for the very first open, then normal
+            full-body fake responses for every subsequent open.
+        """
+
+        del timeout
+        url = request.full_url
+        opened.append(url)
+        # Only the very first transport open truncates; the retried attempt and
+        # the remaining files stream their full advertised bodies.
+        if len(opened) == 1:
+            return _TruncatedResponse(url, payloads[url])
+        return _Response(url, payloads[url])
+
+    monkeypatch.setattr(acquisition, "_open_https_request", fake_open)
+
+    # No fetcher override: this must run the production HTTPS transport so the
+    # IncompleteRead classification is exercised where it actually happens.
+    result = acquire_dataset(
+        dataset_config,
+        repository,
+        Path("data/raw/synthetic/1.0.0"),
+        Path("artifacts/acquisition.json"),
+        clock=lambda: datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        sleep=waits.append,
+    )
+
+    assert result.downloaded_file_count == 3
+    assert result.reused_file_count == 0
+    # Exactly one backoff wait for the single truncated attempt.
+    assert waits == [2.0]
+    # The first file was opened twice (truncated, then retried); the other two
+    # companion files each streamed cleanly on their only attempt.
+    assert opened == [
+        dataset_config.download_url + "100.atr",
+        dataset_config.download_url + "100.atr",
+        dataset_config.download_url + "100.dat",
+        dataset_config.download_url + "100.hea",
+    ]
+    # The committed file the truncation hit is byte-identical to the payload,
+    # proving the retry re-entered a clean staging path and full verification.
+    committed = repository / "data" / "raw" / "synthetic" / "1.0.0" / "100.atr"
+    assert committed.read_bytes() == payloads[dataset_config.download_url + "100.atr"]
+
+
 def test_transient_classification_separates_connectivity_from_permanent_failures() -> None:
     """Connectivity-shaped errors classify as transient; definitive failures do not.
 
     Protects the boundary the retry layer depends on: timeouts, connection drops,
-    non-HTTP URL errors (DNS and socket failures), and the documented transient
-    HTTP statuses are retryable, while definitive HTTP client errors and local
-    OS errors (such as a full disk while staging) fail fast.
+    non-HTTP URL errors (DNS and socket failures), mid-body truncations
+    (http.client.IncompleteRead, a dropped connection surfaced by http.client's
+    own bookkeeping — #206), and the documented transient HTTP statuses are
+    retryable, while definitive HTTP client errors, malformed protocol exchanges
+    (http.client's other HTTPException values), and local OS errors (such as a
+    full disk while staging) fail fast.
     """
 
     transient_errors: tuple[BaseException, ...] = (
@@ -856,11 +1008,13 @@ def test_transient_classification_separates_connectivity_from_permanent_failures
         urllib.error.HTTPError(
             "https://example.test/100.dat", 503, "Service Unavailable", Message(), None
         ),
+        http.client.IncompleteRead(b"partial", 42),
     )
     permanent_errors: tuple[BaseException, ...] = (
         urllib.error.HTTPError("https://example.test/100.dat", 404, "Not Found", Message(), None),
         urllib.error.HTTPError("https://example.test/100.dat", 403, "Forbidden", Message(), None),
         OSError(errno.ENOSPC, "No space left on device"),
+        http.client.BadStatusLine("not-a-status-line"),
     )
 
     # Each direction is asserted per-error so a misclassification names itself.
@@ -1030,3 +1184,87 @@ class _Response:
             return b""
         self._read = True
         return self._content
+
+
+class _TruncatedResponse:
+    """Simulate a response whose connection drops before its advertised body ends (#206).
+
+    Mirrors _Response's minimal contract (context management, status and URL
+    inspection, Content-Length headers) but serves only the first byte of its
+    advertised body and then raises http.client.IncompleteRead from the next
+    read(), matching how a real mid-body connection drop on a known-length
+    response surfaces from http.client during streaming.
+    """
+
+    def __init__(self, url: str, content: bytes) -> None:
+        """Store the URL and the full advertised content; only part is ever served.
+
+        Args:
+            url: The URL this fake response reports via geturl().
+            content: The full body the response advertises via Content-Length;
+                read() serves only its first byte before failing.
+        """
+
+        self._url = url
+        self._content = content
+        self._read = False
+        self.headers = {"Content-Length": str(len(content))}
+
+    def __enter__(self) -> _TruncatedResponse:
+        """Return self as the active response, matching the real context-manager use.
+
+        Returns:
+            This fake response instance.
+        """
+
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        """No-op exit; nothing needs cleanup for an in-memory fake response.
+
+        Args:
+            _: Exception info tuple, ignored (this fake never suppresses exceptions).
+        """
+
+        return None
+
+    def getcode(self) -> int:
+        """Report a successful (200) HTTP status; the drop happens mid-body, not here.
+
+        Returns:
+            The fixed status code 200.
+        """
+
+        return 200
+
+    def geturl(self) -> str:
+        """Report the response's final URL, used by _validate_final_url's redirect check.
+
+        Returns:
+            This fake response's configured URL.
+        """
+
+        return self._url
+
+    def read(self, _: int) -> bytes:
+        """Serve one partial chunk, then fail like a connection dropped mid-body.
+
+        The first call returns a single byte (so partial bytes genuinely reach
+        the staged file, as they would on a real drop); the second call raises
+        IncompleteRead carrying the served/expected byte accounting, exactly as
+        http.client reports a stream that ended short of its Content-Length.
+
+        Args:
+            _: The requested chunk size, ignored by this fake.
+
+        Returns:
+            The first byte of the advertised content, on the first call only.
+        """
+
+        # First call: one real byte lands in the staged file. Second call: the
+        # advertised remainder never arrives, so http.client's accounting error
+        # surfaces instead of a normal end-of-stream b"".
+        if self._read:
+            raise http.client.IncompleteRead(self._content[:1], len(self._content) - 1)
+        self._read = True
+        return self._content[:1]

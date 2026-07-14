@@ -9,6 +9,23 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Added
 
+- Added a `Not Planned` Status lane to the ECG Pipeline Modernization project board for #208 and
+  documented its semantics in `docs/governance/github-project.md` and the `AGENTS.md`
+  project-planning bullet: the lane is used only for issues closed with GitHub's native
+  "not planned" state reason, keeping withdrawn work visibly distinct from delivered work in
+  board views and field-based filters. `Closed` stays reserved for completed issues,
+  pull-request lanes and the `project-status-sync` automation are unaffected (it targets PR merge
+  events, not issue closures), and the built-in issue-closed workflow's inability to distinguish
+  state reasons is recorded: items land in `Closed` first and are moved to `Not Planned` manually
+  with a read-back check. The two withdrawn hosted-notebook issues (#198, #200) are backfilled
+  into the new lane.
+- Documented the notebook-surface label mapping for #207 in `docs/governance/label-taxonomy.md`,
+  cross-referenced from `docs/governance/github-project.md`: there is deliberately no
+  `area: notebooks` label — notebook-focused issues and pull requests carry `area: documentation`
+  on the label side (precedent: PRs #202 and #205, consistent with the #105/#113 migration of the
+  legacy `area:notebooks` spelling) while the board's Repository Area field records the
+  finer-grained `notebooks` value — so future PR authors stop rediscovering the asymmetry through
+  failed label assignment.
 - Added bounded transient-failure retries to dataset acquisition for #201, implementing the
   `AGENTS.md` defensive-external-calls rule at its origin site: each per-file HTTPS transfer now
   retries plausibly transient connectivity failures (timeouts, dropped/reset/refused connections,
@@ -98,6 +115,21 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Fixed
 
+- Folded `http.client.IncompleteRead` into acquisition's single-exception contract and transient
+  retry classification for #206: a server closing a known-`Content-Length` response mid-body makes
+  `response.read()` raise `IncompleteRead` — an `http.client.HTTPException`, outside the previously
+  caught `(OSError, TimeoutError, URLError)` set — so it escaped `acquire_dataset` as a raw
+  traceback instead of entering #201's bounded retry path. The production HTTPS transport now
+  collapses every `http.client.HTTPException` into `AcquisitionError` and classifies
+  `IncompleteRead` specifically as transient (a mid-body connection drop, retried up to three
+  total attempts with 2s/4s backoff and staged-file cleanup between attempts), while other
+  protocol-level exchange failures stay permanent and fail fast on the first attempt. Every #201
+  integrity and exhaustion guarantee is unchanged: digest/size mismatches are never retried,
+  atomic commit-on-full-success holds, and exhausted retries still exit with the same graceful
+  bounded external-connectivity message. Deterministic tests pin the classification boundary
+  (`IncompleteRead` transient, `BadStatusLine` permanent), the collapse at the transport seam,
+  and a full end-to-end retry of a truncated body through the production transport via the
+  injectable sleep seam.
 - Corrected the #192 Dependabot entry under `### Dependencies` below, which recorded the
   superseded `setup-uv` version 8.3.0 instead of the actually merged 8.3.1 (#204). A mid-flight
   `@dependabot recreate` retargeted the group bump from 8.3.0 to 8.3.1, but the final autofill

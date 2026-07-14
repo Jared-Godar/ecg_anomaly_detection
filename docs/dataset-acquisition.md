@@ -54,10 +54,12 @@ Acquisition applies the following controls:
 - each response must return HTTP 200 and respect a bounded per-file size;
 - downloads are streamed into a temporary staging directory rather than partial destination files;
 - transient connectivity failures (timeouts, dropped/reset connections, name-resolution failures,
-  and HTTP 429/500/502/503/504) are retried per file up to three total attempts with exponential
-  backoff (2s, then 4s), with the partially staged file removed between attempts; permanent
-  failures (HTTP 404/403, size-cap violations, digest or size mismatches, rejected redirects) fail
-  fast on the first attempt, and every retry outcome still passes the same staged integrity checks;
+  a response body truncated by a mid-transfer connection drop, and HTTP 429/500/502/503/504) are
+  retried per file up to three total attempts with exponential backoff (2s, then 4s), with the
+  partially staged file removed between attempts; permanent failures (HTTP 404/403, malformed
+  HTTP protocol exchanges, size-cap violations, digest or size mismatches, rejected redirects)
+  fail fast on the first attempt, and every retry outcome still passes the same staged integrity
+  checks;
 - when retries are exhausted, the failure message names the affected URL and attempt count, states
   that the cause is an external connectivity or service condition rather than a repository or setup
   defect, and gives re-run remediation — atomicity means a re-run restarts cleanly;

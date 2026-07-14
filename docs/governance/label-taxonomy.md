@@ -42,6 +42,31 @@ GitHub automation labels `bug` and `question` may remain when useful; they suppl
 not declared by the manifest. `duplicate`, `good first issue`, `help wanted`, `invalid`, and `wontfix` were
 retired in the #105/#113 migration pass (zero usage, not applicable to a single-maintainer repository).
 
+## Notebook-surface label mapping (#207)
+
+There is deliberately no `area: notebooks` label, even though the ECG Pipeline Modernization
+board's Repository Area single-select field does offer a `notebooks` option (see
+[GitHub Project governance](github-project.md#required-fields)). The two surfaces map like this:
+
+| Surface | Value for notebook-focused work |
+|---|---|
+| Issue/PR labels (this taxonomy) | `area: documentation` |
+| Project board Repository Area field | `notebooks` |
+
+The label side treats the supported public notebooks as part of the repository's documentation
+surface — consistent with the #105/#113 migration, which folded the legacy `area:notebooks`
+spelling into `area: documentation` (see the migration table below) rather than minting a
+current-taxonomy notebooks label. The board field keeps the finer-grained `notebooks` value
+because Repository Area is a single-select routing field, not a label, and costs nothing to keep
+specific. Precedent: PRs #202 and #205 both carry `area: documentation` labels with `notebooks`
+as their board Repository Area; an attempted `area: notebooks` label on PR #205 failed PR
+creation because the label does not exist.
+
+Do not mint an `area: notebooks` label ad hoc when a PR hits that failure — apply
+`area: documentation` and set the board field to `notebooks`. If the asymmetry ever becomes a
+real friction, propose adding the label to `.github/labels.json` through the normal label-sync
+workflow instead of creating it directly on an issue or PR.
+
 ## Completed legacy-label migration (#105, #113)
 
 The table below is a historical record of the one-time migration executed against the live repository. All
