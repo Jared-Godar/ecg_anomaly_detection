@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import http.client
 import json
 import os
 import shutil
@@ -56,8 +57,9 @@ class TransientAcquisitionError(AcquisitionError):
     The subclass relationship keeps every existing ``except AcquisitionError``
     caller working unchanged, while the retry layer (_fetch_with_transient_retries)
     can catch this specific type to retry only failures that a short wait can
-    plausibly fix — timeouts, connection drops, name-resolution blips, and the
-    transient HTTP statuses in TRANSIENT_HTTP_STATUS_CODES. Integrity failures
+    plausibly fix — timeouts, connection drops (including a response body
+    truncated mid-transfer, http.client.IncompleteRead), name-resolution blips,
+    and the transient HTTP statuses in TRANSIENT_HTTP_STATUS_CODES. Integrity failures
     (digest/size mismatch, unexpected redirect, size-cap violation) never use this
     type and therefore always fail fast on the first attempt.
     """
@@ -314,9 +316,11 @@ def _is_transient_retrieval_failure(error: BaseException) -> bool:
     """Decide whether one failed retrieval attempt is plausibly transient.
 
     Transient means a short wait can plausibly change the outcome: a timeout, a
-    dropped/refused/reset connection, a name-resolution blip, or a momentary
+    dropped/refused/reset connection (including one dropped mid-body, surfaced
+    by http.client as IncompleteRead), a name-resolution blip, or a momentary
     server-side condition (see TRANSIENT_HTTP_STATUS_CODES). Everything else —
-    a definitive HTTP client error such as 404, or a local OSError like a full
+    a definitive HTTP client error such as 404, a malformed protocol exchange
+    (http.client's other HTTPException values), or a local OSError like a full
     disk while staging — is permanent and must fail fast, because retrying it
     delays the clean failure without changing the result.
 
@@ -336,6 +340,14 @@ def _is_transient_retrieval_failure(error: BaseException) -> bool:
     # (DNS failure, refused connection, TLS/socket-level timeout) -- the classic
     # transient connectivity class this retry layer exists for.
     if isinstance(error, urllib.error.URLError):
+        return True
+    # A response that ends before delivering its advertised Content-Length
+    # surfaces from response.read() as http.client.IncompleteRead (#206): the
+    # connection dropped mid-body, the same transient class as a reset, just
+    # reported by http.client's own bookkeeping instead of a socket error.
+    # http.client's other HTTPException values (e.g. a malformed status line)
+    # are protocol-level defects a wait cannot fix and stay permanent.
+    if isinstance(error, http.client.IncompleteRead):
         return True
     # Raw socket-level failures can surface outside urllib's wrapping while the
     # response body is being streamed: timeouts and reset/aborted connections.
@@ -743,11 +755,14 @@ def _fetch_https_file(
                 raise AcquisitionError(f"Content-Length mismatch for {url}")
     except AcquisitionError:
         raise
-    except (OSError, TimeoutError, urllib.error.URLError) as error:
+    except (OSError, TimeoutError, urllib.error.URLError, http.client.HTTPException) as error:
         # Distinguish plausibly transient connectivity failures (retryable by
         # _fetch_with_transient_retries) from permanent ones (fail fast) while
         # keeping the same single-exception surface for callers: both types are
         # AcquisitionError, so non-retrying callers behave exactly as before.
+        # HTTPException is caught since #206: response.read() raises
+        # http.client.IncompleteRead (not an OSError or URLError) when the
+        # connection drops mid-body, and it previously escaped this collapse.
         if _is_transient_retrieval_failure(error):
             raise TransientAcquisitionError(f"could not retrieve {url}: {error}") from error
         raise AcquisitionError(f"could not retrieve {url}: {error}") from error

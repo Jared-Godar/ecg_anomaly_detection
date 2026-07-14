@@ -205,8 +205,10 @@ merge, release-tag) require an explicit go-ahead; everything else here is standi
 - Set new issues to `Backlog`, active pull requests to `In Progress` while implementation is
   underway and `Review` once open and awaiting merge, merged pull requests to `Merged`
   (`project-status-sync.yml` sets this automatically; correct manually if it ever doesn't -- see
-  [GitHub Project governance](docs/governance/github-project.md#automation)), and completed closed
-  issues to `Closed`.
+  [GitHub Project governance](docs/governance/github-project.md#automation)), completed closed
+  issues to `Closed`, and issues closed with GitHub's native "not planned" state reason to
+  `Not Planned` (never `Closed`, which stays reserved for completed work -- see
+  [GitHub Project governance](docs/governance/github-project.md#status-lifecycle)).
 - Preserve manually curated project values unless they are blank or demonstrably inconsistent
   with repository state.
 - Link each implementation pull request to its issue with a supported closing reference when the

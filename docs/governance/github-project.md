@@ -14,7 +14,7 @@ Every issue and pull request added to the project must populate these fields:
 
 | Field | Values |
 |---|---|
-| Status | Backlog, Ready, In Progress, Blocked, Review, Validation, Merged, Closed |
+| Status | Backlog, Ready, In Progress, Blocked, Review, Validation, Merged, Closed, Not Planned |
 | Workstream | Acquisition, Pipeline, Evaluation, Governance, Developer Experience, Documentation, Release, Stewardship |
 | Issue Type | Feature, Enhancement, Governance, Documentation, Technical Debt, Bug, Investigation, Research |
 | Priority | Critical, High, Medium, Low |
@@ -26,6 +26,11 @@ Every issue and pull request added to the project must populate these fields:
 
 Use the most specific defensible value. Leave uncertain metadata blank and request maintainer
 review instead of manufacturing precision.
+
+The Repository Area option `notebooks` has no matching `area: notebooks` label — notebook-surface
+work carries `area: documentation` on the label side; see the
+[notebook-surface label mapping](label-taxonomy.md#notebook-surface-label-mapping-207) in the
+label taxonomy.
 
 ### Bundling pull requests
 
@@ -80,6 +85,14 @@ via Graphviz (see [`docs/diagrams/design-spec.md`](../diagrams/design-spec.md)).
 - Review means the deliverable is ready for maintainer review.
 - Merged describes a merged pull request or an issue awaiting final closure.
 - Closed describes a completed, closed issue.
+- Not Planned (#208) describes an issue closed with GitHub's native "not planned" state reason —
+  withdrawn, superseded, or deliberately declined work. It is used **only** for issues carrying
+  that state reason; `Closed` stays reserved for completed issues, and pull request lanes are
+  unaffected. The native state reason carries the distinction on the issue itself, but not in
+  board views or field-based filters — this lane makes withdrawn work visibly distinct from
+  delivered work on the board. It is a terminal excursion available from any lane at withdrawal
+  time, not a step in the delivery progression, which is why the lifecycle diagram above
+  deliberately continues to show only the delivery path.
 
 ## Historical record
 
@@ -135,6 +148,12 @@ listens for `pull_request: closed` and, when `github.event.pull_request.merged =
 to explicitly set the item's Status to `Merged` after the built-in workflows have already run,
 winning the race deterministically instead of leaving `Closed` as the final value. Originally
 tracked in #100, superseded by #117.
+
+The built-in `Issue closed` workflow does not distinguish closure state reasons, so an issue
+closed as "not planned" initially lands in `Closed` like any other closed issue; move it to
+`Not Planned` manually afterward with a read-back check (see the CLI section below).
+`project-status-sync.yml` is unaffected by the `Not Planned` lane — it targets pull-request
+merge events only, never issue closures.
 
 Automatic priority, risk, size, and portfolio assignments are intentionally avoided. Those fields
 require reviewable engineering judgment.
