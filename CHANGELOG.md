@@ -74,6 +74,8 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Dependencies
 
+- Bump `astral-sh/setup-uv` from 8.2.0 to 8.3.0 (github_actions) via Dependabot (#192).
+
 ### Governance
 
 - Integrated bot-authored (Dependabot) pull requests into the changelog and metadata gates
