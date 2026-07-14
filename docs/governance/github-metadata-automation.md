@@ -150,8 +150,9 @@ The check validates two layers:
   milestone is a delivery commitment, not a mandatory tag) — the check reads each closing issue's
   own milestone field and inherits that decision rather than forcing an unrelated milestone onto
   the pull request.
-- **Linked issue level**: for every issue number extracted from a closing reference, that the
-  issue is a member of the tracked Project and has every field in
+- **Linked issue level**: for every issue number extracted from a closing reference or a
+  non-closing marker (see [Non-closing issue reference marker](#non-closing-issue-reference-marker)
+  below), that the issue is a member of the tracked Project and has every field in
   [Required fields](github-project.md#required-fields) populated.
 
 ### Per-PR changelog gate
@@ -171,6 +172,57 @@ condition.
 ```fish
 uv run python scripts/github/validate_changelog_update.py --pr-number 65
 ```
+
+### Non-closing issue reference marker
+
+A receipts-gated pull request — one whose tracking issue must stay open past merge until
+post-merge receipts land — cannot use a closing keyword without forcing a noisy
+close-then-reopen cycle on its tracking issue. Issue #216 introduced a sanctioned alternative:
+an explicit marker line in the pull request body that binds the PR to its tracking issue for
+governance purposes (Project membership, field completeness, milestone inheritance) without
+asking GitHub to auto-close the issue on merge.
+
+**Syntax:**
+
+```text
+Non-closing ref: #N — <reason>
+```
+
+The marker is case-insensitive. The separator accepts either an em-dash (`—`) or a plain ASCII
+hyphen (`-`). The reason after the separator is **mandatory** — it is the audit trail
+justifying why the issue is deliberately kept open past this PR's merge. A marker with no
+reason (or whitespace-only after the separator) is deliberately not recognized.
+
+**Behavior:**
+
+- Satisfies the closing-reference requirement in `validate_pull_request` (the PR passes
+  without a closing keyword when at least one non-closing marker is present).
+- Runs the **same** downstream checks as a closing reference: the referenced issue must be a
+  tracked Project member with every required field populated, and its milestone is inherited
+  for the PR's own milestone requirement.
+- The **only** thing skipped is GitHub's auto-close — the issue stays open when the PR merges.
+- The premature-closure observational check (issue #158) does not apply to non-closing refs,
+  since those issues are *supposed* to remain open past merge.
+- Fenced code blocks and inline code spans are stripped before matching, so a marker quoted as
+  prose or example text is not mistaken for a real directive.
+
+**Ambiguity is a hard violation:** naming the same issue number via both a closing keyword
+(`Closes #N`) and a non-closing marker (`Non-closing ref: #N — reason`) in the same PR body
+is reported as a metadata failure. Auto-closing and deliberately keeping open are contradictory
+requests; the PR must choose one.
+
+**When to use:**
+
+- Multi-leg governance work whose tracking issue must accumulate post-merge receipts (e.g.
+  closure-pass label changes, Project field updates) before it can be closed.
+- A PR that delivers one leg of a broader tracking issue that will be closed by a later PR.
+
+**When NOT to use:**
+
+- When the PR fully completes the issue scope and the issue should close on merge — use a
+  standard closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`).
+- As an escape hatch to avoid linking work to a tracking issue — the marker enforces the same
+  metadata bar as a closing keyword, just without the auto-close side effect.
 
 ### Token requirement and rollout
 
