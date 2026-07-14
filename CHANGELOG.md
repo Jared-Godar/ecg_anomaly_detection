@@ -227,6 +227,15 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Documentation
 
+- Refreshed the Project #5 Status option-ID table in `docs/governance/github-project.md` (#212)
+  to the post-#208 generation — all eight pre-existing IDs plus the new `Not Planned` row, re-verified
+  against the live field schema at fix time — and documented the `updateProjectV2Field` footgun
+  discovered during that work: the mutation's `singleSelectOptions` argument replaces the whole
+  option set and regenerates every option ID (even for options resent unchanged by name),
+  orphaning every item's stored Status value board-wide; options must be added through the
+  project web UI, with the per-item read-back-verified `gh project item-edit` loop as the
+  restore path (the route used for the verified 209/209 board restore recorded on PR #209).
+  Completes the follow-up commit PR #209's body promised but did not land before merge.
 - Added a release-time changelog-coverage backstop to
   `docs/governance/release-checklist.md` (#186): enumerate the full
   `git log <last-release-tag>..main` commit range and confirm every commit's issue or pull
