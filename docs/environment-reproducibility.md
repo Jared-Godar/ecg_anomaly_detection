@@ -55,6 +55,33 @@ uv run --group notebooks python -c "import IPython, ipykernel, matplotlib, matpl
 uv run --group notebooks --group experiments python -c "import lightgbm, xgboost; print('experiments ok')"
 ```
 
+## Run the supported local notebook workflow
+
+The supported public workflow is one local repository checkout opened in VS Code or JupyterLab
+with that checkout's `.venv` kernel. Notebook 00 synchronizes the locked `notebooks` group, runs
+the governed pipeline through `uv run`, and leaves ignored generated state in the checkout.
+Notebooks 01 and 02 reuse that same state in place after independently verifying their required
+artifacts; no archive, copy, upload, or external storage transition is part of the workflow.
+
+From the repository root:
+
+```fish
+uv sync --locked --group notebooks
+uv run --group notebooks jupyter lab notebooks/00-environment-setup-and-artifact-generation.ipynb
+```
+
+Run notebooks 00, 01, and 02 in order. Keep the same checkout and select the registered project
+kernel in each notebook. Generated source data and run artifacts remain ignored local files; they
+are not committed data, release artifacts, benchmark evidence, or protected-test evidence. The
+notebook time ranges are qualified planning guidance because download speed, local cache state,
+CPU, memory, disk, and system load vary.
+
+Optional web-runtime integration is not currently supported or documented as a user workflow.
+Future evaluation, including explicit cost disclosure and cross-notebook continuity, is tracked in
+[Issue #200](https://github.com/Jared-Godar/ecg_anomaly_detection/issues/200).
+
+Platform reference: [VS Code Jupyter kernel selection](https://code.visualstudio.com/docs/datascience/jupyter-kernel-management).
+
 ## Register and select the notebook kernel
 
 After syncing the notebook group, register the current `.venv` once for Jupyter-compatible tools:

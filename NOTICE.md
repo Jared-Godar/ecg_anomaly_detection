@@ -42,4 +42,10 @@ The archive's [preservation policy](archive/original_2022/README.md#preservation
 
 ## Documentation banner images
 
-The three banner images in `docs/assets/` (`ecg-readme-project-overview-banner.png`, `ecg-first-time-environment-setup-banner.png`, `ecg-notebook-workflow-banner.png`) are AI-generated original assets created specifically for this project's modernization documentation. They are not third-party material and are unrelated to the unresolved-provenance imagery described above under "Images and notebook research material."
+The five public notebook and overview banner images in `docs/assets/`
+(`ecg-readme-project-overview-banner.png`, `ecg-first-time-environment-setup-banner.png`,
+`ecg-notebook-workflow-banner.png`, `ecg-notebook-narrative-walkthrough-banner.png`, and
+`ecg-gradient-boosting-validation-banner.png`) are AI-generated original assets created
+specifically for this project's modernization documentation. They are not third-party material
+and are unrelated to the unresolved-provenance imagery described above under "Images and notebook
+research material."

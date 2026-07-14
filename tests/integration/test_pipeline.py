@@ -278,6 +278,7 @@ def test_run_pipeline_command_emits_stage_progress_and_total_elapsed_time(
     # Confirm per-record progress notes were printed for every configured record.
     for record_id in record_ids:
         assert f"({record_id}): " in output
+        assert f"({record_id}): downloaded and verified 3 files" in output
     assert "completed run " in output.splitlines()[-1]
     assert " in " in output.splitlines()[-1]
 

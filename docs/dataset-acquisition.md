@@ -30,6 +30,9 @@ extra website content, historical alternates, or documentation files.
 `acquire` prints a `[1/1] acquire: starting` banner, its existing completion message, and a
 `[1/1] acquire: complete in MM:SS` banner (or `failed after MM:SS` if it raises) to stdout, matching
 [the orchestrated `run-pipeline` command's progress output](pipeline-orchestration.md#progress-output).
+Between those banners it prints one completed line per configured record—not one line per file—so
+a first 48-record download stays visibly active. Each line says whether that record's companion
+files were downloaded and verified, verified from existing local files, or partially restored.
 This is purely observational and never changes the command's exit code or the acquired files.
 
 ## Safety and recovery behavior

@@ -140,8 +140,8 @@ should never contain business logic itself; that belongs in the stage modules.
   interruption-tolerant hyperparameter search (checkpoints one candidate at a time).
 - `notebook_quality.py` — static checks (format/strip-outputs/lint) for the ignored
   `notebooks/local/` sandbox; never executes cells.
-- `progress.py` — per-stage progress banners with elapsed time, flushed per line so subprocess
-  consumers (including the Step 0 notebook) can stream it live.
+- `progress.py` — per-stage progress banners plus optional qualified elapsed heartbeats, serialized
+  and flushed per line so subprocess consumers and notebooks can stream useful updates live.
 
 ### Two non-obvious invariants that shape most changes
 
@@ -169,9 +169,10 @@ should never contain business logic itself; that belongs in the stage modules.
 - `archive/original_2022/` — preserved, unsupported historical notebooks/images; excluded from
   lint/format hooks (`ruff.toml`, `.pre-commit-config.yaml`) and must not be rewritten except via
   a dedicated, explicitly reviewed archival repair.
-- `notebooks/` (curated, 00→01→02) call supported package APIs and are execution-tested in CI
-  against synthetic data; `notebooks/local/` is an ignored, disposable experimentation sandbox
-  (not supported workflow input or benchmark evidence).
+- `notebooks/` (curated, 00→01→02) call supported package APIs, give bounded and qualified feedback
+  around locally variable execution phases, and are execution-tested in CI against synthetic data;
+  `notebooks/local/` is an ignored, disposable experimentation sandbox (not supported workflow
+  input or benchmark evidence).
 - `tests/{unit,integration,scripts}/` plus `tests/fixtures/` — only small synthetic or
   explicitly-redistributable fixtures; no real patient-derived ECG data.
 - `scripts/` — thin operational entry points (label sync, drift detection, notebook/project

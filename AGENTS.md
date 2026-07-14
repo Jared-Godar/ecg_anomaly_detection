@@ -41,6 +41,13 @@ defect, not a style choice.
 - **Calibrated claims.** Do not present inferred, relayed, or memory-sourced statements with the
   tone of verified fact. State the confidence and its basis when it is not directly verified in
   the current session.
+- **Check outside-sandbox permission first.** When an authorization or permission barrier is
+  encountered, the first remediation step is to check whether the required permission is
+  available through the environment's approved out-of-sandbox mechanism. Do this before trying
+  workarounds or asking the maintainer to repeat an authorization they may already have granted.
+  Checking availability does not itself grant permission, bypass an approval requirement, or
+  broaden the action that the maintainer authorized; use the platform's normal approval flow when
+  the out-of-sandbox action still requires explicit consent.
 - **Floor, not ceiling.** This section is a minimum, not an exhaustive list of permitted actions.
   Using judgment to do the obviously-necessary thing when no rule names it is required, not
   optional. Declining or omitting an obviously-correct action because it "wasn't in the contract"
@@ -98,6 +105,18 @@ merge, release-tag) require an explicit go-ahead; everything else here is standi
 
 ## Engineering discipline
 
+- **Defensively code every external call.** Any operation that leaves the process for a network or
+  external service — dataset/file downloads, package installs (`uv sync`/PyPI), HTTP/API requests,
+  remote CLIs, registry or container pulls — must (1) retry *transient* failures (timeouts,
+  connection resets, transient 5xx) a bounded number of times with backoff, while failing fast on
+  *permanent* errors (404, auth, digest/size mismatch) and never retrying a non-idempotent
+  operation in a way that risks duplication or corruption; and (2) on exhaustion, exit *gracefully*
+  — a clear, bounded message that names what failed, states plainly that it is an
+  external/connectivity condition rather than a code or setup defect, and gives concrete
+  remediation steps — never a raw traceback, especially on a user-facing surface such as the public
+  notebooks. Retries must preserve existing integrity guarantees (atomic commits, checksum
+  verification). New external calls meet this bar when written; known existing gaps are tracked and
+  retrofitted (#201 covers the Step 0 notebook's PhysioNet download and `uv sync` bootstrap).
 - **Diagnose before suppressing.** Prove the root cause of a warning or failure before silencing
   it or editing global config; do not trade a real protection for cosmetic quiet, even under time
   pressure.

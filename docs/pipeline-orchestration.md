@@ -37,11 +37,17 @@ baseline instead of redownloading unchanged files.
 (acquisition, inventory, record processing, split, split diagnostics, training, validation
 evaluation), with elapsed time and key counts or artifact paths on completion. The record-processing
 stage additionally prints one indented line per record so long record loops do not appear frozen.
+Acquisition uses the same record-level cadence after each record's required companion files pass
+their size and digest checks. It distinguishes newly downloaded files, verified existing files, and
+partial resume without expanding to noisy per-file output.
 Representative output:
 
 ```text
 run 32888ee3-7781-4171-b43e-e076a73b363c starting
 [1/7] acquisition: starting (3 records, 9 files expected)
+    record 1/3 (100): downloaded and verified 3 files
+    record 2/3 (101): downloaded and verified 3 files
+    record 3/3 (102): downloaded and verified 3 files
 [1/7] acquisition: complete in 00:04 (manifest written to artifacts/datasets/synthetic/1.0.0/acquisition.json)
 [2/7] inventory: starting
 [2/7] inventory: complete in 00:01 (9 files verified)
@@ -70,8 +76,12 @@ Every line is flushed as it is written. Python fully block-buffers stdout when i
 terminal, which is exactly the case for `notebooks/00-environment-setup-and-artifact-generation.ipynb`'s
 Step 0 cell: it runs this command through `subprocess.Popen` specifically so a reviewer can watch
 progress live. Without an explicit flush per line, every banner above would arrive in one batch at
-process exit instead of live. The notebook requires no changes to pick up this output — it already
-streams the CLI's combined stdout/stderr line by line.
+process exit instead of live. The notebook streams the CLI's combined stdout/stderr line by line
+from an intentionally short invocation cell, keeping live output close to the visible call in VS
+Code and Jupyter while the preceding setup cell retains failure classification and verification
+logic. Before starting, Step 0 also gives a broad, qualified first-run expectation and names
+download speed, cache state, record count, CPU, and disk as variable factors; its measured
+completion line is runtime feedback, not benchmark evidence.
 
 ## Output layout
 

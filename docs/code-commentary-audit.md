@@ -167,11 +167,16 @@ are not Python and are skipped, rather than misreported as invalid-Python violat
 
 ### Scope and baseline
 
-The pre-audit baseline recorded at issue intake was 3 curated notebooks, 31 Python code cells,
+The pre-audit baseline recorded at issue intake was 3 curated notebooks, 31 code cells,
 1,939 source lines, 39 function/class definitions (0 undocumented — every existing definition
-already had a docstring), and 330 standalone comment lines. The completed audit contains the same
-31 code cells and 39 definitions (no definitions were added or removed), 2,261 source lines, and
-652 standalone comment lines.
+already had a docstring), and 330 standalone comment lines. The completed #151 audit contained the
+same 31 code cells and 39 definitions (no definitions were added or removed), 2,347 source lines,
+and 689 standalone comment lines. Subsequent maintained notebook work remains under the same gate.
+The current Issue #194 inventory contains 37 total code cells; two are Bash magics intentionally
+skipped by the Python AST audit, leaving 35 audited Python cells, 2,533 Python source lines, 40
+definitions, and 773 standalone comment lines. The reduction from the earlier in-progress count
+reflects removal of an unvalidated cross-runtime setup path; the supported local execution,
+progress-reporting, artifact-verification, and evaluation-boundary commentary remains audited.
 
 `notebooks/local/` and `archive/original_2022/` remain excluded from this policy, matching the
 repository-wide scope above. The protected held-out test partition was not opened, inspected, or
@@ -180,9 +185,9 @@ scored during this audit, including within
 
 ### Audited inventory
 
-- `notebooks/00-environment-setup-and-artifact-generation.ipynb` (8 code cells)
-- `notebooks/01-narrative-walkthrough.ipynb` (11 code cells)
-- `notebooks/02-high-performing-gradient-boosting-validation.ipynb` (12 code cells)
+- `notebooks/00-environment-setup-and-artifact-generation.ipynb` (12 total code cells; 10 Python)
+- `notebooks/01-narrative-walkthrough.ipynb` (12 Python code cells)
+- `notebooks/02-high-performing-gradient-boosting-validation.ipynb` (13 Python code cells)
 
 ### Ongoing enforcement
 
