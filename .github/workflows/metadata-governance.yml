@@ -32,9 +32,9 @@ jobs:
 
       - name: Validate PR and linked-issue metadata
         env:
-          # PROJECT_METADATA_TOKEN is a fine-grained PAT scoped to this repository with
-          # read-only Pull requests, Issues, and (Account permissions) Projects access --
-          # see docs/governance/github-metadata-automation.md. The default GITHUB_TOKEN
+          # PROJECT_METADATA_TOKEN is a CLASSIC PAT (scopes: project + public_repo +
+          # read:org); fine-grained tokens cannot access user-owned Projects -- see
+          # docs/governance/github-metadata-automation.md. The default GITHUB_TOKEN
           # cannot read Project V2 fields for a user-owned project. --strict-project-checks
           # below means an unreadable Project (missing token, rotated-out secret, revoked
           # permission) is a hard failure, not a silently skipped check; the GITHUB_TOKEN

@@ -72,7 +72,41 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Removed
 
+### Dependencies
+
 ### Governance
+
+- Integrated bot-authored (Dependabot) pull requests into the changelog and metadata gates
+  (#193): a new `Dependabot PR autofill` workflow (`.github/workflows/dependabot-autofill.yml`,
+  `pull_request_target`, triple-gated on the immutable PR author `dependabot[bot]`, a same-repo
+  head, and a `dependabot/**` branch) auto-commits a `### Dependencies` changelog entry to each
+  Dependabot PR branch — derived exclusively from SHA-pinned `dependabot/fetch-metadata`
+  structured outputs (regex-allowlisted, fail-closed, never attacker-influenceable free text)
+  and written through a contents-API PUT with the classic `PROJECT_METADATA_TOKEN` PAT so the
+  required checks re-run on the amended PR — and adds the PR to Project #5 with nine documented
+  bot-default fields, read-back verified (`scripts/github/autofill_dependabot_changelog.py`,
+  `scripts/github/sync_dependabot_pr_metadata.py`). The workflow never checks out or executes
+  PR-head content; a per-commit server-side authorship proof (every commit authored by
+  `dependabot[bot]` with a verified signature) gates the write, and an idempotency-first
+  `(#N)`-keyed replace-or-insert terminates the self-trigger loop and self-heals Dependabot
+  force-pushes. `scripts/github/validate_project_metadata.py` now treats governed bot authors
+  as a documented exempt class: linked-issue and milestone requirements are waived,
+  compensated by enforcing the PR's own Project #5 membership and field completeness from the
+  same snapshot (no silent bypass, per #184's design principle); human PRs are unchanged.
+  `.github/dependabot.yml` now applies taxonomy-valid labels (`dependency: external`,
+  `type: maintenance`, and a per-ecosystem `area:*` label) plus the maintainer as assignee —
+  its previous `dependencies`/`automation` label names no longer exist in the taxonomy, which
+  is why PR #192 arrived label-less. A new `scripts/check_privileged_workflow_safety.py` guard
+  (run as a repository-hygiene job) mechanically enforces the privileged workflow's structural
+  security invariants — no PR-head checkout, no `${{ }}` interpolation in run bodies,
+  immutable-author gating (never `github.actor`), no persisted credentials, and no
+  ambient `contents: write` token — so a future edit cannot silently reintroduce the classic
+  `pull_request_target` injection vector. The empty `### Dependencies` heading above is now
+  part of the Unreleased template, and stale workflow comments describing
+  `PROJECT_METADATA_TOKEN` as a fine-grained PAT were corrected to match the authoritative
+  governance record (a classic PAT: `project` + `public_repo` + `read:org`). Auto-merge for
+  low-risk bumps was considered and deliberately deferred; every bot PR still requires the
+  maintainer's merge click.
 
 - Required coding agents to check the environment's approved out-of-sandbox permission path as
   the first remediation step after encountering an authorization barrier (#195), before trying

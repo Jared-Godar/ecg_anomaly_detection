@@ -146,6 +146,9 @@ result is not committed — see [release governance](governance/releases.md#arti
 executes the three curated public notebooks end to end against synthetic data — see
 [notebook validation](../notebooks/README.md#validation). Third-party Actions are pinned to
 immutable commit SHAs, and Dependabot proposes weekly updates for Actions and pre-commit hooks.
+Dependabot's pull requests satisfy the same required gates as human ones via governed automation
+(auto-generated changelog entry and board metadata) — see [bot-authored pull
+requests](governance/github-metadata-automation.md#bot-authored-dependabot-pull-requests).
 
 A separate workflow validates pull request and linked-issue planning metadata (assignee,
 milestone, labels, closing reference, and Project field completeness) on every pull request. See

@@ -1,5 +1,11 @@
 version: 2
 
+# Labels below must exist in the repo taxonomy (.github/labels.json /
+# docs/governance/label-taxonomy.md): Dependabot silently SKIPS unknown
+# labels rather than creating them, which is how PR #192 arrived label-less
+# under the legacy [dependencies, automation] pair. The metadata gate
+# requires BOTH a type:* and an area:* label on every PR, so each entry
+# carries an area label matched to what that ecosystem touches.
 updates:
   - package-ecosystem: github-actions
     directory: /
@@ -13,7 +19,8 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
-    labels: [dependencies, automation]
+    labels: ["dependency: external", "type: maintenance", "area: ci-cd"]
+    assignees: ["Jared-Godar"]
 
   - package-ecosystem: pre-commit
     directory: /
@@ -27,4 +34,5 @@ updates:
     groups:
       pre-commit-hooks:
         patterns: ["*"]
-    labels: [dependencies, automation]
+    labels: ["dependency: external", "type: maintenance", "area: quality"]
+    assignees: ["Jared-Godar"]

@@ -63,8 +63,18 @@ that touches a substantive path (`src/`, `scripts/`, `docs/`, `configs/`, or
 `.github/workflows/`) without also touching `CHANGELOG.md`. A pull request
 that genuinely needs no entry must say so explicitly and visibly with a
 `changelog: not-needed -- <reason>` line in its body; the gate records the
-exemption in its output instead of being bypassed silently (issue #184). The
-release pull request then only freezes the accumulated `Unreleased` entries
+exemption in its output instead of being bypassed silently (issue #184).
+
+Bot-authored dependency pull requests are held to the same contract by
+automation rather than exemption: the `dependabot-autofill.yml` workflow writes
+an auto-generated entry under a `### Dependencies` heading in `## Unreleased`
+onto each Dependabot pull request's own branch, so dependency currency stays
+visible in the release record without a gate bypass (issue #193; see
+[bot-authored pull requests](github-metadata-automation.md#bot-authored-dependabot-pull-requests)
+for the full policy and security model). The release freeze carries those
+entries into the release section like any other.
+
+The release pull request then only freezes the accumulated `Unreleased` entries
 under the proposed version. Tagging and publication remain separate,
 deliberate operations and must not occur as an incidental effect of merging a
 governance change.
