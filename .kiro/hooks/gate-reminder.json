@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Gate Reminder Before Commit",
+      "trigger": "PreToolUse",
+      "matcher": "mcp_gitkraken_git_add_or_commit",
+      "action": {
+        "type": "agent",
+        "prompt": "BEFORE committing, ensure all four gate checks have been run and passed in this session: (1) uv run pytest, (2) uv run pyright, (3) uvx --from pre-commit==4.6.0 pre-commit run --all-files, (4) git diff --check. If any gate has not been run yet, run them all first before proceeding with the commit."
+      }
+    }
+  ]
+}
