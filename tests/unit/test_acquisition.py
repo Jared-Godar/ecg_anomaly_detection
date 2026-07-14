@@ -5,8 +5,10 @@ from __future__ import annotations
 import errno
 import hashlib
 import os
+import urllib.error
 import urllib.request
 from datetime import UTC, datetime
+from email.message import Message
 from pathlib import Path
 from typing import Any
 
@@ -18,10 +20,13 @@ from ecg_anomaly_detection.acquisition import (
     AcquisitionRecordProgress,
     Fetcher,
     TransferResult,
+    TransientAcquisitionError,
     acquire_dataset,
     format_acquisition_record_progress,
+    format_timed_acquisition_record_progress,
 )
 from ecg_anomaly_detection.config import DatasetConfig, ExpectedSourceFile
+from ecg_anomaly_detection.progress import UnitTimingSnapshot
 
 
 @pytest.fixture
@@ -569,6 +574,331 @@ def test_install_without_overwrite_refuses_overwrite_after_cross_filesystem_fall
 
     assert destination.read_bytes() == b"already acquired"
     assert set(tmp_path.iterdir()) == {source, destination}
+
+
+def test_transient_failure_retries_with_backoff_then_succeeds(
+    repository: Path, dataset_config: DatasetConfig
+) -> None:
+    """Two transient blips on one file are absorbed by bounded backoff retries (#201).
+
+    Protects three retry-layer contracts at once: the exponential backoff schedule
+    (2s then 4s), the staging cleanup between attempts (the failing attempts leave
+    partial bytes behind, and the succeeding attempt must find a clean staged path,
+    matching the real transport's exclusive-create contract), and the unchanged
+    integrity outcome — the final result is byte-identical to an untroubled run.
+    """
+
+    payloads = _payloads(dataset_config)
+    calls: list[str] = []
+    successful_fetch = _fetcher(payloads, calls)
+    transient_failures_remaining = [2]
+    waits: list[float] = []
+
+    def flaky_fetch(url: str, output: Path, timeout: float, maximum: int) -> TransferResult:
+        """Raise a transient failure twice, leaving staged debris, then serve normally.
+
+        Args:
+            url: The requested download URL.
+            output: The staged path; must be clean on every attempt.
+            timeout: Per-request timeout forwarded to the successful fake fetch.
+            maximum: Size cap forwarded to the successful fake fetch.
+
+        Returns:
+            The successful fake transfer's digest, once failures are exhausted.
+        """
+
+        # The retry wrapper must have removed the previous attempt's partial file:
+        # the real HTTPS transport opens the staged path with exclusive create and
+        # would otherwise fail on the leftover.
+        assert not output.exists()
+        # Simulate a connection dropping mid-stream: partial bytes hit the staged
+        # path before the transient error surfaces.
+        if transient_failures_remaining[0]:
+            transient_failures_remaining[0] -= 1
+            output.write_bytes(b"partial")
+            raise TransientAcquisitionError(f"could not retrieve {url}: timed out")
+        return successful_fetch(url, output, timeout, maximum)
+
+    result = acquire_dataset(
+        dataset_config,
+        repository,
+        Path("data/raw/synthetic/1.0.0"),
+        Path("artifacts/acquisition.json"),
+        fetcher=flaky_fetch,
+        clock=lambda: datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        sleep=waits.append,
+    )
+
+    assert result.downloaded_file_count == 3
+    assert result.reused_file_count == 0
+    # Exactly the documented exponential schedule, and only for the flaky file.
+    assert waits == [2.0, 4.0]
+    # Every configured file was ultimately served by the successful transport.
+    assert len(calls) == 3
+
+
+def test_transient_retries_exhaust_gracefully_and_preserve_atomicity(
+    repository: Path, dataset_config: DatasetConfig
+) -> None:
+    """Exhausted retries fail with a graceful connectivity message and persist nothing.
+
+    Protects the defensive-external-calls exit contract: the final error names the
+    URL and attempt count, states plainly that the cause is external connectivity
+    rather than a repository or setup defect, and gives re-run remediation — and the
+    atomic commit-on-full-success behavior means no files, staging debris, or
+    manifest survive the aborted acquisition.
+    """
+
+    attempts: list[str] = []
+    waits: list[float] = []
+
+    def always_transient(url: str, output: Path, timeout: float, maximum: int) -> TransferResult:
+        """Record the attempt and raise a transient connectivity failure every time.
+
+        Args:
+            url: The requested download URL, recorded for attempt counting.
+            output: Unused staged path (no bytes are ever written).
+            timeout: Unused; present to satisfy the Fetcher signature.
+            maximum: Unused; present to satisfy the Fetcher signature.
+
+        Returns:
+            Never returns; always raises TransientAcquisitionError.
+        """
+
+        del output, timeout, maximum
+        attempts.append(url)
+        raise TransientAcquisitionError(f"could not retrieve {url}: connection reset")
+
+    # Every attempt fails, so the bounded retry loop must exhaust and surface the
+    # graceful external-connectivity message asserted below.
+    with pytest.raises(AcquisitionError) as raised:
+        acquire_dataset(
+            dataset_config,
+            repository,
+            Path("data/raw/synthetic/1.0.0"),
+            Path("artifacts/acquisition.json"),
+            fetcher=always_transient,
+            clock=lambda: datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+            sleep=waits.append,
+        )
+
+    message = str(raised.value)
+    # The graceful exit names what failed and how often, classifies it as an
+    # external condition rather than a defect, and gives concrete remediation.
+    assert "after 3 attempts" in message
+    assert "external connectivity or service condition" in message
+    assert "not a defect in this repository or your setup" in message
+    assert "re-run" in message
+    # Only the first file was ever attempted, exactly the bounded attempt count,
+    # with the full backoff schedule between attempts.
+    assert attempts == [dataset_config.download_url + "100.atr"] * 3
+    assert waits == [2.0, 4.0]
+    # Atomicity preserved: nothing partial persists and no manifest was written,
+    # so a re-run restarts cleanly from scratch.
+    assert list((repository / "data" / "raw" / "synthetic" / "1.0.0").iterdir()) == []
+    assert not (repository / "artifacts" / "acquisition.json").exists()
+
+
+def test_permanent_failure_is_not_retried(repository: Path, dataset_config: DatasetConfig) -> None:
+    """A permanent retrieval failure (e.g. HTTP 404) fails fast on the first attempt.
+
+    Retrying a definitive failure could not change the outcome; the retry layer
+    must pass plain AcquisitionError through untouched, with no backoff waits.
+    """
+
+    attempts: list[str] = []
+    waits: list[float] = []
+
+    def permanent_failure(url: str, output: Path, timeout: float, maximum: int) -> TransferResult:
+        """Record the attempt and raise a permanent (non-transient) retrieval error.
+
+        Args:
+            url: The requested download URL, recorded for attempt counting.
+            output: Unused staged path (no bytes are ever written).
+            timeout: Unused; present to satisfy the Fetcher signature.
+            maximum: Unused; present to satisfy the Fetcher signature.
+
+        Returns:
+            Never returns; always raises AcquisitionError.
+        """
+
+        del output, timeout, maximum
+        attempts.append(url)
+        raise AcquisitionError(f"could not retrieve {url}: HTTP Error 404: Not Found")
+
+    # The plain (non-transient) AcquisitionError must pass straight through the
+    # retry layer on the first attempt.
+    with pytest.raises(AcquisitionError, match="404"):
+        acquire_dataset(
+            dataset_config,
+            repository,
+            Path("data/raw/synthetic/1.0.0"),
+            Path("artifacts/acquisition.json"),
+            fetcher=permanent_failure,
+            clock=lambda: datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+            sleep=waits.append,
+        )
+
+    assert len(attempts) == 1
+    assert waits == []
+
+
+def test_integrity_mismatch_after_successful_transfer_is_not_retried(
+    repository: Path, dataset_config: DatasetConfig
+) -> None:
+    """A digest/size expectation failure after a completed transfer never triggers a retry.
+
+    The retry layer wraps only the transport; the committed size/SHA-256 checks run
+    afterward and stay fail-fast, so retries cannot mask upstream content tampering
+    or corruption as a connectivity blip.
+    """
+
+    # Serve wrong bytes for every URL so the transfer itself "succeeds" but the
+    # committed expected-size check immediately rejects the content.
+    tampered_payloads = {url: b"tampered" for url in _payloads(dataset_config)}
+    calls: list[str] = []
+    waits: list[float] = []
+
+    # The transfer completes, so the failure below comes from the post-transfer
+    # expected-size check — the permanent, never-retried integrity path.
+    with pytest.raises(AcquisitionError, match="size mismatch"):
+        acquire_dataset(
+            dataset_config,
+            repository,
+            Path("data/raw/synthetic/1.0.0"),
+            Path("artifacts/acquisition.json"),
+            fetcher=_fetcher(tampered_payloads, calls),
+            clock=lambda: datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+            sleep=waits.append,
+        )
+
+    # One transport call, zero backoff waits: the integrity failure is permanent.
+    assert len(calls) == 1
+    assert waits == []
+
+
+def test_resume_redownload_retries_transient_failures(
+    repository: Path, dataset_config: DatasetConfig
+) -> None:
+    """Restoring a missing file during resume gets the same bounded transient retries.
+
+    The resume path re-downloads through its own staging directory; a single
+    transient blip there must also be absorbed, while the restored file is still
+    bound to the acquisition manifest's recorded digest.
+    """
+
+    payloads = _payloads(dataset_config)
+    calls: list[str] = []
+    successful_fetch = _fetcher(payloads, calls)
+
+    acquire_dataset(
+        dataset_config,
+        repository,
+        Path("data/raw/synthetic/1.0.0"),
+        Path("artifacts/acquisition.json"),
+        fetcher=successful_fetch,
+        clock=lambda: datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+    )
+    # Remove one committed file so the resume path must re-download exactly it.
+    (repository / "data" / "raw" / "synthetic" / "1.0.0" / "100.dat").unlink()
+
+    transient_failures_remaining = [1]
+    waits: list[float] = []
+
+    def flaky_fetch(url: str, output: Path, timeout: float, maximum: int) -> TransferResult:
+        """Raise one transient failure, then serve the recorded payload normally.
+
+        Args:
+            url: The requested download URL.
+            output: The staged path inside the resume path's staging directory.
+            timeout: Per-request timeout forwarded to the successful fake fetch.
+            maximum: Size cap forwarded to the successful fake fetch.
+
+        Returns:
+            The successful fake transfer's digest, once the failure is exhausted.
+        """
+
+        # Same one-blip-then-success shape as the fresh-acquisition retry test.
+        if transient_failures_remaining[0]:
+            transient_failures_remaining[0] -= 1
+            raise TransientAcquisitionError(f"could not retrieve {url}: timed out")
+        return successful_fetch(url, output, timeout, maximum)
+
+    resumed = acquire_dataset(
+        dataset_config,
+        repository,
+        Path("data/raw/synthetic/1.0.0"),
+        Path("artifacts/acquisition.json"),
+        fetcher=flaky_fetch,
+        sleep=waits.append,
+    )
+
+    assert resumed.downloaded_file_count == 1
+    assert resumed.reused_file_count == 2
+    # Exactly one backoff wait for the single absorbed blip.
+    assert waits == [2.0]
+
+
+def test_transient_classification_separates_connectivity_from_permanent_failures() -> None:
+    """Connectivity-shaped errors classify as transient; definitive failures do not.
+
+    Protects the boundary the retry layer depends on: timeouts, connection drops,
+    non-HTTP URL errors (DNS and socket failures), and the documented transient
+    HTTP statuses are retryable, while definitive HTTP client errors and local
+    OS errors (such as a full disk while staging) fail fast.
+    """
+
+    transient_errors: tuple[BaseException, ...] = (
+        TimeoutError("timed out"),
+        ConnectionResetError("connection reset by peer"),
+        urllib.error.URLError(TimeoutError("_ssl.c:989: The handshake operation timed out")),
+        urllib.error.URLError(OSError(61, "Connection refused")),
+        urllib.error.HTTPError(
+            "https://example.test/100.dat", 503, "Service Unavailable", Message(), None
+        ),
+    )
+    permanent_errors: tuple[BaseException, ...] = (
+        urllib.error.HTTPError("https://example.test/100.dat", 404, "Not Found", Message(), None),
+        urllib.error.HTTPError("https://example.test/100.dat", 403, "Forbidden", Message(), None),
+        OSError(errno.ENOSPC, "No space left on device"),
+    )
+
+    # Each direction is asserted per-error so a misclassification names itself.
+    for error in transient_errors:
+        assert acquisition._is_transient_retrieval_failure(error), error
+    # The permanent direction is checked the same way: any True here would let the
+    # retry layer waste attempts on a failure a wait cannot fix.
+    for error in permanent_errors:
+        assert not acquisition._is_transient_retrieval_failure(error), error
+
+
+def test_timed_record_progress_line_appends_qualified_suffix() -> None:
+    """The timed record line matches #199's shape: measured durations plus a qualified estimate.
+
+    Fixed snapshot values keep the assertion deterministic and demonstrate the exact
+    one-line format users see: existing record wording, per-record duration, phase
+    elapsed time, and the approx.-qualified remaining projection.
+    """
+
+    progress = AcquisitionRecordProgress(
+        record_index=5,
+        record_total=48,
+        record_id="104",
+        downloaded_file_count=3,
+        reused_file_count=0,
+    )
+    timing = UnitTimingSnapshot(
+        unit_index=5,
+        total_units=48,
+        unit_seconds=14.0,
+        phase_elapsed_seconds=69.0,
+        approx_remaining_seconds=594.0,
+    )
+
+    assert format_timed_acquisition_record_progress(progress, timing) == (
+        "record 5/48 (104): downloaded and verified 3 files"
+        " | record 00:14 | elapsed 01:09 | approx. remaining 09:54"
+    )
 
 
 def _payloads(config: DatasetConfig) -> dict[str, bytes]:

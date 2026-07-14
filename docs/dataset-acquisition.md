@@ -32,7 +32,18 @@ extra website content, historical alternates, or documentation files.
 [the orchestrated `run-pipeline` command's progress output](pipeline-orchestration.md#progress-output).
 Between those banners it prints one completed line per configured record—not one line per file—so
 a first 48-record download stays visibly active. Each line says whether that record's companion
-files were downloaded and verified, verified from existing local files, or partially restored.
+files were downloaded and verified, verified from existing local files, or partially restored,
+followed by a qualified timing suffix: the record's own measured duration, the acquisition phase's
+measured elapsed time, and an `approx. remaining` projection. The projection multiplies the mean
+completed-record duration observed in the current run by the records still outstanding; until three
+records have completed it reports an explicit `estimating...` warm-up state instead of an unstable
+number, and the final record reports `00:00`. Measured durations are observations; the remaining
+value is always labeled `approx.` and is never a deadline or guarantee:
+
+```text
+    record 5/48 (104): downloaded and verified 3 files | record 00:14 | elapsed 01:09 | approx. remaining 09:54
+```
+
 This is purely observational and never changes the command's exit code or the acquired files.
 
 ## Safety and recovery behavior
@@ -42,6 +53,14 @@ Acquisition applies the following controls:
 - HTTPS is required and credentials, query strings, and all redirects are rejected;
 - each response must return HTTP 200 and respect a bounded per-file size;
 - downloads are streamed into a temporary staging directory rather than partial destination files;
+- transient connectivity failures (timeouts, dropped/reset connections, name-resolution failures,
+  and HTTP 429/500/502/503/504) are retried per file up to three total attempts with exponential
+  backoff (2s, then 4s), with the partially staged file removed between attempts; permanent
+  failures (HTTP 404/403, size-cap violations, digest or size mismatches, rejected redirects) fail
+  fast on the first attempt, and every retry outcome still passes the same staged integrity checks;
+- when retries are exhausted, the failure message names the affected URL and attempt count, states
+  that the cause is an external connectivity or service condition rather than a repository or setup
+  defect, and gives re-run remediation — atomicity means a re-run restarts cleanly;
 - missing expected metadata, unexpected directory entries, size mismatches, and SHA-256 mismatches
   fail with the affected path and expected/observed evidence;
 - the baseline manifest is written atomically before staged files are committed to the raw zone;
