@@ -36,9 +36,11 @@
     {"name": "modernization: testability", "color": "c2e0c6", "description": "Adds deterministic seams or regression coverage"},
     {"name": "modernization: ux", "color": "e99695", "description": "Improves developer-facing workflow ergonomics or usability"},
 
+    {"name": "portfolio: agentic-engineering", "color": "b388ff", "description": "Demonstrates governed AI-agent engineering workflow for the case-study audience"},
     {"name": "portfolio: case-study", "color": "d4c5f9", "description": "Improves the responsible modernization narrative"},
     {"name": "portfolio: operational-maturity", "color": "5319e7", "description": "Demonstrates repository operational rigor for the case-study audience"},
     {"name": "portfolio: release", "color": "7057ff", "description": "Required for a portfolio release milestone"},
+    {"name": "portfolio: testing-rigor", "color": "8250df", "description": "Demonstrates layered test design and coverage discipline for the case-study audience"},
 
     {"name": "risk: data-integrity", "color": "b60205", "description": "Could affect provenance, transformations, or artifact integrity"},
     {"name": "risk: evaluation", "color": "d93f0b", "description": "Could affect leakage controls, metrics, or result interpretation"},

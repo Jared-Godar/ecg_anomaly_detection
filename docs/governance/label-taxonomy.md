@@ -33,7 +33,9 @@ Add these only when they communicate useful routing or review context:
 
 - `modernization:*` identifies historical preservation, reproducibility, split integrity, testability, or UX
   (developer-facing workflow ergonomics).
-- `portfolio:*` identifies case-study presentation, portfolio-release, or operational-maturity work.
+- `portfolio:*` identifies case-study presentation, portfolio-release, operational-maturity,
+  testing-rigor, or agentic-engineering work (see the
+  [portfolio-signal extension](#portfolio-signal-extension-210) for the 2026 additions).
 - `risk:*` flags data-integrity, evaluation, security review, or explicitly low-risk concerns.
 - `size:*` estimates review surface from `xs` through `l`; it does not encode priority.
 - `dependency:*` records an external, repository-setting, or maintainer-decision dependency.
@@ -41,6 +43,27 @@ Add these only when they communicate useful routing or review context:
 GitHub automation labels `bug` and `question` may remain when useful; they supplement this taxonomy and are
 not declared by the manifest. `duplicate`, `good first issue`, `help wanted`, `invalid`, and `wontfix` were
 retired in the #105/#113 migration pass (zero usage, not applicable to a single-maintainer repository).
+
+## Portfolio-signal extension (#210)
+
+The 2026-07-14 portfolio-signal audit minted two additional contextual `portfolio:*` labels,
+each paired with a matching Portfolio Signal board option (see the
+[Portfolio Signal boundaries](github-project.md#portfolio-signal-boundaries-210) for the
+board-side option IDs and the full boundary definitions):
+
+| Label | Applies when |
+|---|---|
+| `portfolio: testing-rigor` | The test suite, coverage, or verification design is the item's subject; CI pipeline plumbing stays `portfolio: operational-maturity` |
+| `portfolio: agentic-engineering` | Agent contracts, instruction files, or agent-workflow enforcement are the subject; agent-*authored* work on other subjects does not qualify |
+
+Both remain contextual per this section's rule — never required, never auto-assigned.
+
+A third audit candidate, CI supply-chain hardening / meta-CI (SHA-pinned action refs, zizmor,
+tested workflow-safety scripts), was deliberately **not** minted: the existing near-orphan
+options (Systems Thinking, Ownership) showed that a signal with too few carrying items dilutes
+the taxonomy rather than sharpening it. That work stays mapped to
+`portfolio: operational-maturity`. Revisit trigger: reconsider a dedicated signal once a
+hardening workstream accumulates roughly eight or more items whose primary subject it is.
 
 ## Notebook-surface label mapping (#207)
 
