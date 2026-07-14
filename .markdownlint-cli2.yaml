@@ -13,6 +13,9 @@ globs:
   - "**/*.md"
   - "!archive/original_2022/**"
   - "!.venv/**"
+  # Gitignored artifacts directory contains session handoffs and generated
+  # reports that are not tracked content; exclude from lint.
+  - "!artifacts/**"
   # Tool-local AI assistant / coding-agent files are gitignored (see
   # .gitignore's matching configuration section), but markdownlint-cli2 scans
   # the filesystem without consulting Git. Exclude local files here while

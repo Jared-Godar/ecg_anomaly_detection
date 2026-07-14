@@ -1257,3 +1257,332 @@ def test_main_bot_pr_warns_and_skips_project_checks_when_not_strict(
         exit_code = vpm.main(["--pr-number", "210", "--repo", "Jared-Godar/ecg_anomaly_detection"])
     assert exit_code == 0
     assert "skipping Project field checks" in capsys.readouterr().err
+
+
+# --- extract_non_closing_issue_numbers (issue #216) -----------------------------------
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ("Non-closing ref: #216 — receipts land post-merge", (216,)),
+        ("Non-closing ref: #42 - simple hyphen separator", (42,)),
+        ("NON-CLOSING REF: #99 — case insensitive match", (99,)),
+        ("non-closing ref: #5 — lower case", (5,)),
+        # Multiple markers in one body.
+        (
+            "Non-closing ref: #10 — first reason\nNon-closing ref: #20 — second reason",
+            (10, 20),
+        ),
+        # No reason after separator: deliberately does NOT match (audit trail is mandatory).
+        ("Non-closing ref: #7 —", ()),
+        ("Non-closing ref: #7 -", ()),
+        # No separator at all: does NOT match.
+        ("Non-closing ref: #7", ()),
+        # Empty body.
+        ("", ()),
+        # A bare "#216" without the marker label.
+        ("See #216 for context.", ()),
+        # A closing keyword is not a non-closing marker.
+        ("Closes #216", ()),
+    ],
+)
+def test_extract_non_closing_issue_numbers(body: str, expected: tuple[int, ...]) -> None:
+    """The non-closing marker's vocabulary and formatting rules are matched correctly.
+
+    Args:
+        body: A PR body text to scan.
+        expected: The issue numbers extract_non_closing_issue_numbers must return.
+    """
+
+    assert vpm.extract_non_closing_issue_numbers(body) == expected
+
+
+def test_extract_non_closing_issue_numbers_deduplicates_preserving_order() -> None:
+    """The same issue number marked twice in one body appears only once, at its first position."""
+
+    body = "Non-closing ref: #5 — reason A\nNon-closing ref: #5 — reason B\nNon-closing ref: #3 — reason C"
+    assert vpm.extract_non_closing_issue_numbers(body) == (5, 3)
+
+
+def test_extract_non_closing_issue_numbers_ignores_inline_code() -> None:
+    """A marker quoted as inline-code prose is not treated as a real directive.
+
+    Mirrors the closing-reference code-span inertness test: prose quoting the
+    marker pattern must not trip the parser.
+    """
+
+    body = "This body shows `Non-closing ref: #42 — reason` as an example."
+    assert vpm.extract_non_closing_issue_numbers(body) == ()
+
+
+def test_extract_non_closing_issue_numbers_ignores_fenced_code_block() -> None:
+    """A marker inside a fenced Markdown code block is not treated as a real directive."""
+
+    body = "Real text.\n```text\nNon-closing ref: #42 — reason\n```\nMore real text."
+    assert vpm.extract_non_closing_issue_numbers(body) == ()
+
+
+def test_extract_non_closing_issue_numbers_reason_must_be_nonempty() -> None:
+    """A marker whose reason is only whitespace after the separator does not match.
+
+    The reason is the audit trail justifying why the issue stays open past merge;
+    an empty one defeats the purpose and is deliberately rejected.
+    """
+
+    # Whitespace-only after the separator.
+    assert vpm.extract_non_closing_issue_numbers("Non-closing ref: #7 —   ") == ()
+    assert vpm.extract_non_closing_issue_numbers("Non-closing ref: #7 -   ") == ()
+
+
+# --- validate_pull_request: non-closing marker path (issue #216) ----------------------
+
+
+def test_non_closing_ref_alone_satisfies_closing_reference_requirement() -> None:
+    """A PR with only a non-closing marker (no closing keyword) passes the reference check.
+
+    This is the primary use case for receipts-gated PRs: they bind to an issue
+    that must NOT be auto-closed on merge.
+    """
+
+    pr = vpm.PullRequestMetadata(
+        number=217,
+        assignees=("Jared-Godar",),
+        milestone="v1.1.0",
+        labels=("type: governance", "area: ci-cd"),
+        body="Non-closing ref: #216 — receipts land post-merge",
+        state="OPEN",
+    )
+    violations = vpm.validate_pull_request(pr)
+    assert not any("closing issue reference" in v for v in violations)
+    assert not any("non-closing marker" in v for v in violations)
+    assert violations == ()
+
+
+def test_ambiguity_same_issue_closing_and_non_closing_is_a_violation() -> None:
+    """Naming the same issue via both a closing keyword and a non-closing marker fails.
+
+    Auto-closing an issue and deliberately keeping it open are contradictory
+    requests; the validator must surface the ambiguity explicitly.
+    """
+
+    pr = vpm.PullRequestMetadata(
+        number=217,
+        assignees=("Jared-Godar",),
+        milestone="v1.1.0",
+        labels=("type: governance", "area: ci-cd"),
+        body="Closes #216\nNon-closing ref: #216 — contradicts the close above",
+        state="OPEN",
+    )
+    violations = vpm.validate_pull_request(pr)
+    assert any("contradictory" in v for v in violations)
+    assert any("#216" in v for v in violations)
+
+
+def test_different_issues_via_closing_and_non_closing_is_fine() -> None:
+    """A PR can close one issue and non-closing-ref a different issue without ambiguity.
+
+    A receipts-gated PR may close its own implementation issue while non-closing-
+    referencing a broader tracking issue that stays open for later legs.
+    """
+
+    pr = vpm.PullRequestMetadata(
+        number=217,
+        assignees=("Jared-Godar",),
+        milestone="v1.1.0",
+        labels=("type: governance", "area: ci-cd"),
+        body="Closes #100\nNon-closing ref: #216 — tracking issue stays open for next leg",
+        state="OPEN",
+    )
+    violations = vpm.validate_pull_request(pr)
+    assert violations == ()
+
+
+def test_neither_closing_nor_non_closing_ref_reports_both_options() -> None:
+    """A PR with no closing keyword AND no non-closing marker reports both as options.
+
+    The violation message must mention both mechanisms so a contributor knows
+    about the non-closing alternative.
+    """
+
+    pr = vpm.PullRequestMetadata(
+        number=217,
+        assignees=("Jared-Godar",),
+        milestone="v1.1.0",
+        labels=("type: governance", "area: ci-cd"),
+        body="No reference at all.",
+        state="OPEN",
+    )
+    violations = vpm.validate_pull_request(pr)
+    assert any("non-closing marker" in v for v in violations)
+
+
+# --- main: non-closing ref integration path (issue #216) ------------------------------
+
+
+def _pr_payload_non_closing(
+    body: str = "Non-closing ref: #216 — receipts land post-merge",
+    state: str = "open",
+) -> dict[str, object]:
+    """Build a REST pull-request payload using a non-closing marker instead of a closing keyword.
+
+    Args:
+        body: The PR body text (default carries a non-closing marker for #216).
+        state: REST's lowercase state value ("open"/"closed").
+
+    Returns:
+        A dict shaped like `gh api repos/.../pulls/N` output.
+    """
+
+    return {
+        "number": 217,
+        "assignees": [{"login": "Jared-Godar"}],
+        "milestone": {"title": "v1.1.0"},
+        "labels": [{"name": "type: governance"}, {"name": "area: ci-cd"}],
+        "body": body,
+        "state": state,
+        "user": {"login": "Jared-Godar", "type": "User"},
+    }
+
+
+def test_main_non_closing_ref_passes_with_complete_project_item(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A PR with only a non-closing marker passes when the referenced issue is board-complete.
+
+    The non-closing path must run the same Project-membership and field-
+    completeness checks as the closing path — the marker never weakens the
+    tracking chain (issue #216).
+    """
+
+    # Sequence: PR read, issue overview read (#216), quota preflight, Project
+    # snapshot (containing #216's complete item), quota report.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_pr_payload_non_closing()),
+            _completed(_issue_payload()),
+            _quota(4988),
+            _completed({"items": [_complete_item(216)]}),
+            _quota(4985),
+        ],
+    ):
+        exit_code = vpm.main(["--pr-number", "217", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "passed" in captured.out
+
+
+def test_main_non_closing_ref_fails_when_issue_not_on_board(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A PR with a non-closing marker fails when the referenced issue is not a Project member.
+
+    The same enforcement as the closing path: Project membership is mandatory
+    regardless of whether the reference is closing or non-closing.
+    """
+
+    # The snapshot is empty — #216 is not a board member.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_pr_payload_non_closing()),
+            _completed(_issue_payload()),
+            _quota(4988),
+            _completed({"items": []}),
+            _quota(4985),
+        ],
+    ):
+        exit_code = vpm.main(["--pr-number", "217", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 1
+    assert "issue #216 is not a member of the tracked Project" in capsys.readouterr().err
+
+
+def test_main_non_closing_ref_does_not_trigger_premature_closure_check(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A non-closing ref for a closed issue does NOT trigger the premature-closure warning.
+
+    Non-closing refs exist precisely for issues that may be closed and reopened
+    across multiple legs; the premature-closure check only applies to closing
+    issues whose auto-close relationship is at risk.
+    """
+
+    # The issue is closed, but since it's non-closing-ref'd, no timeline read
+    # should happen and no "non-merge event" warning should appear.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_pr_payload_non_closing()),
+            _completed(_issue_payload(state="closed")),
+            _quota(4988),
+            _completed({"items": [_complete_item(216)]}),
+            _quota(4985),
+        ],
+    ) as mock_run:
+        exit_code = vpm.main(["--pr-number", "217", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 0
+    # No timeline endpoint should have been called.
+    for call in mock_run.call_args_list:
+        assert not any("timeline" in arg for arg in call.args[0])
+    assert "non-merge event" not in capsys.readouterr().err
+
+
+def test_main_ambiguity_same_issue_fails_with_exit_one(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A PR naming the same issue via both mechanisms fails with exit 1 and a clear message.
+
+    The ambiguity violation is a PR-level metadata failure, not a Project or
+    quota failure, so exit code 1 is correct.
+    """
+
+    body = "Closes #216\nNon-closing ref: #216 — contradicts the close"
+    # Mock the full validation sequence: PR fetch, issue overview, quota, and
+    # project snapshot — the ambiguity violation fires at the PR-level check stage.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_pr_payload_non_closing(body=body)),
+            _completed(_issue_payload()),
+            _quota(4988),
+            _completed({"items": [_complete_item(216)]}),
+            _quota(4985),
+        ],
+    ):
+        exit_code = vpm.main(["--pr-number", "217", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 1
+    assert "contradictory" in capsys.readouterr().err
+
+
+def test_main_mixed_closing_and_non_closing_different_issues_passes(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A PR closing one issue and non-closing-ref'ing another passes when both are board-complete.
+
+    Both issues must be validated against the Project snapshot; the closing one
+    also gets the premature-closure check while the non-closing one does not.
+    """
+
+    body = "Closes #100\nNon-closing ref: #216 — tracking issue stays open"
+    # Sequence: PR, issue #100 overview, issue #216 overview, quota preflight,
+    # snapshot containing both, quota report.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_pr_payload_non_closing(body=body)),
+            _completed(_issue_payload()),  # #100
+            _completed(_issue_payload()),  # #216
+            _quota(4988),
+            _completed({"items": [_complete_item(100), _complete_item(216)]}),
+            _quota(4985),
+        ],
+    ):
+        exit_code = vpm.main(["--pr-number", "217", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 0
+    assert "passed" in capsys.readouterr().out

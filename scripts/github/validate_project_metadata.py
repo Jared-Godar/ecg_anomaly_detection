@@ -7,6 +7,19 @@ a pull request must have an assignee, a type:* label, an area:* label, and a
 closing reference to an issue; that issue must be a member of the tracked
 GitHub Project and have every required Project field populated.
 
+A receipts-gated pull request may instead bind itself to its tracking issue with
+an explicit non-closing marker of the form "Non-closing ref: #N — <reason>"
+(issue #216), which satisfies the closing-reference requirement without asking
+GitHub to auto-close the issue on merge. This exists for multi-leg governance
+work whose tracking issue must stay open past the merge -- until its post-merge
+receipts land -- instead of the noisy close-then-reopen cycle the closing keyword
+would otherwise force. The marker never weakens the tracking chain: the issue it
+names runs the same Project-membership, field-completeness, and milestone-
+inheritance checks a closing reference triggers, and only GitHub's auto-close is
+skipped. Naming one issue with both a closing keyword and the marker is a hard
+violation, since auto-closing it and deliberately keeping it open are
+contradictory requests.
+
 A pull request must also have a milestone -- unless every issue it closes is
 itself deliberately unmilestoned, per docs/governance/issue-workflow.md's rule
 that a milestone is a delivery commitment assigned only when work requires
@@ -150,6 +163,21 @@ _FENCED_CODE_BLOCK_PATTERN = re.compile(r"```.*?```", re.DOTALL)
 # newline either.
 _INLINE_CODE_SPAN_PATTERN = re.compile(r"`[^`\n]*`")
 
+# Matches the sanctioned non-closing marker (issue #216): the literal label
+# "Non-closing ref:" (case-insensitive), an issue reference, a separator, and a
+# required non-empty reason. The separator accepts either an em-dash (—, the
+# canonical documented form) or a plain ASCII hyphen, so the marker is easy to
+# type. The reason is mandatory -- it is the audit trail justifying an issue kept
+# open past merge, so a reasonless marker deliberately does not match. The issue
+# number is capture group 1; the reason is captured (group 2) only to enforce its
+# presence, never returned. A leading \b stops the label from matching inside a
+# larger word, and like the closing pattern this is applied only after
+# _strip_markdown_code so a marker quoted in code stays inert.
+_NON_CLOSING_REF_PATTERN = re.compile(
+    r"\bNon-closing\s+ref:\s*#(\d+)\s*(?:—|-)\s*(\S.*)",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class PullRequestMetadata:
@@ -234,6 +262,26 @@ def extract_closing_issue_numbers(body: str) -> tuple[int, ...]:
     return tuple(seen)
 
 
+def extract_non_closing_issue_numbers(body: str) -> tuple[int, ...]:
+    """Return issue numbers bound by a sanctioned non-closing marker, in order, deduplicated.
+
+    Recognizes the ``Non-closing ref: #N — <reason>`` marker (issue #216), which lets a
+    receipts-gated pull request reference its tracking issue without a closing keyword so
+    GitHub does not auto-close the issue on merge. Fenced code blocks and inline code spans
+    are stripped before matching -- exactly like extract_closing_issue_numbers -- so a marker
+    quoted as prose or example text isn't mistaken for a real directive in this PR's own body.
+    A marker with no reason after the separator is deliberately not matched: the reason is the
+    audit trail justifying an open receipts-gated issue, and an empty one defeats the purpose.
+    """
+    seen: dict[int, None] = {}
+    # Mirror extract_closing_issue_numbers' order-preserving dedup: dict.setdefault
+    # inserts each issue number on first occurrence only, so a body carrying two
+    # markers for the same issue still yields that issue number exactly once.
+    for match in _NON_CLOSING_REF_PATTERN.finditer(_strip_markdown_code(body or "")):
+        seen.setdefault(int(match.group(1)), None)
+    return tuple(seen)
+
+
 def _has_label_with_prefix(labels: Sequence[str], prefix: str) -> bool:
     """Return whether any label starts with a given prefix, ignoring spaces and case.
 
@@ -281,6 +329,13 @@ def validate_pull_request(
     keeps the original behavior unless it explicitly opts out for the governed
     bot-author class (see is_governed_bot_pull_request), whose dependency PRs
     deliberately have no tracking issue to reference.
+
+    The closing-reference requirement is satisfied by either a GitHub closing
+    keyword (extract_closing_issue_numbers) or a sanctioned non-closing marker
+    (extract_non_closing_issue_numbers, issue #216); the marker binds a
+    receipts-gated PR to an issue it must not auto-close on merge. Naming the same
+    issue both ways is reported as an ambiguity violation, since auto-closing it
+    and deliberately keeping it open are contradictory requests.
     """
     violations: list[str] = []
     # An unassigned PR has no clear owner accountable for addressing review feedback.
@@ -297,12 +352,28 @@ def validate_pull_request(
     # Same reasoning as the type:* check above, for area:*.
     if not _has_label_with_prefix(pr.labels, "area:"):
         violations.append("pull request is missing an area:* label")
-    # No recognized closing keyword means this PR won't auto-close any issue on
-    # merge, breaking the issue-tracking chain this governance model depends on.
-    # Waived only for governed bot PRs (see this function's own docstring), whose
-    # compensating check happens in _run_validation instead.
-    if require_closing_reference and not extract_closing_issue_numbers(pr.body):
-        violations.append("pull request body has no closing issue reference (e.g. 'Closes #123')")
+    # The closing-reference requirement is satisfied by either a GitHub closing
+    # keyword OR a sanctioned non-closing marker (issue #216). Both paths bind the
+    # PR to a tracking issue; the marker simply skips GitHub's auto-close.
+    if require_closing_reference:
+        closing = extract_closing_issue_numbers(pr.body)
+        non_closing = extract_non_closing_issue_numbers(pr.body)
+        # Neither mechanism is present: the PR has no issue-tracking chain at all.
+        if not closing and not non_closing:
+            violations.append(
+                "pull request body has no closing issue reference (e.g. 'Closes #123') "
+                "and no non-closing marker (e.g. 'Non-closing ref: #123 — reason')"
+            )
+        # Naming the same issue both ways is a hard violation: auto-closing it and
+        # deliberately keeping it open are contradictory requests.
+        ambiguous = set(closing) & set(non_closing)
+        # Any overlap means the PR's intent for those issues is ambiguous.
+        if ambiguous:
+            nums = ", ".join(f"#{n}" for n in sorted(ambiguous))
+            violations.append(
+                f"issue(s) {nums} named by both a closing keyword and a non-closing "
+                "marker — these are contradictory (auto-close vs. keep open)"
+            )
     return tuple(violations)
 
 
@@ -647,20 +718,26 @@ def _run_validation(args: argparse.Namespace, monitor: github_api.QuotaMonitor) 
         )
 
     closing_issues = extract_closing_issue_numbers(pr.body)
+    non_closing_issues = extract_non_closing_issue_numbers(pr.body)
 
-    # Each closing issue's native metadata is fetched exactly once and reused
+    # The union of closing and non-closing issue numbers: every referenced issue
+    # must pass the same Project-membership and field-completeness checks, and
+    # any issue's milestone may trigger milestone inheritance on the PR.
+    all_linked_issues = tuple(dict.fromkeys(closing_issues + non_closing_issues))
+
+    # Each linked issue's native metadata is fetched exactly once and reused
     # by both the milestone-inheritance and premature-closure stages below --
     # the request-deduplication rule from issue #173.
     overviews: dict[int, IssueOverview] = {}
     require_milestone = True
-    # Only fetch closing issues' native metadata (and only then reconsider the
-    # PR milestone requirement) when there are closing issues to check in the
+    # Only fetch linked issues' native metadata (and only then reconsider the
+    # PR milestone requirement) when there are linked issues to check in the
     # first place; with none, require_milestone keeps its conservative True default.
-    if closing_issues:
+    if all_linked_issues:
         # Same "can't fetch, can't validate" reasoning as the PR fetch above.
         try:
             overviews = {
-                number: fetch_issue_overview(number, args.repo) for number in closing_issues
+                number: fetch_issue_overview(number, args.repo) for number in all_linked_issues
             }
         except _QUOTA_ERRORS:
             raise
@@ -677,12 +754,13 @@ def _run_validation(args: argparse.Namespace, monitor: github_api.QuotaMonitor) 
         require_milestone = False
 
     warnings: list[str] = []
-    # The premature-closure check (issue #158) only makes sense while this PR is
-    # still open: once merged, GitHub's own automation is expected to have
-    # closed the issue anyway, and once the PR itself is closed/abandoned there
-    # is no longer an open fix in flight for the check to protect. Governed bot
-    # PRs need no special-casing here: they have no closing issues, so this
-    # stage degrades to a natural no-op for them.
+    # The premature-closure check (issue #158) only makes sense for closing issues
+    # while this PR is still open: once merged, GitHub's own automation is expected
+    # to have closed the issue anyway, and once the PR itself is closed/abandoned
+    # there is no longer an open fix in flight for the check to protect. Non-closing
+    # refs are deliberately excluded: those issues are *supposed* to stay open past
+    # merge. Governed bot PRs need no special-casing here: they have no closing
+    # issues, so this stage degrades to a natural no-op for them.
     if closing_issues and pr.state == "OPEN":
         # A failure here must never fail the whole run (see this check's own
         # non-blocking, observational design in issue #158) -- print a warning
@@ -691,7 +769,9 @@ def _run_validation(args: argparse.Namespace, monitor: github_api.QuotaMonitor) 
         # fail every later stage anyway, and deserves its distinct exit code.
         try:
             closure_states = tuple(
-                fetch_issue_closure_state(overview, args.repo) for overview in overviews.values()
+                fetch_issue_closure_state(overviews[number], args.repo)
+                for number in closing_issues
+                if number in overviews
             )
         except _QUOTA_ERRORS:
             raise
@@ -713,11 +793,13 @@ def _run_validation(args: argparse.Namespace, monitor: github_api.QuotaMonitor) 
         )
     )
 
-    # Project field checks only make sense when there's at least one closing issue
-    # to check them against (a PR with none already failed validate_pull_request's
-    # own closing-reference check above) -- or on the governed-bot path, where the
-    # compensating check validates the PR's own Project membership instead.
-    if closing_issues or governed_bot:
+    # Project field checks run for every linked issue -- both closing and
+    # non-closing refs -- since the marker never weakens the tracking chain
+    # (issue #216). A PR with no linked issues already failed
+    # validate_pull_request's own closing-reference check above. On the
+    # governed-bot path the compensating check validates the PR's own Project
+    # membership instead.
+    if all_linked_issues or governed_bot:
         # An unreadable Project (see fetch_project_items' own docstring) is handled
         # specially below rather than propagating like other GitHubApiErrors,
         # since the default GITHUB_TOKEN often lacks the scope to read it. The
@@ -752,9 +834,10 @@ def _run_validation(args: argparse.Namespace, monitor: github_api.QuotaMonitor) 
                 report = build_project_field_report(pr.number, items, content_type="PullRequest")
                 violations.extend(validate_project_membership(report, subject="pull request"))
             else:
-                # Check every closing issue's Project membership/fields against the
-                # one already-fetched item list, rather than re-fetching per issue.
-                for issue_number in closing_issues:
+                # Check every linked issue's Project membership/fields against
+                # the one already-fetched item list, rather than re-fetching per
+                # issue. Both closing and non-closing refs run the same checks.
+                for issue_number in all_linked_issues:
                     report = build_project_field_report(issue_number, items)
                     violations.extend(validate_project_membership(report))
 

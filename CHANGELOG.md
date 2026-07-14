@@ -9,6 +9,17 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Added
 
+- Added a sanctioned non-closing issue reference marker to the automated PR metadata gate for
+  #216: a pull request body line of the form `Non-closing ref: #N — <reason>` (case-insensitive,
+  em-dash or hyphen, reason mandatory) now satisfies the closing-reference requirement without
+  asking GitHub to auto-close the referenced issue on merge. The marker runs the same
+  linked-issue checks as a closing keyword (Project #5 membership, nine-field completeness,
+  milestone inheritance) — only the auto-close side effect is skipped. Naming the same issue via
+  both a closing keyword and the marker is detected as an ambiguity violation. Fenced code blocks
+  and inline code spans are stripped before matching (consistent with closing-keyword parsing).
+  Documented in `docs/governance/github-metadata-automation.md` and the `AGENTS.md`
+  project-planning-metadata rules. Unit tests cover marker parsing, code-block/inline-code
+  inertness, the ambiguity case, and `_run_validation` integration with the Project snapshot.
 - Added Kiro IDE workspace configuration for #220: tracked steering files
   (`project-context.md`, `workflow-rules.md`, `github-project.md`, `seed-prompt-template.md`)
   and agent hooks (`gate-reminder.json`) provide durable multi-agent workflow context, while

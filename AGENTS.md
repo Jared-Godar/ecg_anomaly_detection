@@ -230,6 +230,13 @@ merge, release-tag) require an explicit go-ahead; everything else here is standi
   with repository state.
 - Link each implementation pull request to its issue with a supported closing reference when the
   pull request completes the issue scope.
+- When a pull request must NOT auto-close its tracking issue (e.g. receipts-gated multi-leg
+  governance work), use the sanctioned non-closing marker (`Non-closing ref: #N — <reason>`)
+  instead of a closing keyword. The marker satisfies the gate's closing-reference requirement
+  and runs the same linked-issue Project membership, field-completeness, and milestone-
+  inheritance checks — only GitHub's auto-close is skipped. Naming the same issue with both a
+  closing keyword and the marker is a hard violation. See
+  [github-metadata-automation.md](docs/governance/github-metadata-automation.md#non-closing-issue-reference-marker).
 - Verify all nine project fields after creating or updating an issue or pull request.
 
 ## Project positioning
