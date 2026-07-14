@@ -20,6 +20,12 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   Documented in `docs/governance/github-metadata-automation.md` and the `AGENTS.md`
   project-planning-metadata rules. Unit tests cover marker parsing, code-block/inline-code
   inertness, the ambiguity case, and `_run_validation` integration with the Project snapshot.
+- Added Kiro IDE workspace configuration for #220: tracked steering files
+  (`project-context.md`, `workflow-rules.md`, `github-project.md`, `seed-prompt-template.md`)
+  and agent hooks (`gate-reminder.json`) provide durable multi-agent workflow context, while
+  `.kiro/settings/` (machine-specific permissions and MCP config) stays gitignored. The
+  `.gitignore` uses a deny-then-whitelist pattern (`.kiro/` ignored, `!.kiro/steering/*.md` and
+  `!.kiro/hooks/*.json` tracked).
 - Extended the portfolio-signal taxonomy for #210 with two paired label + board-option signals:
   `portfolio: testing-rigor` (layered test design and coverage discipline as the item's subject)
   and `portfolio: agentic-engineering` (agent contracts, instruction files, or agent-workflow
@@ -79,6 +85,15 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Changed
 
+- Reframed `README.md` as a recruiter-facing engineering showcase for #217: the modernization
+  narrative moves from headline to origin-story context, replaced by six evidence-backed
+  portfolio-signal sections (Agentic Engineering, Governance, Reproducibility, Testing Rigor,
+  Data Engineering, Operational Maturity) with concrete file/feature citations. The large
+  capability table, current-status table, architecture table, historical-experiment section,
+  and detailed known-limitations section are trimmed from the README and preserved in their
+  existing linked `docs/` pages — no information lost, only relocated for a skim-friendly
+  recruiter audience. Quick start, use-limitation notice, dataset attribution, and reference
+  links are retained in compact form.
 - Hardened the public Step 0 notebook's external-connectivity touch-points for #201 so a transient
   network failure no longer surfaces as a raw Python traceback: a new shared helper cell owns a
   bounded connectivity-signature classifier (including the acquisition retry layer's graceful

@@ -120,6 +120,13 @@ credentials/
 .continue/
 .aider*
 *.aider.chat.history.md
+.kiro/*
+!.kiro/steering/
+!.kiro/hooks/
+.kiro/steering/*
+!.kiro/steering/*.md
+.kiro/hooks/*
+!.kiro/hooks/*.json
 
 # Raw and derived data. Keep only directory contracts in Git.
 /data/raw/**
