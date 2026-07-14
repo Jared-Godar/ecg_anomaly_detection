@@ -67,6 +67,32 @@ deleted, and the zero-usage unused GitHub default labels were retired (see
 [label taxonomy § Completed legacy-label migration](label-taxonomy.md#completed-legacy-label-migration-105-113)
 for the full record). `--include-closed` now reports zero drift as well.
 
+## Board drift detection
+
+`scripts/detect_board_drift.py` is the scheduled verification backstop behind the
+creation-time board automation (issue #233; see
+[GitHub metadata automation § Creation-time board population](github-metadata-automation.md#creation-time-board-population-issue-233)).
+For every open issue and pull request (governed-bot items excluded) it flags missing
+Project #5 membership, an unset Status, and any field left unset despite a label that
+derives it via the shared mapping table (`scripts/github/project_label_mapping.py`). A
+populated field whose value differs from its label derivation is deliberately **not**
+flagged — curated values win — and full nine-field completeness stays the PR-time
+metadata gate's job. Like its label sibling, it is read-only: remediation is a manual
+`populate_project_item.py` run or the documented `gh` fallback commands.
+
+```fish
+uv run python scripts/detect_board_drift.py
+```
+
+`.github/workflows/repository-hygiene.yml` runs this weekly alongside the other hygiene
+checks, in its own `board-drift` job using the Projects-scoped classic
+`PROJECT_METADATA_TOKEN` — the board snapshot is a Projects V2 GraphQL read the default
+`GITHUB_TOKEN` cannot perform for a user-owned project. It shares the label-drift
+check's exit-code contract (0 clean, 1 drift, 2 execution failure, 3 quota), but its
+`--min-graphql-quota` preflight defaults to `250` rather than observe-only `0`: each run
+pays for one full board snapshot (~203 points measured live), so starting one on a pool
+that cannot serve it would fail mid-run anyway.
+
 ## Held-out execution trigger safety
 
 `scripts/check_held_out_trigger_safety.py` is a read-only governance-as-code check that parses

@@ -188,8 +188,20 @@ closed as "not planned" initially lands in `Closed` like any other closed issue;
 `project-status-sync.yml` is unaffected by the `Not Planned` lane — it targets pull-request
 merge events only, never issue closures.
 
-Automatic priority, risk, size, and portfolio assignments are intentionally avoided. Those fields
-require reviewable engineering judgment.
+Since issue #233, `.github/workflows/project-item-autofill.yml` also automates the
+creation-time leg: on `issues`/`pull_request` `opened`/`labeled` events it adds the item to
+the board when absent, defaults Status to Backlog when (and only when) Status is unset, and
+fills unset fields derivable from the item's labels, converging as labels land — see
+[Creation-time board population](github-metadata-automation.md#creation-time-board-population-issue-233)
+for the mapping table, precedence rules, bot/fork exclusions, and the manual fallback. It never
+overwrites a populated field and never regresses a Status lane.
+
+Priority, Risk, Size, Repository Area, Issue Type, and Portfolio Signal are automated only as
+label *mirrors*: the reviewable engineering judgment lives in assigning the taxonomy labels
+(docs/governance/label-taxonomy.md), and the automation transcribes exactly that decision onto
+the board, leaving ambiguous or unlabeled cases blank. Workstream and Target Release have no
+label source and are never inferred — heuristic assignment remains intentionally avoided for
+exactly the original reason: a confidently wrong value reads as deliberate triage.
 
 ## Setting Status via the CLI
 

@@ -344,7 +344,12 @@ distinct quota exit code. `tests/scripts/test_validate_changelog_update.py` cove
 changelog gate (issue #184): the substantive-path classification, the exemption-marker rules
 (including that a marker quoted in code spans or fenced blocks is never honored), the
 failure/exemption/happy decision paths end to end, and the unreadable-data and rate-limit exit
-codes. None of these calls the network; running them requires no GitHub token.
+codes. `tests/scripts/test_project_label_mapping.py`,
+`test_populate_project_item.py`, and `test_detect_board_drift.py` cover the creation-time
+board automation (issue #233): the mapping table's manifest-completeness invariant, the
+governed-bot skip, add-then-verify membership, the fill-only-unset precedence rule, conflict
+withholding, the drift cross-check, and their exit-code mappings. None of these calls the
+network; running them requires no GitHub token.
 
 ## Bot-authored (Dependabot) pull requests
 
@@ -484,6 +489,105 @@ considered and **deferred**. No auto-merge is configured: every bot pull request
 the maintainer's explicit merge click, keeping a human decision on every change that reaches
 `main`. Revisiting that decision is tracked separately from this policy.
 
+## Creation-time board population (issue #233)
+
+**Canonical rule:** every issue and pull request must be a Project #5 member carrying the
+mandatory label set. Membership and field population were entirely manual at item-creation time
+until issue #233, and the gap bit repeatedly — #210 was never added to the board at filing, and
+the ten #218-audit findings issues (#223–#232) landed with zero board presence, costing a
+~100-operation manual back-fill that was interrupted mid-batch. The
+[`project-item-autofill`](../../.github/workflows/project-item-autofill.yml) workflow makes the
+rule the default rather than a per-item ritual.
+
+### Behavior
+
+The workflow fires on `issues: [opened, labeled]` and `pull_request: [opened, labeled]` and runs
+`scripts/github/populate_project_item.py`, which:
+
+1. **Adds the item to Project #5 when absent** — idempotent, verified by a targeted re-lookup
+   (`gh project item-add`'s exit status is never accepted as evidence).
+2. **Defaults Status to Backlog only when Status is unset** — the automation never regresses a
+   lane a human, an agent, or a built-in workflow already advanced. The ensure-Backlog check
+   runs on every event (not just `opened`), so a missed `opened` run is back-filled by the next
+   `labeled` event.
+3. **Fills every label-derivable field that is currently unset**, converging as labels land:
+
+   | Label namespace | Project field | Mapping notes |
+   |---|---|---|
+   | `type:*` | Issue Type | Direct name matches plus `type: maintenance` → Technical Debt (the Dependabot-defaults precedent); `type: modernization` deliberately unmapped (Feature vs. Enhancement is judgment) |
+   | `priority:*` | Priority | `p0` → Critical, `p1` → High, `p2` → Medium, `p3` → Low (the taxonomy ladder rung-for-rung; verified live against board items) |
+   | `risk:*` | Risk | `risk: low` → Low; the domain labels (`data-integrity`, `evaluation`, `security`) → High per the historical mapping precedent above; Medium has no label source |
+   | `size:*` | Size | Direct ladder match `xs`/`s`/`m`/`l` → XS/S/M/L; the board's XL has no label source |
+   | `area:*` | Repository Area | Exact same-named options only (`ci-cd`, `documentation`, `evaluation`, `modeling`, `validation`); `cli`/`data`/`pipeline`/`quality`/`repository` have no same-named option and stay human-set |
+   | `portfolio:*` | Portfolio Signal | Direct name matches (`operational-maturity`, `testing-rigor`, `agentic-engineering`); `case-study`/`release` have no same-named option |
+
+   The authoritative table is code, not this summary:
+   `scripts/github/project_label_mapping.py`, whose unit tests enforce that every label in
+   `.github/labels.json` is either mapped, explicitly listed as deliberately unmapped, or in a
+   namespace with no board counterpart — growing the taxonomy without deciding its board
+   translation fails the suite.
+
+Boundaries, all deliberate:
+
+- **Curated values win.** Only UNSET fields are ever written; a populated field is preserved
+  untouched regardless of what the labels derive. Every write is verified by a targeted
+  read-back with one bounded retry (#164/#170).
+- **Workstream and Target Release are never inferred.** They have no label source; heuristic
+  inference (title prefixes, defaults) is an explicit non-goal, because a confidently-wrong
+  value reads as deliberate triage. The PR-time metadata gate remains the enforcement point for
+  full nine-field completeness.
+- **Conflicting derivations are withheld.** Two labels deriving different options for one field
+  (e.g. `risk: low` plus `risk: security`) produce a logged warning and no write — ambiguity is
+  for maintainer review.
+- **Governed-bot items are skipped** (workflow condition plus a server-side REST author check),
+  because [the Dependabot autofill path](#bot-authored-dependabot-pull-requests) owns bot PRs'
+  board stamping with different defaults. Fork pull requests are also skipped at the workflow
+  level: plain `pull_request` events from forks receive no secrets, so the run could only fail;
+  the scheduled backstop below catches them instead.
+- **Option IDs are resolved by name at runtime** (one cached `field-list` read per run), never
+  hardcoded — the 2026-07-14 board-wide option-ID regeneration
+  ([github-project.md](github-project.md#setting-status-via-the-cli)) proved stored IDs go
+  stale wholesale.
+
+### Testing and change caveat
+
+`issues:`-triggered workflows execute the workflow definition from the **default branch**, so
+changes to `project-item-autofill.yml` (or the script behind it) take effect only after merge
+and cannot be exercised from a feature branch. The mapping/idempotency/precedence logic is
+therefore unit-tested exhaustively (`tests/scripts/test_populate_project_item.py`,
+`test_project_label_mapping.py`, `test_github_api.py`), and behavior changes should be verified
+post-merge with one disposable probe issue: file it with taxonomy labels, read back membership
+and fields, add one more label to confirm convergence, then close it as not-planned with lane
+`Not Planned`.
+
+### Scheduled backstop
+
+The weekly [`repository-hygiene`](../../.github/workflows/repository-hygiene.yml) run gained a
+`board-drift` job executing `scripts/detect_board_drift.py`: for every OPEN issue and pull
+request (governed-bot items excluded) it flags missing board membership, an unset Status, and
+any unset field whose deriving label is present. It never flags a populated field that differs
+from its derivation (curated values win) and never mutates anything — remediation is a manual,
+read-back-verified `populate_project_item.py` run or the fallback commands below. It exits 1 on
+drift, using the house exit-code convention otherwise (0 clean, 2 unreadable, 3 quota).
+
+### Manual fallback
+
+When the automation is down, or for an item it cannot reach (e.g. a fork PR), the same
+convergence runs from any checkout with a `project`-scoped `gh` session:
+
+```fish
+# Converge one item (issue or pull request) exactly as the workflow would.
+uv run python scripts/github/populate_project_item.py --content-type issue --number <N>
+uv run python scripts/github/populate_project_item.py --content-type pull-request --number <N>
+
+# Check the whole repository for membership/field gaps without mutating anything.
+uv run python scripts/detect_board_drift.py
+```
+
+Fields the automation deliberately leaves blank (Workstream, Target Release, any conflicted or
+unmapped derivation) are set manually with the read-back-verified `gh project item-edit` loop in
+[GitHub Project governance](github-project.md#setting-status-via-the-cli).
+
 ## GraphQL quota stewardship
 
 Issue #173 hardened the repository's governance automation against avoidable GraphQL
@@ -516,6 +620,8 @@ this table when upgrading `gh` majors.
 | `scripts/sync_github_labels.py` | `gh label create --force` per manifest label via the shared `run_gh` (issue #175; the pre-migration inventory listed `label list`/`edit`, which the script never actually called) | REST mutations -- no GraphQL spend of its own; low frequency (manual); observe-only preflight default (0) with before/after/consumed reporting and quota exit code 3; `--dry-run` makes no `gh` calls at all |
 | `scripts/github/sync_dependabot_pr_metadata.py` | `gh api graphql` targeted PR-item lookup, optional item-add with verifying re-lookup, `gh project field-list`, up to nine `item-edit`/read-back pairs (issue #193) | GraphQL (~15-25 points/run; preflight default 50; no full-board reads) |
 | `scripts/github/autofill_dependabot_changelog.py` | `gh api repos/...` pull-request, commit, and contents reads plus the changelog contents `PUT` (issue #193) | REST only -- zero GraphQL spend |
+| `scripts/github/populate_project_item.py` | `gh api graphql` targeted issue/PR-item lookup, optional item-add with verifying re-lookup, `gh project field-list`, up to seven `item-edit`/read-back pairs; the content/labels/author read is REST (issue #233) | GraphQL (~10-25 points/run; preflight default 50; no full-board reads) |
+| `scripts/detect_board_drift.py` | `gh issue list` / `gh pr list --json` plus one `gh project item-list` snapshot (issue #233) | GraphQL-backed listings plus the ~203-point snapshot; low frequency (weekly/manual hygiene); preflight default 250 (snapshot-sized, like the validator) with before/after/consumed reporting and quota exit code 3 |
 | `.github/workflows/*.yml` | no direct `gh` calls | -- (workflows only invoke the scripts above) |
 
 ### Consumption rules

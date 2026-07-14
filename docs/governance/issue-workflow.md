@@ -18,7 +18,12 @@ New forms receive one `type:*` label and `status: triage`. During triage, the ma
 2. makes the outcome, non-goals, acceptance criteria, and data boundary explicit;
 3. assigns one `priority:*`, one `status:*`, at least one `area:*`, and relevant thematic labels;
 4. assigns a milestone only when the work is required for that milestone; and
-5. adds accepted work to the `ECG Pipeline Modernization` project when project-level tracking is useful.
+5. verifies the issue is on the `ECG Pipeline Modernization` Project #5 — every issue and pull
+   request must be a board member (the canonical rule from issue #233). The
+   `project-item-autofill` workflow adds it automatically on creation and mirrors
+   label-derivable fields as labels land; triage confirms membership and sets the fields
+   automation deliberately leaves human-set (Workstream, Target Release) — see
+   [Creation-time board population](github-metadata-automation.md#creation-time-board-population-issue-233).
 
 Use `M3 — Baseline modeling and evaluation` for accepted baseline or grouped-evaluation work and
 `M4 — Portfolio release` for release-readiness work. A milestone is a delivery commitment, not a topic.
