@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Contract Enforcement Reminder",
+      "trigger": "UserPromptSubmit",
+      "action": {
+        "type": "agent",
+        "prompt": "STANDING CONTRACT CHECK: AGENTS.md is binding. Before responding, confirm you are grounding your actions in the verified current governance documentation — not memory, not assumptions, not training data. If you haven't read the relevant governance doc this session, read it now before acting. \"Do what is written, the way it is written.\" \"Done means done.\" Issue first. Gate every commit. Verify with evidence. Calibrate claims. The rules were always there — follow them."
+      }
+    }
+  ]
+}

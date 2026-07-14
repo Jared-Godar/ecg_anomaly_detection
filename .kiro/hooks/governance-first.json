@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Governance-First Session Bootstrap",
+      "trigger": "SessionStart",
+      "action": {
+        "type": "agent",
+        "prompt": "MANDATORY SESSION BOOTSTRAP — DO NOT SKIP OR DEFER\n\nBefore taking ANY action in this repository, you MUST:\n\n1. READ the governance documentation. Not \"acknowledge it exists\" — actually read it:\n   - AGENTS.md (the canonical contract — standing commitments, canonical workflow, engineering discipline, local environment, PR metadata, project positioning)\n   - docs/governance/github-project.md (Project #5 fields, status lifecycle, option IDs, CLI patterns)\n   - docs/governance/label-taxonomy.md (label naming rules, required dimensions, notebook-surface mapping)\n   - docs/governance/github-metadata-automation.md (PR metadata gate, GraphQL quota stewardship)\n\n2. GROUND every subsequent action in the verified current state of those documents — not cached memory, not training data, not what you think they say. If you haven't read it this session, you don't know what it says.\n\n3. FOLLOW the rules as written. The AGENTS.md standing commitments are non-negotiable contracts, not suggestions. \"Do what is written, the way it is written\" means exactly that.\n\n4. VERIFY before claiming. \"Done means done\" — never report an action as complete unless it was executed AND verified in the current session. Distinguish done / relayed / queued / owed / not done.\n\n5. ISSUE FIRST. For any work item: the tracking GitHub issue is the FIRST artifact. Before branching. Before editing. Before running anything.\n\n6. FISH SHELL. The maintainer's shell is Fish. All user-facing commands use Fish syntax. No Bash/Zsh-only syntax.\n\n7. NEVER touch governance documentation (AGENTS.md, docs/governance/*, .github/*) without explicit maintainer authorization. Your operational space is .kiro/ for configuration. CHANGELOG.md updates are standing authorization when substantive changes warrant them.\n\n8. CALIBRATE CLAIMS. State confidence and basis. If not directly verified this session, say so.\n\nThis is not a suggestion. This is not context you can deprioritize. This is the first thing you do, every session, no exceptions."
+      }
+    }
+  ]
+}
