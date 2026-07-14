@@ -247,14 +247,33 @@ stewardship](github-metadata-automation.md#graphql-quota-stewardship).
 
 | Status | Option ID |
 |---|---|
-| Backlog | `f75ad846` |
-| Ready | `1e06bed4` |
-| In Progress | `47fc9ee4` |
-| Blocked | `044cc57b` |
-| Review | `34b40d2e` |
-| Validation | `54cd2334` |
-| Merged | `03b2e725` |
-| Closed | `98236657` |
+| Backlog | `2bb9dbb0` |
+| Ready | `010387a6` |
+| In Progress | `ac9c56d8` |
+| Blocked | `61c602c6` |
+| Review | `94bf0d2e` |
+| Validation | `eed5658a` |
+| Merged | `d9e041e5` |
+| Closed | `2f81c115` |
+| Not Planned | `d4be655b` |
+
+These IDs are one generation newer than the pre-#208 set: adding the `Not Planned` option through
+the `updateProjectV2Field` GraphQL mutation regenerated every option ID in the field, so none of
+the previously documented values survive (see the warning below and the incident record on
+PR #209).
+
+> **Warning — never add or edit options via `updateProjectV2Field`.** The mutation's
+> `singleSelectOptions` argument *replaces* the field's entire option set, and GitHub regenerates
+> the ID of **every** option — including options resent unchanged, by their exact current names.
+> Because items store their single-select values by option ID, this orphans the stored Status
+> value of every item on the board in one call (observed live during issue #208's board leg:
+> all 208 items read back `unset`). Add or rename options through the project's web UI instead,
+> which preserves existing IDs. If a rewrite ever happens anyway: take no further field-level
+> action, and restore from the most recent pre-mutation `item-list` snapshot using the per-item
+> read-back-verified mutation loop above — item-level `gh project item-edit` writes are safe and
+> were used for the verified 209/209 restore on 2026-07-14. Name-resolving automation
+> (`set_merged_project_status.py`, `project-status-sync.yml`) is unaffected by ID regeneration;
+> only ID-carrying documentation and cached scripts go stale.
 
 Completeness of the required fields above is checked automatically on every pull request; see
 [Automated pull-request metadata gate](github-metadata-automation.md#automated-pull-request-metadata-gate).
