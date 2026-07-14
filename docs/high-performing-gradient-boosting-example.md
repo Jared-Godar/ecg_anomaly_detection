@@ -65,6 +65,25 @@ Balanced sample weights are applied during fitting. The notebook does not use FF
 
 LightGBM remains an optional future local optimization candidate because adding it as the default public notebook path would complicate environment and dependency governance.
 
+## Runtime feedback
+
+The notebook prints one start line and one measured completion line around each potentially
+long phase: train/validation shard verification and loading, fixed-model fitting, and validation
+scoring. Start lines give deliberately broad expectations—seconds to a few minutes for loading
+and scoring, and often a few minutes for fitting on a typical laptop—while naming the local
+artifact-size, disk, dataset, and hardware factors that can change those timings. These are
+planning hints, not runtime guarantees or benchmark evidence.
+
+Because manual review observed a roughly seven-minute fit with no intermediate model output, the
+fit stage also prints one qualified elapsed-time heartbeat per minute until the unchanged blocking
+`model.fit` call returns. This cadence keeps the cell visibly active without enabling estimator
+iteration logs, estimating remaining time, or adding a second fit path.
+
+The feedback is observational only. It does not alter estimator settings, inputs, metrics,
+evaluation boundaries, or generated evidence, and it does not write timing or model artifacts.
+The tracked notebook retains empty outputs and null execution counts; progress appears only when
+a reviewer runs the notebook locally in the supported environment.
+
 ## Evaluation boundary
 
 The notebook:

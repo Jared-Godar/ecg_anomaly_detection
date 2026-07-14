@@ -100,4 +100,5 @@ expected_source_files = [
     # The first invocation's own captured stdout carries both progress banners
     # around its original completion message (#61).
     assert "[1/1] acquire: starting" in output
+    assert "record 1/1 (100): downloaded and verified 3 files" in output
     assert "[1/1] acquire: complete in" in output

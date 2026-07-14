@@ -128,10 +128,103 @@ class AcquisitionResult:
     reused_file_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class AcquisitionRecordProgress:
+    """Completed transfer counts for one configured dataset record.
+
+    The callback payload is deliberately record-grained rather than file-grained. A
+    MIT-BIH record has three required companion files, so one event per record keeps a
+    first acquisition visibly active without producing 144 low-value file messages.
+    """
+
+    record_index: int
+    record_total: int
+    record_id: str
+    downloaded_file_count: int
+    reused_file_count: int
+
+
 # Fetcher is the transport abstraction acquire_dataset depends on: given a URL,
 # destination path, timeout, and size cap, it stages a file and returns its digest. Tests
 # substitute a fake Fetcher to exercise acquisition logic without real network access.
 Fetcher = Callable[[str, Path, float, int], TransferResult]
+
+# AcquisitionProgressCallback is an observational hook invoked only after all required
+# files for one configured record have passed their integrity checks. The callback never
+# changes acquisition evidence or determines which files are retrieved.
+AcquisitionProgressCallback = Callable[[AcquisitionRecordProgress], None]
+
+
+def format_acquisition_record_progress(progress: AcquisitionRecordProgress) -> str:
+    """Render one concise record-level acquisition progress message.
+
+    Fresh, cached, and partially resumed records use different language so users can
+    tell whether network retrieval is active without mistaking a verified cache hit for
+    a download. Counts are derived from completed integrity checks, not predictions.
+
+    Args:
+        progress: Record identity and completed downloaded/reused file counts.
+
+    Returns:
+        One human-readable line suitable for ``ProgressReporter.note``.
+    """
+
+    prefix = f"record {progress.record_index}/{progress.record_total} ({progress.record_id}): "
+    downloaded = progress.downloaded_file_count
+    reused = progress.reused_file_count
+    # A fully fresh record reports that every downloaded file also passed the committed
+    # size/digest checks; "downloaded" alone would understate the integrity behavior.
+    if downloaded and not reused:
+        noun = "file" if downloaded == 1 else "files"
+        return f"{prefix}downloaded and verified {downloaded} {noun}"
+    # A fully cached record is re-hashed and compared with both source expectations and
+    # its acquisition manifest, so "verified existing" is more accurate than "skipped".
+    if reused and not downloaded:
+        noun = "file" if reused == 1 else "files"
+        return f"{prefix}verified {reused} existing {noun}"
+    # A partially restored record can contain both newly retrieved and reusable files;
+    # keep both counts in one record-level line instead of emitting per-file noise.
+    downloaded_noun = "file" if downloaded == 1 else "files"
+    reused_noun = "file" if reused == 1 else "files"
+    return (
+        f"{prefix}downloaded and verified {downloaded} missing {downloaded_noun}; "
+        f"verified {reused} existing {reused_noun}"
+    )
+
+
+def _notify_record_progress(
+    callback: AcquisitionProgressCallback | None,
+    *,
+    record_index: int,
+    record_total: int,
+    record_id: str,
+    downloaded_file_count: int,
+    reused_file_count: int,
+) -> None:
+    """Invoke an optional callback after one record's required files are complete.
+
+    Args:
+        callback: Optional record-level observational hook supplied by the caller.
+        record_index: One-based configured record position.
+        record_total: Total number of configured records.
+        record_id: Dataset record identifier just completed.
+        downloaded_file_count: Files retrieved and verified for this record.
+        reused_file_count: Existing files re-hashed and verified for this record.
+    """
+
+    # None is the backwards-compatible silent path for library callers that do not need
+    # interactive progress; acquisition results and manifests remain unchanged.
+    if callback is None:
+        return
+    callback(
+        AcquisitionRecordProgress(
+            record_index=record_index,
+            record_total=record_total,
+            record_id=record_id,
+            downloaded_file_count=downloaded_file_count,
+            reused_file_count=reused_file_count,
+        )
+    )
 
 
 class _RejectRedirects(urllib.request.HTTPRedirectHandler):
@@ -177,8 +270,25 @@ def acquire_dataset(
     clock: Callable[[], datetime] | None = None,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     max_file_size_bytes: int = DEFAULT_MAX_FILE_SIZE_BYTES,
+    progress_callback: AcquisitionProgressCallback | None = None,
 ) -> AcquisitionResult:
-    """Retrieve required files or verify them against an existing acquisition baseline."""
+    """Retrieve required files or verify them against an existing acquisition baseline.
+
+    Args:
+        config: Versioned dataset identity and closed required-file inventory.
+        repository_root: Checkout root containing ``pyproject.toml``.
+        data_dir: Canonical raw-data directory for this dataset and version.
+        manifest_path: Repository artifact path for acquisition evidence.
+        fetcher: Optional transport substitute; defaults to strict HTTPS retrieval.
+        clock: Optional acquisition timestamp source used when creating a new manifest.
+        timeout_seconds: Positive per-request transport timeout.
+        max_file_size_bytes: Positive hard cap for each retrieved file.
+        progress_callback: Optional hook called once after each record's required files
+            have been downloaded/reused and integrity-verified.
+
+    Returns:
+        Stable acquisition evidence and invocation-level transfer/reuse counts.
+    """
     expectations = _expected_source_files(config)
     # A non-positive timeout would mean every request fails (or never times out at all),
     # neither of which is a usable configuration.
@@ -216,6 +326,7 @@ def acquire_dataset(
             transport,
             timeout_seconds,
             max_file_size_bytes,
+            progress_callback,
         )
 
     existing = [name for name in config.expected_files if (destination / name).exists()]
@@ -238,21 +349,35 @@ def acquire_dataset(
     with tempfile.TemporaryDirectory(prefix=".acquire-", dir=destination) as staging_name:
         staging = Path(staging_name)
         acquired: list[AcquiredFile] = []
-        # Download every expected file in the config's declared order, so the manifest's
-        # file list order is deterministic and reproducible across runs.
-        for relative_path in config.expected_files:
-            url = _file_url(config, relative_path)
-            staged_path = staging / relative_path
-            transfer = transport(url, staged_path, timeout_seconds, max_file_size_bytes)
-            _validate_transfer(transfer, relative_path)
-            _validate_expected_transfer(transfer, expectations[relative_path])
-            acquired.append(
-                AcquiredFile(
-                    path=relative_path,
-                    url=url,
-                    size_bytes=transfer.size_bytes,
-                    sha256=transfer.sha256,
+        # The nested config order is the same deterministic order exposed by
+        # DatasetConfig.expected_files, while also giving acquisition a natural point to
+        # emit exactly one callback after each record's companion files are complete.
+        record_total = len(config.record_ids)
+        # Complete each record as one user-visible progress unit.
+        for record_index, record_id in enumerate(config.record_ids, start=1):
+            # Retrieve every required companion extension before reporting the record.
+            for extension in config.required_extensions:
+                relative_path = f"{record_id}.{extension}"
+                url = _file_url(config, relative_path)
+                staged_path = staging / relative_path
+                transfer = transport(url, staged_path, timeout_seconds, max_file_size_bytes)
+                _validate_transfer(transfer, relative_path)
+                _validate_expected_transfer(transfer, expectations[relative_path])
+                acquired.append(
+                    AcquiredFile(
+                        path=relative_path,
+                        url=url,
+                        size_bytes=transfer.size_bytes,
+                        sha256=transfer.sha256,
+                    )
                 )
+            _notify_record_progress(
+                progress_callback,
+                record_index=record_index,
+                record_total=record_total,
+                record_id=record_id,
+                downloaded_file_count=len(config.required_extensions),
+                reused_file_count=0,
             )
         manifest = AcquisitionManifest(
             schema_version=1,
@@ -283,6 +408,7 @@ def _resume_acquisition(
     fetcher: Fetcher,
     timeout_seconds: float,
     max_file_size_bytes: int,
+    progress_callback: AcquisitionProgressCallback | None,
 ) -> AcquisitionResult:
     """Resume acquisition by verifying existing files and retrieving only missing files.
 
@@ -300,6 +426,7 @@ def _resume_acquisition(
         fetcher: Transport used to retrieve any file not already present.
         timeout_seconds: Per-request timeout passed through to the fetcher.
         max_file_size_bytes: Per-file size cap passed through to the fetcher.
+        progress_callback: Optional hook called once after each record is complete.
 
     Returns:
         Result reporting how many files were reused versus freshly downloaded.
@@ -308,44 +435,63 @@ def _resume_acquisition(
     expectations = _expected_source_files(config)
     downloaded = 0
     reused = 0
-    # Process the manifest's files in their recorded order for deterministic behavior.
-    for item in manifest.files:
-        destination_path = destination / item.path
-        # A file already on disk can potentially be reused instead of re-downloaded --
-        # but only after re-verifying it, not merely because a manifest entry exists.
-        if destination_path.exists():
-            # Reject a symlink or non-regular file rather than hashing through it, since
-            # that could reuse (and "verify") the contents of an unrelated file.
-            if destination_path.is_symlink() or not destination_path.is_file():
-                raise AcquisitionError(f"acquired path must be a regular file: {destination_path}")
-            current = _hash_file(destination_path)
-            _validate_expected_transfer(current, expectations[item.path], existing=True)
-            # The manifest recorded a specific digest at acquisition time; if the file on
-            # disk no longer matches it, something modified the file after acquisition
-            # and it can no longer be trusted as the acquired baseline.
-            if current != TransferResult(item.size_bytes, item.sha256):
-                raise AcquisitionError(
-                    f"existing file differs from acquisition manifest: {item.path}"
-                )
-            reused += 1
-            continue
-        # Stage the re-download in a fresh temporary directory (same pattern as the
-        # initial acquisition) so a failed retry never leaves a partial file at the
-        # final destination path.
-        with tempfile.TemporaryDirectory(prefix=".acquire-", dir=destination) as staging_name:
-            staged_path = Path(staging_name) / item.path
-            transfer = fetcher(item.url, staged_path, timeout_seconds, max_file_size_bytes)
-            _validate_transfer(transfer, item.path)
-            _validate_expected_transfer(transfer, expectations[item.path])
-            # The freshly downloaded file must match the *manifest's* recorded digest
-            # (not just the committed expected-source digest), so a resumed run can never
-            # silently substitute a different file version than the one first acquired.
-            if transfer != TransferResult(item.size_bytes, item.sha256):
-                raise AcquisitionError(
-                    f"retrieved file differs from acquisition manifest: {item.path}"
-                )
-            _install_without_overwrite(staged_path, destination_path)
-        downloaded += 1
+    # Manifest/config validation above guarantees these names and their deterministic
+    # order match, so indexing by path makes record grouping explicit without weakening
+    # any manifest identity check.
+    manifest_files = {item.path: item for item in manifest.files}
+    record_total = len(config.record_ids)
+    # Re-verify or restore each record before emitting its one aggregate callback.
+    for record_index, record_id in enumerate(config.record_ids, start=1):
+        record_downloaded = 0
+        record_reused = 0
+        # Count downloaded/reused companion files independently for accurate wording.
+        for extension in config.required_extensions:
+            item = manifest_files[f"{record_id}.{extension}"]
+            destination_path = destination / item.path
+            # A file already on disk can potentially be reused instead of re-downloaded --
+            # but only after re-verifying it, not merely because a manifest entry exists.
+            if destination_path.exists():
+                # Reject a symlink or non-regular file rather than hashing through it,
+                # since that could reuse the contents of an unrelated file.
+                if destination_path.is_symlink() or not destination_path.is_file():
+                    raise AcquisitionError(
+                        f"acquired path must be a regular file: {destination_path}"
+                    )
+                current = _hash_file(destination_path)
+                _validate_expected_transfer(current, expectations[item.path], existing=True)
+                # The manifest recorded a specific digest at acquisition time; if the
+                # file no longer matches it, the acquired baseline is no longer trusted.
+                if current != TransferResult(item.size_bytes, item.sha256):
+                    raise AcquisitionError(
+                        f"existing file differs from acquisition manifest: {item.path}"
+                    )
+                reused += 1
+                record_reused += 1
+                continue
+            # Stage the re-download in a fresh temporary directory so a failed retry
+            # never leaves a partial file at the final destination path.
+            with tempfile.TemporaryDirectory(prefix=".acquire-", dir=destination) as staging_name:
+                staged_path = Path(staging_name) / item.path
+                transfer = fetcher(item.url, staged_path, timeout_seconds, max_file_size_bytes)
+                _validate_transfer(transfer, item.path)
+                _validate_expected_transfer(transfer, expectations[item.path])
+                # A restored file must match the acquisition manifest, not merely the
+                # live config, preventing silent upstream substitution during resume.
+                if transfer != TransferResult(item.size_bytes, item.sha256):
+                    raise AcquisitionError(
+                        f"retrieved file differs from acquisition manifest: {item.path}"
+                    )
+                _install_without_overwrite(staged_path, destination_path)
+            downloaded += 1
+            record_downloaded += 1
+        _notify_record_progress(
+            progress_callback,
+            record_index=record_index,
+            record_total=record_total,
+            record_id=record_id,
+            downloaded_file_count=record_downloaded,
+            reused_file_count=record_reused,
+        )
     return AcquisitionResult(
         manifest=manifest,
         downloaded_file_count=downloaded,

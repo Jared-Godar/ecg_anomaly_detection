@@ -11,8 +11,56 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Changed
 
+- Improved the three supported public notebooks' presentation and navigation for #194: notebooks
+  01 and 02 now use approved banners consistent with notebook 00; cross-notebook and relevant
+  policy references are repository-relative links; important prerequisites, protected-test
+  boundaries, destructive-action warnings, and interpretation limits use a shared accessible
+  callout treatment; and regression coverage validates local targets, banner dimensions/PNG
+  structure/alt text, role-consistent callout styling, and lineage palette/claim semantics. The
+  notebook guide now documents a non-executing Jupyter HTML render
+  check for banners, the lineage diagram, links, and panels. The Step 1 lineage diagram has also
+  been redesigned in the approved dark Graphviz visual system with a tracked source, composited
+  legend, reproducible export workflow, explicit protected-test boundary, and visible source
+  attribution. All three public notebooks now give quiet, immediately flushed execution feedback:
+  Step 0 adds qualified bootstrap and first-run timing guidance around its existing streamed
+  pipeline stages, now including one downloaded/reused integrity update per configured acquisition
+  record and a short invocation cell that keeps live VS Code/Jupyter output in view. Step 1 bounds
+  optional run-evidence discovery with one start/completion pair and exposes configured channel and
+  record-exclusion context. Step 2 reports waveform loading, fixed-model fitting, and validation
+  scoring, makes successful repository path resolution visible, and emits a qualified minute-scale
+  elapsed heartbeat during an otherwise silent fit. All three notebooks now open with a concise,
+  conversational task overview, qualified first-run/rerun timing, and compact jump links; detailed
+  version history is preserved in bottom appendices. The supported workflow now stays within one
+  local VS Code/Jupyter checkout using its locked `.venv` kernel. Notebook 00 verifies and retains
+  generated state in that checkout, while notebooks 01 and 02 begin with visible local continuity
+  confirmations before independently checking their required artifacts; no selector, cross-runtime
+  copy, upload, external-storage handoff, or programmatic kernel restart remains. Optional
+  web-runtime integration is deferred to #200 instead of being represented as supported by #194.
+  Expectations remain deliberately approximate and measured times remain observational,
+  with no changes to model inputs, parameters, metrics, evaluation boundaries, saved outputs, or
+  artifact policy.
+- Documented the public notebooks' fixed random seeds and their purpose for #194: notebook 00
+  explains that the versioned split and training configs both pin `seed = 2022`, notebook 01
+  explains the split and training seeds it already surfaces, and notebook 02 explains its fixed
+  `random_state=0` — in every case so repeated local runs reproduce the same subject partitions,
+  the same fitted models, and the same validation metrics. Seed values themselves are unchanged.
+- Added a recovery note to the Step 0 notebook for the rare transient PhysioNet download timeout,
+  explaining that the failure is a network hiccup rather than a broken notebook and that a re-run
+  restarts the atomic download cleanly. The deliberate defensive handling (graceful messaging and
+  optional connectivity retries) is tracked separately in #201.
+- Codified a **defensive-external-calls** engineering-discipline rule in `AGENTS.md`: external
+  calls (downloads, package installs, HTTP/API, remote CLIs) must retry transient failures with
+  backoff and, on exhaustion, exit gracefully with clear remediation instead of a raw traceback.
+  Surfaced by this PR's walkthrough; existing gaps are retrofitted under #201.
+
 ### Fixed
 
+- Fixed the Step 1 and Step 2 notebooks' local-checkout kernel guard, which rejected the correct
+  uv-created `.venv` kernel: it resolved the interpreter symlink out to the base Python and then
+  failed its `.venv` membership check. The guard now compares the interpreter path lexically
+  (matching Step 0), so a correctly selected uv venv kernel is accepted while genuinely wrong
+  kernels are still refused. Added a regression test asserting the symlink-safe comparison.
+  Surfaced during the #194 walkthrough.
 - Hardened the shared GitHub CLI layer (`scripts/github/github_api.py`) against transient
   GitHub 5xx server errors (#190): `run_gh` now retries them on the same bounded 2s/5s/10s
   schedule it already used for the secondary rate limit, so a freshly opened pull request's

@@ -9,7 +9,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
 
-from ecg_anomaly_detection.acquisition import Fetcher, acquire_dataset
+from ecg_anomaly_detection.acquisition import (
+    Fetcher,
+    acquire_dataset,
+    format_acquisition_record_progress,
+)
 from ecg_anomaly_detection.config import load_dataset_config
 from ecg_anomaly_detection.dataset_index import create_dataset_index, write_dataset_index
 from ecg_anomaly_detection.evaluation import (
@@ -161,6 +165,9 @@ def run_pipeline(
             acquisition_manifest_path,
             fetcher=fetcher,
             clock=timestamp,
+            # One verified line per record keeps a first network acquisition visibly
+            # active while avoiding noisy per-file output (48 lines rather than 144).
+            progress_callback=lambda item: progress.note(format_acquisition_record_progress(item)),
         )
         stage.detail(f"manifest written to {acquisition_manifest_path.relative_to(root)}")
 
