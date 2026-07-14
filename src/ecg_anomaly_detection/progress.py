@@ -9,9 +9,16 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from threading import Event, Lock, Thread
 from time import perf_counter
 from typing import TextIO
+
+# How many completed units a bounded-unit phase must observe before its projected
+# remaining duration is considered minimally stable. Below this threshold the
+# projection would rest on one or two samples, so callers report an explicit
+# "estimating..." warm-up state instead of an unstable number (#199).
+DEFAULT_ESTIMATE_WARMUP_UNIT_COUNT = 3
 
 
 def format_elapsed_seconds(seconds: float) -> str:
@@ -19,6 +26,159 @@ def format_elapsed_seconds(seconds: float) -> str:
     total_seconds = max(0, int(round(seconds)))
     minutes, secs = divmod(total_seconds, 60)
     return f"{minutes:02d}:{secs:02d}"
+
+
+@dataclass(frozen=True, slots=True)
+class UnitTimingSnapshot:
+    """Measured timing evidence captured when one bounded work unit completes.
+
+    ``unit_seconds`` and ``phase_elapsed_seconds`` are direct monotonic-clock
+    observations. ``approx_remaining_seconds`` is the only inferred field and
+    carries three deliberate states: ``None`` while the estimator is still
+    warming up (too few samples for a defensible projection), ``0.0`` once the
+    final unit completes (nothing remains, a fact rather than an estimate), and
+    a positive projection otherwise.
+    """
+
+    unit_index: int
+    total_units: int
+    unit_seconds: float
+    phase_elapsed_seconds: float
+    approx_remaining_seconds: float | None
+
+
+class UnitTimingEstimator:
+    """Project qualified remaining time for a phase made of bounded, countable units.
+
+    This is the shared timing/projection abstraction called for by #199: one
+    tested home for per-unit duration measurement, phase elapsed time, and a
+    current-run-only remaining-duration projection, so operations that report
+    timing do not each grow a subtly different implementation. The projection
+    method is deliberately simple and documented: mean completed-unit duration
+    (phase elapsed divided by completed units) multiplied by the units still
+    outstanding. A running mean keeps the estimate well-defined for fast reused
+    units, slow outliers, and the final unit alike, and it never uses history
+    from earlier runs. Output produced from these snapshots is observational
+    only; the estimator never influences the observed operation.
+    """
+
+    __slots__ = (
+        "_completed_units",
+        "_monotonic",
+        "_previous_mark",
+        "_started_at",
+        "_total_units",
+        "_warmup_unit_count",
+    )
+
+    def __init__(
+        self,
+        total_units: int,
+        monotonic: Callable[[], float] = perf_counter,
+        warmup_unit_count: int = DEFAULT_ESTIMATE_WARMUP_UNIT_COUNT,
+    ) -> None:
+        """Start the phase clock for a known, fixed number of work units.
+
+        Args:
+            total_units: Positive count of units the phase will complete; the
+                projection is only defensible when the denominator is known.
+            monotonic: Clock used for every measurement; overridable in tests
+                for deterministic timing instead of real wall-clock time.
+            warmup_unit_count: Positive number of completed units required
+                before a remaining-time projection is reported at all.
+        """
+
+        # A zero or negative unit count leaves the projection with no defensible
+        # denominator; bool is excluded because it is an int subclass in Python.
+        if isinstance(total_units, bool) or not isinstance(total_units, int) or total_units <= 0:
+            raise ValueError("unit timing requires a positive total unit count")
+        # A non-positive warm-up would report a projection built from zero samples.
+        if (
+            isinstance(warmup_unit_count, bool)
+            or not isinstance(warmup_unit_count, int)
+            or warmup_unit_count <= 0
+        ):
+            raise ValueError("unit timing requires a positive warm-up unit count")
+        self._total_units = total_units
+        self._warmup_unit_count = warmup_unit_count
+        self._monotonic = monotonic
+        # Construction marks the phase start; the caller is expected to create the
+        # estimator immediately before the phase's first unit begins.
+        self._started_at = monotonic()
+        # The previous completion mark starts at the phase start so the first
+        # unit's duration is measured from the beginning of the phase.
+        self._previous_mark = self._started_at
+        self._completed_units = 0
+
+    def complete_unit(self) -> UnitTimingSnapshot:
+        """Record one completed unit and return its measured/projected timing.
+
+        Returns:
+            A snapshot of this unit's measured duration, the phase's measured
+            elapsed time, and the qualified remaining-time projection state.
+        """
+
+        # More completions than configured units would silently corrupt the
+        # projection's denominator; fail loudly instead.
+        if self._completed_units >= self._total_units:
+            raise ValueError("unit timing received more completions than configured units")
+        now = self._monotonic()
+        # max(0.0, ...) guards against a caller-supplied clock that is not truly
+        # monotonic; a negative duration would render as a nonsense estimate.
+        unit_seconds = max(0.0, now - self._previous_mark)
+        phase_elapsed_seconds = max(0.0, now - self._started_at)
+        self._previous_mark = now
+        self._completed_units += 1
+        remaining_units = self._total_units - self._completed_units
+        # Three deliberate projection states (see UnitTimingSnapshot's docstring):
+        # a factual zero when nothing remains, an explicit warm-up before enough
+        # samples exist, and the documented mean-based projection otherwise.
+        if remaining_units == 0:
+            approx_remaining_seconds: float | None = 0.0
+        elif self._completed_units < self._warmup_unit_count:
+            approx_remaining_seconds = None
+        else:
+            approx_remaining_seconds = (
+                phase_elapsed_seconds / self._completed_units
+            ) * remaining_units
+        return UnitTimingSnapshot(
+            unit_index=self._completed_units,
+            total_units=self._total_units,
+            unit_seconds=unit_seconds,
+            phase_elapsed_seconds=phase_elapsed_seconds,
+            approx_remaining_seconds=approx_remaining_seconds,
+        )
+
+
+def format_unit_timing_suffix(snapshot: UnitTimingSnapshot, *, unit_label: str) -> str:
+    """Render one snapshot as a qualified `` | ...`` suffix for an existing progress line.
+
+    The suffix deliberately distinguishes observation from inference: the unit
+    and elapsed durations are measured values, while the remaining duration is
+    always labeled ``approx.`` and appears either as an explicit ``estimating...``
+    warm-up state or as a projection — never as a deadline or guarantee (#199).
+
+    Args:
+        snapshot: Timing evidence for the unit that just completed.
+        unit_label: Operation-specific unit noun (for example ``"record"``), so
+            shared formatting preserves each operation's own wording.
+
+    Returns:
+        A suffix like `` | record 00:14 | elapsed 01:09 | approx. remaining 09:54``,
+        with ``estimating...`` in place of the projection during warm-up.
+    """
+
+    # None is the estimator's explicit warm-up state; communicate that the
+    # estimate is still being established rather than emitting an unstable number.
+    if snapshot.approx_remaining_seconds is None:
+        remaining_text = "estimating..."
+    else:
+        remaining_text = format_elapsed_seconds(snapshot.approx_remaining_seconds)
+    return (
+        f" | {unit_label} {format_elapsed_seconds(snapshot.unit_seconds)}"
+        f" | elapsed {format_elapsed_seconds(snapshot.phase_elapsed_seconds)}"
+        f" | approx. remaining {remaining_text}"
+    )
 
 
 class StageHandle:

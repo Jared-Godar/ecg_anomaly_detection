@@ -39,15 +39,18 @@ evaluation), with elapsed time and key counts or artifact paths on completion. T
 stage additionally prints one indented line per record so long record loops do not appear frozen.
 Acquisition uses the same record-level cadence after each record's required companion files pass
 their size and digest checks. It distinguishes newly downloaded files, verified existing files, and
-partial resume without expanding to noisy per-file output.
+partial resume without expanding to noisy per-file output. Each acquisition record line also carries
+a qualified timing suffix — the record's own measured duration, the acquisition phase's measured
+elapsed time, and an `approx. remaining` projection — because a first 48-record network download is
+the pipeline's one long wait whose remaining work is countable (see the audit below).
 Representative output:
 
 ```text
 run 32888ee3-7781-4171-b43e-e076a73b363c starting
 [1/7] acquisition: starting (3 records, 9 files expected)
-    record 1/3 (100): downloaded and verified 3 files
-    record 2/3 (101): downloaded and verified 3 files
-    record 3/3 (102): downloaded and verified 3 files
+    record 1/3 (100): downloaded and verified 3 files | record 00:01 | elapsed 00:01 | approx. remaining estimating...
+    record 2/3 (101): downloaded and verified 3 files | record 00:01 | elapsed 00:02 | approx. remaining estimating...
+    record 3/3 (102): downloaded and verified 3 files | record 00:02 | elapsed 00:04 | approx. remaining 00:00
 [1/7] acquisition: complete in 00:04 (manifest written to artifacts/datasets/synthetic/1.0.0/acquisition.json)
 [2/7] inventory: starting
 [2/7] inventory: complete in 00:01 (9 files verified)
@@ -60,11 +63,42 @@ run 32888ee3-7781-4171-b43e-e076a73b363c starting
 completed run 32888ee3-7781-4171-b43e-e076a73b363c in 00:09: 3 records, 9 windows, manifest artifacts/runs/32888ee3-7781-4171-b43e-e076a73b363c/run-manifest.json
 ```
 
+The projection method is deliberately simple and current-run-only: mean completed-record duration
+(phase elapsed divided by records completed) multiplied by the records still outstanding. Until
+three records have completed, the line reports an explicit `approx. remaining estimating...`
+warm-up state instead of an unstable one-sample number; the final record reports `00:00`. The
+record and elapsed values are measured observations, while the remaining value is inference and is
+always labeled `approx.` — it is never a deadline, precise finish time, or guarantee. Verified
+reruns reuse files in milliseconds, so their projections simply shrink toward zero; a single slow
+outlier record shifts the mean rather than dominating the estimate.
+
 A stage that raises prints `failed after MM:SS` instead of `complete in MM:SS`; the underlying
 error still propagates and the command still returns a nonzero status. This output is purely
 observational: it never affects run identity, evidence contents, or artifact schemas, and the
 existing `runtime_summary.json` per-stage timings (see below) remain the authoritative timing
 evidence.
+
+### Timing-enrichment audit (issue #199)
+
+Enriched timing is deliberately not applied everywhere. The following inventory covers every
+intermediate progress/status site across the governed CLI pipeline and the three public notebooks,
+with the decision and its basis, so future contributors extend timing only where a demonstrated
+long wait has a defensible timing basis rather than decorating fast phases with timestamps:
+
+| Progress site | Decision | Basis |
+| --- | --- | --- |
+| `run-pipeline` / `acquire` per-record acquisition lines | **Enriched timing** | The one long-running phase (minutes on a first 48-record network download) with countable, comparable remaining units; observed live in the #194 walkthrough. |
+| Seven `run-pipeline` stage banners and the single-stage subcommand banners | No change | Completion banners already report measured elapsed time; the stages other than acquisition normally finish in seconds locally, below the threshold where projections help. |
+| `record_processing` per-record window lines | No change | The whole phase completes in roughly a minute locally and each unit takes fractions of a second; three timing fields on 48 fast lines would be decoration, and the stage banner already reports total elapsed. |
+| `list-runs` / `purge-run` | No change | Near-instantaneous local filesystem operations; they print no progress banners at all by design. |
+| Notebook 00 bootstrap (`uv sync`) | Elapsed-only (existing) | Long-running on a cold cache but without countable remaining units (dependency count, wheel sizes, and cache state vary); it keeps its single qualified expectation and measured completion line, and uv streams its own per-package output. |
+| Notebook 00 governed pipeline relay | Inherits enrichment | The relay streams the CLI's lines unchanged, so the acquisition timing suffix arrives automatically; the runner keeps its broad qualified first-run expectation and measured process-exit duration. |
+| Notebook 01 run-evidence discovery scan | No change | One bounded start/completion pair around a directory scan that varies with accumulated local runs; already qualified, normally sub-second. |
+| Notebook 02 partition load / fit / score stages | Elapsed-only (existing) | Long fit without defensible remaining units (no iteration-count observation surface worth coupling to); it keeps its three bounded stage pairs and the single restrained minute-scale heartbeat rather than a fabricated remaining projection. |
+
+The shared abstraction behind the enriched acquisition lines is
+`ecg_anomaly_detection.progress.UnitTimingEstimator` plus `format_unit_timing_suffix`, covered by
+deterministic clock-injected tests; operations keep their own wording via the unit-label parameter.
 
 Every other standalone subcommand except `list-runs` and `purge-run` prints the same shape of
 banner around its own single-stage body: a `[1/1] <command>: starting` line, its existing

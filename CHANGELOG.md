@@ -9,7 +9,50 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Added
 
+- Added bounded transient-failure retries to dataset acquisition for #201, implementing the
+  `AGENTS.md` defensive-external-calls rule at its origin site: each per-file HTTPS transfer now
+  retries plausibly transient connectivity failures (timeouts, dropped/reset/refused connections,
+  name-resolution failures, and HTTP 429/500/502/503/504) up to three total attempts with
+  exponential backoff (2s, then 4s), removing the partially staged file between attempts, so a
+  single brief PhysioNet blip no longer aborts a whole 48-record acquisition. Permanent failures
+  (HTTP 404/403, size-cap violations, digest or size mismatches, rejected redirects) still fail
+  fast on the first attempt, and every existing integrity guarantee — atomic commit-on-full-success,
+  SHA-256 digest verification against committed expectations, final-URL validation, and size caps —
+  applies unchanged to whichever attempt succeeds. When retries are exhausted, the failure message
+  names the URL and attempt count, states plainly that the cause is an external connectivity or
+  service condition rather than a repository or setup defect, and gives re-run remediation.
+  Deterministic tests inject the backoff sleep and cover transient-then-success, exhaustion,
+  permanent-not-retried, integrity-mismatch-not-retried, and resume-path retry behavior.
+- Added qualified timing and remaining-duration estimates to long-running acquisition progress for
+  #199: each existing per-record completion line (in `run-pipeline` and the standalone `acquire`
+  command) now also reports that record's measured duration, the acquisition phase's measured
+  elapsed time, and an `approx. remaining` projection derived only from the current run (mean
+  completed-record duration times records outstanding), with an explicit
+  `approx. remaining estimating...` warm-up state until three records have completed and a factual
+  `00:00` on the final record. The shared, clock-injected estimator and suffix formatter live in
+  `progress.py` (`UnitTimingEstimator`, `format_unit_timing_suffix`) with deterministic tests, and
+  update frequency is unchanged: still exactly one concise line per configured record. A documented
+  audit in the pipeline orchestration guide inventories every other intermediate progress site
+  across the governed CLI and public notebooks 00–02 with its apply/elapsed-only/no-change decision,
+  so timing decoration is not added indiscriminately. Observational only: no change to acquisition
+  ordering, retries, manifests, artifacts, models, metrics, or evaluation boundaries.
+
 ### Changed
+
+- Hardened the public Step 0 notebook's external-connectivity touch-points for #201 so a transient
+  network failure no longer surfaces as a raw Python traceback: a new shared helper cell owns a
+  bounded connectivity-signature classifier (including the acquisition retry layer's graceful
+  exhaustion wording), a `[connectivity]` guidance panel (what happened, that it is an external
+  network/service condition rather than a code or setup bug, and what to do), and a deliberate
+  `SystemExit` halt that stops Run All without a multi-frame traceback while still blocking Steps
+  1 and 2 on missing artifacts. The environment bootstrap now streams `uv sync --group notebooks`
+  output live while capturing it for classification, the governed pipeline runner's failure
+  classifier gains a distinct `EXTERNAL_CONNECTIVITY` classification ahead of its generic fallback,
+  and the opt-in Bash launcher's `curl` installer and dependency-sync steps print equivalent
+  bounded guidance. Non-connectivity failures keep their existing strict classifications and
+  `RuntimeError` behavior, the recovery note now describes the implemented automatic retries and
+  graceful halt, and static regression tests assert the shared classifier, both classified
+  touch-points, and the absence of a bare re-raise on the connectivity path (notebook v2.54).
 
 - Improved the three supported public notebooks' presentation and navigation for #194: notebooks
   01 and 02 now use approved banners consistent with notebook 00; cross-notebook and relevant
@@ -55,6 +98,12 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Fixed
 
+- Corrected the #192 Dependabot entry under `### Dependencies` below, which recorded the
+  superseded `setup-uv` version 8.3.0 instead of the actually merged 8.3.1 (#204). A mid-flight
+  `@dependabot recreate` retargeted the group bump from 8.3.0 to 8.3.1, but the final autofill
+  run's `dependabot/fetch-metadata` structured outputs still carried the stale version, which the
+  autofill script faithfully rendered per its documented no-head-content security contract — an
+  upstream metadata staleness, not an automation defect. Version string only; no code change.
 - Fixed the Step 1 and Step 2 notebooks' local-checkout kernel guard, which rejected the correct
   uv-created `.venv` kernel: it resolved the interpreter symlink out to the base Python and then
   failed its `.venv` membership check. The guard now compares the interpreter path lexically
@@ -74,7 +123,7 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Dependencies
 
-- Bump `astral-sh/setup-uv` from 8.2.0 to 8.3.0 (github_actions) via Dependabot (#192).
+- Bump `astral-sh/setup-uv` from 8.2.0 to 8.3.1 (github_actions) via Dependabot (#192).
 
 ### Governance
 

@@ -7,7 +7,13 @@ from threading import Event
 
 import pytest
 
-from ecg_anomaly_detection.progress import ProgressReporter, format_elapsed_seconds
+from ecg_anomaly_detection.progress import (
+    ProgressReporter,
+    UnitTimingEstimator,
+    UnitTimingSnapshot,
+    format_elapsed_seconds,
+    format_unit_timing_suffix,
+)
 
 
 @pytest.mark.parametrize(
@@ -207,3 +213,127 @@ def test_heartbeat_rejects_nonpositive_interval() -> None:
         reporter.heartbeat("invalid", interval_seconds=0),
     ):
         raise AssertionError("unreachable heartbeat body")
+
+
+def test_unit_timing_warms_up_then_projects_and_finishes_at_zero() -> None:
+    """The estimator reports an explicit warm-up, then a mean-based projection, then zero.
+
+    A fake clock (construction at 0.0, completions at fixed later ticks) makes every
+    measured and projected value deterministic. With the default warm-up of three
+    completed units, units one and two must decline to project, unit three projects
+    mean-duration x remaining, and the final unit reports a factual zero remaining.
+    """
+
+    clock = iter([0.0, 10.0, 22.0, 30.0, 40.0, 52.0])
+    estimator = UnitTimingEstimator(total_units=5, monotonic=lambda: next(clock))
+
+    snapshots = [estimator.complete_unit() for _ in range(5)]
+
+    # Measured values are direct clock observations: per-unit deltas and phase elapsed.
+    assert [snapshot.unit_seconds for snapshot in snapshots] == [10.0, 12.0, 8.0, 10.0, 12.0]
+    assert [snapshot.phase_elapsed_seconds for snapshot in snapshots] == [
+        10.0,
+        22.0,
+        30.0,
+        40.0,
+        52.0,
+    ]
+    # Units 1-2 are inside the default three-unit warm-up: no projection yet.
+    assert snapshots[0].approx_remaining_seconds is None
+    assert snapshots[1].approx_remaining_seconds is None
+    # Unit 3: mean 30/3 = 10 seconds/unit, 2 units remain -> 20 seconds projected.
+    assert snapshots[2].approx_remaining_seconds == 20.0
+    # Unit 4: mean 40/4 = 10 seconds/unit, 1 unit remains -> 10 seconds projected.
+    assert snapshots[3].approx_remaining_seconds == 10.0
+    # The final unit reports zero remaining as a fact, not an estimate.
+    assert snapshots[4].approx_remaining_seconds == 0.0
+    assert [snapshot.unit_index for snapshot in snapshots] == [1, 2, 3, 4, 5]
+    assert all(snapshot.total_units == 5 for snapshot in snapshots)
+
+
+def test_unit_timing_projection_stays_defined_for_fast_reused_units_and_outliers() -> None:
+    """Near-zero (reused/cached) durations and one large outlier still yield a sane mean.
+
+    Two instantaneous completions followed by one 60-second outlier produce a
+    20-second mean; the projection must remain finite and well-defined rather than
+    dividing by a per-unit zero or chasing the outlier alone.
+    """
+
+    clock = iter([0.0, 0.0, 0.0, 60.0])
+    estimator = UnitTimingEstimator(total_units=4, monotonic=lambda: next(clock))
+
+    snapshots = [estimator.complete_unit() for _ in range(3)]
+
+    assert snapshots[0].unit_seconds == 0.0
+    assert snapshots[1].unit_seconds == 0.0
+    assert snapshots[2].unit_seconds == 60.0
+    # Mean 60/3 = 20 seconds/unit with one unit remaining -> 20 seconds projected.
+    assert snapshots[2].approx_remaining_seconds == 20.0
+
+
+def test_unit_timing_final_unit_reports_zero_even_before_warmup_completes() -> None:
+    """A phase shorter than the warm-up still ends on a factual zero-remaining line.
+
+    With two total units and the default three-unit warm-up, the first unit must
+    report the warm-up state and the second (final) unit must report zero remaining,
+    keeping the "final record reports zero remaining" contract independent of warm-up.
+    """
+
+    clock = iter([0.0, 5.0, 9.0])
+    estimator = UnitTimingEstimator(total_units=2, monotonic=lambda: next(clock))
+
+    first = estimator.complete_unit()
+    second = estimator.complete_unit()
+
+    assert first.approx_remaining_seconds is None
+    assert second.approx_remaining_seconds == 0.0
+
+
+def test_unit_timing_rejects_invalid_configuration_and_overcounting() -> None:
+    """Non-positive unit counts, non-positive warm-ups, and extra completions all fail loudly."""
+
+    # A zero or negative total leaves the projection with no defensible denominator.
+    with pytest.raises(ValueError, match="positive total unit count"):
+        UnitTimingEstimator(total_units=0)
+    # bool is an int subclass; True must not silently mean "one unit".
+    with pytest.raises(ValueError, match="positive total unit count"):
+        UnitTimingEstimator(total_units=True)
+    # A non-positive warm-up would project from zero observed samples.
+    with pytest.raises(ValueError, match="positive warm-up unit count"):
+        UnitTimingEstimator(total_units=3, warmup_unit_count=0)
+
+    estimator = UnitTimingEstimator(total_units=1, monotonic=lambda: 0.0)
+    estimator.complete_unit()
+    # A completion beyond the configured total would corrupt the projection math.
+    with pytest.raises(ValueError, match="more completions than configured units"):
+        estimator.complete_unit()
+
+
+def test_format_unit_timing_suffix_qualifies_estimates_and_preserves_unit_wording() -> None:
+    """The suffix labels inference as approx., shows explicit warm-up, and keeps the caller's noun."""
+
+    projected = UnitTimingSnapshot(
+        unit_index=5,
+        total_units=48,
+        unit_seconds=14.0,
+        phase_elapsed_seconds=69.0,
+        approx_remaining_seconds=594.0,
+    )
+    warming_up = UnitTimingSnapshot(
+        unit_index=1,
+        total_units=48,
+        unit_seconds=14.2,
+        phase_elapsed_seconds=14.2,
+        approx_remaining_seconds=None,
+    )
+
+    assert format_unit_timing_suffix(projected, unit_label="record") == (
+        " | record 00:14 | elapsed 01:09 | approx. remaining 09:54"
+    )
+    # None renders the explicit warm-up wording instead of an unstable number.
+    assert format_unit_timing_suffix(warming_up, unit_label="record") == (
+        " | record 00:14 | elapsed 00:14 | approx. remaining estimating..."
+    )
+    # Operation-specific unit nouns pass through so shared formatting never forces
+    # unrelated operations into acquisition's "record" wording.
+    assert format_unit_timing_suffix(projected, unit_label="shard").startswith(" | shard 00:14")

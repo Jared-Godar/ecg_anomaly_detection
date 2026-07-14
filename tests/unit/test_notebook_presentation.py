@@ -342,10 +342,13 @@ def test_step0_preserves_streaming_with_qualified_runtime_guidance() -> None:
     assert len(bootstrap_cells) == 1
     bootstrap_source = bootstrap_cells[0]
     # Verify every local bootstrap boundary independently so one surviving command
-    # cannot hide a removed environment check.
+    # cannot hide a removed environment check. The dependency sync runs through
+    # subprocess.Popen (not subprocess.run) so its output is streamed live and
+    # captured for connectivity classification at the same time (#201).
     for local_bootstrap_contract in (
         'bootstrap_mode = os.environ.get("ECG_NOTEBOOK_BOOTSTRAP_MODE", "project-venv")',
-        'subprocess.run([uv_executable, "sync", "--group", "notebooks"]',
+        '[uv_executable, "sync", "--group", "notebooks"]',
+        "sync_process = subprocess.Popen(",
         '[uv_executable, "run", "ecg-data", "--help"]',
         'raise RuntimeError(f"Unsupported notebook bootstrap mode: {bootstrap_mode}")',
     ):
@@ -522,3 +525,93 @@ def test_public_notebooks_are_committed_without_runtime_state(notebook_path: Pat
     # notebook cannot pass merely because one of the two runtime-state forms is empty.
     assert all(cell.execution_count is None for cell in code_cells)
     assert all(cell.outputs == [] for cell in code_cells)
+
+
+def test_step0_connectivity_failures_get_shared_graceful_handling() -> None:
+    """Step 0's external touch-points share one connectivity classifier and halt gracefully.
+
+    Protects #201's contract: one shared signature list (including the acquisition
+    retry layer's graceful exhaustion wording) classifies transient connectivity
+    failures for both the dependency sync and the governed pipeline; both paths
+    print the bounded guidance panel and halt via SystemExit — never a bare
+    RuntimeError traceback — while every other failure keeps its strict behavior.
+    """
+
+    code_cells = _code_cells(STEP0_NOTEBOOK)
+
+    # Exactly one shared helper cell owns the signature list, the guidance panel,
+    # and the deliberate SystemExit halt, so the touch-points cannot drift apart.
+    helper_cells = [
+        cell.source for cell in code_cells if "CONNECTIVITY_FAILURE_SIGNATURES = (" in cell.source
+    ]
+    assert len(helper_cells) == 1
+    helper_source = helper_cells[0]
+    # The acquisition retry layer's exhaustion wording must classify without
+    # guesswork, alongside the classic transport-level signatures.
+    for signature_contract in (
+        '"external connectivity or service condition"',
+        '"urlopen error"',
+        '"timed out"',
+        '"connection reset"',
+        "def looks_like_transient_connectivity_failure(",
+        "def print_connectivity_guidance(",
+        "def halt_step0_for_connectivity(",
+        "raise SystemExit(summary)",
+        "setup bug — your checkout, environment, and this notebook are fine.",
+    ):
+        assert signature_contract in helper_source
+
+    # The bootstrap sync failure path classifies before raising: connectivity gets
+    # the shared panel and halt, anything else keeps the strict RuntimeError.
+    bootstrap_cells = [
+        cell.source
+        for cell in code_cells
+        if "Bootstrap the supported local notebook environment" in cell.source
+    ]
+    assert len(bootstrap_cells) == 1
+    bootstrap_source = bootstrap_cells[0]
+    assert (
+        'looks_like_transient_connectivity_failure("".join(sync_output_lines))' in bootstrap_source
+    )
+    assert "print_connectivity_guidance(" in bootstrap_source
+    assert "halt_step0_for_connectivity(" in bootstrap_source
+    assert "raise RuntimeError(" in bootstrap_source
+
+    # The pipeline failure classifier gains a distinct connectivity classification
+    # while keeping its generic fallback for unrecognized failures.
+    runner_cells = [
+        cell.source for cell in code_cells if "def classify_pipeline_failure" in cell.source
+    ]
+    assert len(runner_cells) == 1
+    runner_source = runner_cells[0]
+    assert "if looks_like_transient_connectivity_failure(output_text):" in runner_source
+    assert '"EXTERNAL_CONNECTIVITY"' in runner_source
+    assert (
+        '"PIPELINE_FAILED", "The governed pipeline failed. Review the captured log.", {}'
+        in runner_source
+    )
+
+    # The connectivity branch of the failure handler must reach its deliberate halt
+    # before the strict RuntimeError below it: extract exactly the branch body and
+    # assert it panels and halts without any bare re-raise of its own.
+    branch_start = runner_source.index('if reason == "EXTERNAL_CONNECTIVITY":')
+    branch_end = runner_source.index("raise RuntimeError(", branch_start)
+    connectivity_branch = runner_source[branch_start:branch_end]
+    assert "print_connectivity_guidance(" in connectivity_branch
+    assert "halt_step0_for_connectivity(" in connectivity_branch
+    assert "RuntimeError" not in connectivity_branch
+
+    # The opt-in Bash launcher's two external operations carry the same bounded
+    # not-a-defect guidance, adapted to its shell context.
+    launcher_cells = [cell.source for cell in code_cells if "RUN_LOCAL_LAUNCHER=0" in cell.source]
+    assert len(launcher_cells) == 1
+    launcher_source = launcher_cells[0]
+    assert "connectivity_guidance()" in launcher_source
+    assert "if ! curl -LsSf https://astral.sh/uv/install.sh | sh; then" in launcher_source
+    assert "if ! uv sync --group notebooks; then" in launcher_source
+
+    # Public guidance in the Markdown recovery note reflects the implemented
+    # behavior: automatic bounded retries plus a graceful, halting panel.
+    markdown = _markdown(STEP0_NOTEBOOK)
+    assert "retries a bounded number of times" in markdown
+    assert "[connectivity]" in markdown.replace("<code>", "[").replace("</code>", "]")

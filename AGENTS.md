@@ -116,7 +116,8 @@ merge, release-tag) require an explicit go-ahead; everything else here is standi
   remediation steps — never a raw traceback, especially on a user-facing surface such as the public
   notebooks. Retries must preserve existing integrity guarantees (atomic commits, checksum
   verification). New external calls meet this bar when written; known existing gaps are tracked and
-  retrofitted (#201 covers the Step 0 notebook's PhysioNet download and `uv sync` bootstrap).
+  retrofitted (#201 retrofitted the rule's origin sites: the Step 0 notebook's PhysioNet download
+  and `uv sync` bootstrap).
 - **Diagnose before suppressing.** Prove the root cause of a warning or failure before silencing
   it or editing global config; do not trade a real protection for cosmetic quiet, even under time
   pressure.

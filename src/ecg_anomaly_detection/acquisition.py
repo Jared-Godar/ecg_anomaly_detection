@@ -9,6 +9,7 @@ import os
 import shutil
 import string
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -19,6 +20,7 @@ from typing import Any
 from urllib.parse import quote, urlsplit
 
 from ecg_anomaly_detection.config import DatasetConfig, ExpectedSourceFile
+from ecg_anomaly_detection.progress import UnitTimingSnapshot, format_unit_timing_suffix
 
 # Chunk size for streaming reads/writes (hashing, HTTPS downloads, file copies). 1 MiB
 # balances syscall overhead against peak memory for files that can be tens of megabytes.
@@ -30,10 +32,35 @@ DEFAULT_TIMEOUT_SECONDS = 60.0
 # Content-Length header and against the actual bytes streamed, so a misconfigured or
 # malicious source can't exhaust local disk during acquisition.
 DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
+# Total per-file transport attempts (one initial attempt plus bounded retries) for
+# transient connectivity failures only, per the repository's defensive-external-calls
+# rule (#201): a single brief PhysioNet timeout must not abort a whole acquisition,
+# while permanent failures (404, digest/size mismatch) still fail fast on attempt one.
+DEFAULT_TRANSIENT_ATTEMPT_COUNT = 3
+# First retry backoff wait; each subsequent retry doubles it (2s, then 4s). Bounded and
+# short: this absorbs momentary blips, not extended outages, which still fail cleanly.
+DEFAULT_RETRY_BACKOFF_BASE_SECONDS = 2.0
+# HTTP statuses treated as transient server conditions worth one bounded retry cycle.
+# Everything else in the 4xx/5xx range (404 missing file, 403 auth) is permanent:
+# retrying could not change the outcome and would only delay the clean failure.
+TRANSIENT_HTTP_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 
 
 class AcquisitionError(ValueError):
     """Raised when acquisition cannot preserve its source and integrity contracts."""
+
+
+class TransientAcquisitionError(AcquisitionError):
+    """Raised when one retrieval attempt failed for a plausibly transient network reason.
+
+    The subclass relationship keeps every existing ``except AcquisitionError``
+    caller working unchanged, while the retry layer (_fetch_with_transient_retries)
+    can catch this specific type to retry only failures that a short wait can
+    plausibly fix — timeouts, connection drops, name-resolution blips, and the
+    transient HTTP statuses in TRANSIENT_HTTP_STATUS_CODES. Integrity failures
+    (digest/size mismatch, unexpected redirect, size-cap violation) never use this
+    type and therefore always fail fast on the first attempt.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,6 +219,29 @@ def format_acquisition_record_progress(progress: AcquisitionRecordProgress) -> s
     )
 
 
+def format_timed_acquisition_record_progress(
+    progress: AcquisitionRecordProgress, timing: UnitTimingSnapshot
+) -> str:
+    """Render one record-level progress message with qualified timing detail (#199).
+
+    Composes the existing record wording with the shared timing suffix so each
+    completed record reports its own measured duration, the acquisition phase's
+    measured elapsed time, and a clearly qualified approximate remaining duration
+    (or an explicit warm-up state) — still exactly one concise line per record.
+
+    Args:
+        progress: Record identity and completed downloaded/reused file counts.
+        timing: The record's timing snapshot from a per-phase UnitTimingEstimator.
+
+    Returns:
+        One human-readable line suitable for ``ProgressReporter.note``.
+    """
+
+    return format_acquisition_record_progress(progress) + format_unit_timing_suffix(
+        timing, unit_label="record"
+    )
+
+
 def _notify_record_progress(
     callback: AcquisitionProgressCallback | None,
     *,
@@ -260,6 +310,105 @@ class _RejectRedirects(urllib.request.HTTPRedirectHandler):
         raise AcquisitionError(f"retrieval redirect rejected: {new_url}")
 
 
+def _is_transient_retrieval_failure(error: BaseException) -> bool:
+    """Decide whether one failed retrieval attempt is plausibly transient.
+
+    Transient means a short wait can plausibly change the outcome: a timeout, a
+    dropped/refused/reset connection, a name-resolution blip, or a momentary
+    server-side condition (see TRANSIENT_HTTP_STATUS_CODES). Everything else —
+    a definitive HTTP client error such as 404, or a local OSError like a full
+    disk while staging — is permanent and must fail fast, because retrying it
+    delays the clean failure without changing the result.
+
+    Args:
+        error: The exception one transport attempt raised.
+
+    Returns:
+        True when a bounded retry with backoff is justified; False otherwise.
+    """
+
+    # HTTPError is checked before its URLError parent class: it carries a
+    # definitive server-assigned status code, so only the codes explicitly
+    # listed as transient server conditions justify a retry.
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in TRANSIENT_HTTP_STATUS_CODES
+    # A non-HTTP URLError means the request never got a definitive answer at all
+    # (DNS failure, refused connection, TLS/socket-level timeout) -- the classic
+    # transient connectivity class this retry layer exists for.
+    if isinstance(error, urllib.error.URLError):
+        return True
+    # Raw socket-level failures can surface outside urllib's wrapping while the
+    # response body is being streamed: timeouts and reset/aborted connections.
+    # ConnectionError covers the reset/refused/aborted family; other bare OSError
+    # values (e.g. a local disk error) fall through to permanent below.
+    return isinstance(error, TimeoutError | ConnectionError)
+
+
+def _fetch_with_transient_retries(
+    fetcher: Fetcher,
+    url: str,
+    staged_path: Path,
+    timeout_seconds: float,
+    max_file_size_bytes: int,
+    sleep: Callable[[float], None],
+) -> TransferResult:
+    """Run one file transfer with bounded backoff retries for transient failures only.
+
+    This wrapper sits between acquisition and every transport call (production
+    HTTPS or an injected test fetcher), so the retry policy is uniform and
+    testable without network access. Only TransientAcquisitionError is retried;
+    any other failure — including every integrity failure — propagates
+    immediately, unchanged. Between attempts the partially staged file is
+    removed, so a retry re-enters the transport with the same clean "must not
+    already exist" staging contract as the first attempt; the digest and size
+    expectations applied afterward by the caller are identical for every
+    attempt, keeping retries integrity-preserving by construction.
+
+    Args:
+        fetcher: The transport to invoke for each attempt.
+        url: The HTTPS URL to retrieve.
+        staged_path: Staging destination the transport writes to.
+        timeout_seconds: Per-request timeout passed through to the transport.
+        max_file_size_bytes: Per-file size cap passed through to the transport.
+        sleep: Wait function for backoff; injectable for deterministic tests.
+
+    Returns:
+        The successful attempt's staged size and SHA-256 digest.
+    """
+
+    # Attempts are numbered from 1 so the exhaustion message reports the human
+    # total ("after 3 attempts"), not a zero-based index.
+    for attempt in range(1, DEFAULT_TRANSIENT_ATTEMPT_COUNT + 1):
+        # Only the transient subtype is caught below; every other failure —
+        # including permanent AcquisitionError — propagates out of the loop
+        # unchanged on its first occurrence.
+        try:
+            return fetcher(url, staged_path, timeout_seconds, max_file_size_bytes)
+        except TransientAcquisitionError as error:
+            # A failed attempt can leave a partial staged file behind; remove it
+            # so the next attempt's exclusive-create ("xb") open cannot collide
+            # with debris from this one.
+            staged_path.unlink(missing_ok=True)
+            # Exhaustion exits gracefully per the defensive-external-calls rule:
+            # name what failed, state plainly that it is an external/connectivity
+            # condition rather than a code or setup defect, and give remediation.
+            if attempt == DEFAULT_TRANSIENT_ATTEMPT_COUNT:
+                raise AcquisitionError(
+                    f"could not retrieve {url} after {attempt} attempts: {error}. "
+                    "This is an external connectivity or service condition (network "
+                    "timeout, connection drop, or a transient server error), not a "
+                    "defect in this repository or your setup. Check your internet "
+                    "connection and whether the source host is reachable, then re-run; "
+                    "acquisition is atomic and a re-run restarts cleanly."
+                ) from error
+            # Exponential backoff (base, 2x base, ...) gives a brief blip time to
+            # clear without turning a real outage into a long silent stall.
+            sleep(DEFAULT_RETRY_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1)))
+    # Unreachable: every loop iteration either returns or raises, but an explicit
+    # error keeps this function total if the constants above are ever misedited.
+    raise AcquisitionError(f"retrieval retry loop exited without a result for {url}")
+
+
 def acquire_dataset(
     config: DatasetConfig,
     repository_root: Path,
@@ -271,6 +420,7 @@ def acquire_dataset(
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     max_file_size_bytes: int = DEFAULT_MAX_FILE_SIZE_BYTES,
     progress_callback: AcquisitionProgressCallback | None = None,
+    sleep: Callable[[float], None] | None = None,
 ) -> AcquisitionResult:
     """Retrieve required files or verify them against an existing acquisition baseline.
 
@@ -285,6 +435,8 @@ def acquire_dataset(
         max_file_size_bytes: Positive hard cap for each retrieved file.
         progress_callback: Optional hook called once after each record's required files
             have been downloaded/reused and integrity-verified.
+        sleep: Optional retry backoff wait substitute (defaults to ``time.sleep``);
+            injectable so retry tests run deterministically without real waiting.
 
     Returns:
         Stable acquisition evidence and invocation-level transfer/reuse counts.
@@ -308,6 +460,9 @@ def acquire_dataset(
     destination.mkdir(parents=True, exist_ok=True)
     _reject_unexpected_source_files(config, destination)
     transport = fetcher or _fetch_https_file
+    # time.sleep is the production backoff wait; tests inject a recording fake so
+    # transient-retry behavior is asserted deterministically without real delays.
+    wait = sleep or time.sleep
 
     # An existing manifest means a prior run already established (or partially
     # established) this acquisition baseline; resume/verify against it rather than
@@ -327,6 +482,7 @@ def acquire_dataset(
             timeout_seconds,
             max_file_size_bytes,
             progress_callback,
+            wait,
         )
 
     existing = [name for name in config.expected_files if (destination / name).exists()]
@@ -360,7 +516,12 @@ def acquire_dataset(
                 relative_path = f"{record_id}.{extension}"
                 url = _file_url(config, relative_path)
                 staged_path = staging / relative_path
-                transfer = transport(url, staged_path, timeout_seconds, max_file_size_bytes)
+                # The retry wrapper absorbs bounded transient connectivity blips;
+                # every integrity check below still applies to whichever attempt
+                # finally succeeded, so retries never weaken the evidence contract.
+                transfer = _fetch_with_transient_retries(
+                    transport, url, staged_path, timeout_seconds, max_file_size_bytes, wait
+                )
                 _validate_transfer(transfer, relative_path)
                 _validate_expected_transfer(transfer, expectations[relative_path])
                 acquired.append(
@@ -409,6 +570,7 @@ def _resume_acquisition(
     timeout_seconds: float,
     max_file_size_bytes: int,
     progress_callback: AcquisitionProgressCallback | None,
+    sleep: Callable[[float], None],
 ) -> AcquisitionResult:
     """Resume acquisition by verifying existing files and retrieving only missing files.
 
@@ -427,6 +589,8 @@ def _resume_acquisition(
         timeout_seconds: Per-request timeout passed through to the fetcher.
         max_file_size_bytes: Per-file size cap passed through to the fetcher.
         progress_callback: Optional hook called once after each record is complete.
+        sleep: Retry backoff wait used when a missing file's re-download hits a
+            transient connectivity failure.
 
     Returns:
         Result reporting how many files were reused versus freshly downloaded.
@@ -472,7 +636,12 @@ def _resume_acquisition(
             # never leaves a partial file at the final destination path.
             with tempfile.TemporaryDirectory(prefix=".acquire-", dir=destination) as staging_name:
                 staged_path = Path(staging_name) / item.path
-                transfer = fetcher(item.url, staged_path, timeout_seconds, max_file_size_bytes)
+                # Restored files get the same bounded transient-retry treatment as a
+                # fresh acquisition; the manifest-digest comparison below still binds
+                # whichever attempt succeeded to the recorded baseline.
+                transfer = _fetch_with_transient_retries(
+                    fetcher, item.url, staged_path, timeout_seconds, max_file_size_bytes, sleep
+                )
                 _validate_transfer(transfer, item.path)
                 _validate_expected_transfer(transfer, expectations[item.path])
                 # A restored file must match the acquisition manifest, not merely the
@@ -575,6 +744,12 @@ def _fetch_https_file(
     except AcquisitionError:
         raise
     except (OSError, TimeoutError, urllib.error.URLError) as error:
+        # Distinguish plausibly transient connectivity failures (retryable by
+        # _fetch_with_transient_retries) from permanent ones (fail fast) while
+        # keeping the same single-exception surface for callers: both types are
+        # AcquisitionError, so non-retrying callers behave exactly as before.
+        if _is_transient_retrieval_failure(error):
+            raise TransientAcquisitionError(f"could not retrieve {url}: {error}") from error
         raise AcquisitionError(f"could not retrieve {url}: {error}") from error
     return TransferResult(size_bytes=size_bytes, sha256=digest.hexdigest())
 

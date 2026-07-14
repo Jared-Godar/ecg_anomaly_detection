@@ -12,7 +12,7 @@ from time import perf_counter
 from ecg_anomaly_detection.acquisition import (
     Fetcher,
     acquire_dataset,
-    format_acquisition_record_progress,
+    format_timed_acquisition_record_progress,
 )
 from ecg_anomaly_detection.config import load_dataset_config
 from ecg_anomaly_detection.dataset_index import create_dataset_index, write_dataset_index
@@ -26,7 +26,7 @@ from ecg_anomaly_detection.labels import (
     map_annotations,
     write_mapping_report,
 )
-from ecg_anomaly_detection.progress import ProgressReporter
+from ecg_anomaly_detection.progress import ProgressReporter, UnitTimingEstimator
 from ecg_anomaly_detection.records import (
     load_wfdb_record,
     validate_record,
@@ -158,6 +158,13 @@ def run_pipeline(
         ) as stage,
         runtime_timer.stage("acquisition"),
     ):
+        # Constructed at stage start so per-record durations, phase elapsed time,
+        # and the qualified approx-remaining projection (#199) all measure this
+        # acquisition phase only, using the same injectable monotonic clock as the
+        # rest of the run's timing for deterministic tests.
+        acquisition_timing = UnitTimingEstimator(
+            total_units=len(dataset_config.record_ids), monotonic=monotonic
+        )
         acquire_dataset(
             dataset_config,
             root,
@@ -167,7 +174,11 @@ def run_pipeline(
             clock=timestamp,
             # One verified line per record keeps a first network acquisition visibly
             # active while avoiding noisy per-file output (48 lines rather than 144).
-            progress_callback=lambda item: progress.note(format_acquisition_record_progress(item)),
+            # The appended timing suffix reports measured record/elapsed durations
+            # and a clearly qualified approximate remaining estimate.
+            progress_callback=lambda item: progress.note(
+                format_timed_acquisition_record_progress(item, acquisition_timing.complete_unit())
+            ),
         )
         stage.detail(f"manifest written to {acquisition_manifest_path.relative_to(root)}")
 

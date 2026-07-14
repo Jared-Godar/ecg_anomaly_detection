@@ -12,7 +12,7 @@ from time import perf_counter
 from ecg_anomaly_detection.acquisition import (
     AcquisitionError,
     acquire_dataset,
-    format_acquisition_record_progress,
+    format_timed_acquisition_record_progress,
 )
 from ecg_anomaly_detection.benchmark_approval import (
     BenchmarkApprovalError,
@@ -58,7 +58,11 @@ from ecg_anomaly_detection.local_execution import (
     purge_run,
 )
 from ecg_anomaly_detection.pipeline import PipelineError, run_pipeline
-from ecg_anomaly_detection.progress import ProgressReporter, format_elapsed_seconds
+from ecg_anomaly_detection.progress import (
+    ProgressReporter,
+    UnitTimingEstimator,
+    format_elapsed_seconds,
+)
 from ecg_anomaly_detection.records import (
     RecordValidationError,
     load_wfdb_record,
@@ -666,15 +670,21 @@ def main(arguments: Sequence[str] | None = None) -> int:
             # unit of work.
             # Keep the governed execution within the standard progress-reporting lifecycle.
             with reporter.stage("acquire", 1, 1):
+                # Constructed at stage start so the qualified per-record timing
+                # suffix (#199) measures exactly this command's acquisition phase.
+                acquisition_timing = UnitTimingEstimator(total_units=len(config.record_ids))
                 result = acquire_dataset(
                     config,
                     options.repository_root,
                     options.data_dir,
                     options.output,
                     # Match run-pipeline's record-level cadence so the standalone
-                    # acquisition command also remains visibly active without per-file noise.
+                    # acquisition command also remains visibly active without per-file
+                    # noise, including the same qualified timing suffix.
                     progress_callback=lambda item: reporter.note(
-                        format_acquisition_record_progress(item)
+                        format_timed_acquisition_record_progress(
+                            item, acquisition_timing.complete_unit()
+                        )
                     ),
                 )
                 print(
