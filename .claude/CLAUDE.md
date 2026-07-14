@@ -195,3 +195,25 @@ fail the run rather than warn.
   Project #5 conventions.
 - `docs/governance/label-taxonomy.md` is authoritative on label spelling; the historical
   pre-taxonomy migration there is a record, not a menu — never mint a legacy-style label.
+
+## Session-handoff continuity (Claude-specific addendum)
+
+`AGENTS.md`'s standing commitments define the session-handoff contract — trigger, destination
+(`artifacts/session-handoffs/<UTC-timestamp>-<slug>.md`), and required contents. Claude-specific
+mechanics:
+
+- Claude cannot see the maintainer's plan usage or remaining quota. The maintainer's request is
+  always the authoritative trigger; the proactive signals Claude *can* observe are context
+  compaction/summarization notices appearing in the session, the maintainer mentioning limited
+  time, and an unusually long working session.
+- "Downloadable" means: create `artifacts/session-handoffs/` if absent, write the file there with
+  the Write tool, and reply with the clickable repo-relative link so it opens directly in VS
+  Code. In a web/cloud Claude session with no access to this local checkout, fall back to one
+  fenced markdown block in-chat that the maintainer can save — never push handoff files to the
+  repository to deliver them.
+- The Bash tool runs zsh in this environment, but the handoff's code blocks are for the
+  maintainer's interactive shell and must be **Fish** (same rule as the Shell section above).
+- When a wind-down request arrives mid-task, finish or cleanly checkpoint the current atomic step
+  (e.g. commit-or-stash with a note, stop before a push), then write the handoff.
+- Update the local project memory in the same turn to record that a handoff file exists and its
+  path, so the next Claude session resumes from it rather than rediscovering state.

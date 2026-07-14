@@ -25,6 +25,23 @@ defect, not a style choice.
   merge gate on par with passing tests, not release-time archaeology. (Origin: 25 milestone PRs
   merged with zero changelog entries before a release-gate audit caught it — issues #179 backfill,
   #184 mechanical enforcement.)
+- **Session-handoff continuity.** When the maintainer signals that the current agent session is
+  ending (any "wrap up" / "session limit approaching" / "hand off" phrasing) — or wind-down
+  signals appear without an explicit ask (context compaction, the maintainer mentioning limited
+  time, an unusually long session) — the agent produces a Markdown handoff walkthrough BEFORE the
+  session ends, so the maintainer can continue the in-flight work locally with no agent at all.
+  Write it to the gitignored `artifacts/session-handoffs/<UTC-timestamp>-<slug>.md` (create the
+  directory if absent; never commit handoff files) and point the maintainer at it. Required
+  contents: a state snapshot (branch, commits, PR/issue numbers, which gates ran with their
+  results, and a plain done / queued / owed accounting); numbered next steps in which every
+  action is a copy-pasteable **Fish** code block runnable from the repository root (see Local
+  environment), each followed by its verification command; relevant links (PR, issues, project
+  board); and open risks or watch-items. Never include secrets or tokens. Checkpoint the current
+  atomic step first; producing the handoff is wind-down priority one after that — owed in the
+  moment, like the changelog gate, not archaeology. Agents cannot observe the maintainer's actual
+  usage limits, so the maintainer's request is always the authoritative trigger; the wind-down
+  signals above justify producing one proactively. (Codified 2026-07-14 at the maintainer's
+  request — #211.)
 - **Log the issue before touching the repo.** For any work item, the tracking GitHub issue is
   the FIRST artifact — create it before branching, before editing files, before running anything.
   The order is: issue → branch → implement → gate → document → open PR. Filing the issue after

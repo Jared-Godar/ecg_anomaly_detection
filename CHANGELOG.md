@@ -159,6 +159,18 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Codified a **session-handoff continuity** contract in `AGENTS.md`'s standing commitments, with
+  a Claude-specific addendum in `.claude/CLAUDE.md` (#211): when a working session approaches the
+  maintainer's usage limit — signaled explicitly ("wrap up", "session limit approaching") or via
+  wind-down signs such as context compaction — the agent writes a Markdown handoff walkthrough to
+  the gitignored `artifacts/session-handoffs/<UTC-timestamp>-<slug>.md` before the session ends: a
+  state snapshot (branch/commit/PR/issue state, gates run with results, a plain done/queued/owed
+  accounting), numbered next steps in which every action is a copy-pasteable Fish code block
+  runnable from the repository root with a per-step verification command, relevant links, and
+  open risks — so in-flight work continues locally without any agent. Handoff files are never
+  committed and never contain secrets; the maintainer's request is the authoritative trigger
+  because agents cannot observe actual plan quotas. `docs/architecture.md`'s directory map now
+  names session handoffs among the ignored `artifacts/` contents.
 - Integrated bot-authored (Dependabot) pull requests into the changelog and metadata gates
   (#193): a new `Dependabot PR autofill` workflow (`.github/workflows/dependabot-autofill.yml`,
   `pull_request_target`, triple-gated on the immutable PR author `dependabot[bot]`, a same-repo
