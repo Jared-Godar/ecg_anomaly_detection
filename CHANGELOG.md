@@ -9,6 +9,18 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Added
 
+- Extended the portfolio-signal taxonomy for #210 with two paired label + board-option signals:
+  `portfolio: testing-rigor` (layered test design and coverage discipline as the item's subject)
+  and `portfolio: agentic-engineering` (agent contracts, instruction files, or agent-workflow
+  enforcement as the subject). `.github/labels.json` declares the labels,
+  `docs/governance/label-taxonomy.md` records their applicability boundaries plus the
+  deliberately deferred third candidate (CI supply-chain hardening / meta-CI stays
+  `portfolio: operational-maturity` until roughly eight or more primary-subject items
+  accumulate), and `docs/governance/github-project.md` documents the two new Portfolio Signal
+  board options — added via the project web UI, never `updateProjectV2Field` — with the field's
+  full read-back-verified option-ID table. The labels' declared colors intentionally diverge from
+  the issue's proposal, which had duplicated `portfolio: case-study` and `portfolio: release`
+  exactly (maintainer-confirmed oversight).
 - Added a `Not Planned` Status lane to the ECG Pipeline Modernization project board for #208 and
   documented its semantics in `docs/governance/github-project.md` and the `AGENTS.md`
   project-planning bullet: the lane is used only for issues closed with GitHub's native
