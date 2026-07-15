@@ -34,8 +34,9 @@ Add these only when they communicate useful routing or review context:
 - `modernization:*` identifies historical preservation, reproducibility, split integrity, testability, or UX
   (developer-facing workflow ergonomics).
 - `portfolio:*` identifies case-study presentation, portfolio-release, operational-maturity,
-  testing-rigor, or agentic-engineering work (see the
-  [portfolio-signal extension](#portfolio-signal-extension-210) for the 2026 additions).
+  testing-rigor, agentic-engineering, or governance work (see the
+  [portfolio-signal extension](#portfolio-signal-extension-210) for the 2026 additions and the
+  [alignment audit](#label-to-board-field-alignment-237) for `portfolio: governance`).
 - `risk:*` flags data-integrity, evaluation, security review, or explicitly low-risk concerns.
 - `size:*` estimates review surface from `xs` through `l`; it does not encode priority.
 - `dependency:*` records an external, repository-setting, or maintainer-decision dependency.
@@ -97,6 +98,50 @@ Do not mint an `area: notebooks` label ad hoc when a PR hits that failure — ap
 `area: documentation` and set the board field to `notebooks`. If the asymmetry ever becomes a
 real friction, propose adding the label to `.github/labels.json` through the normal label-sync
 workflow instead of creating it directly on an issue or PR.
+
+## Label-to-board-field alignment (#237)
+
+The taxonomy's `area:*`/`portfolio:*` labels and the board's Repository Area / Portfolio Signal
+option sets are deliberately not isomorphic. The 2026-07-15 alignment audit (#237) reviewed every
+gap in both directions and recorded a per-label decision, so no remaining asymmetry is an
+oversight. For these two namespaces the creation-time automation (#233) derives only the exact
+same-named pairs listed in `scripts/github/project_label_mapping.py` (other namespaces carry
+documented non-identity mappings — see the
+[metadata-automation summary](github-metadata-automation.md#creation-time-board-population-issue-233));
+everything below stays human-set on the board.
+
+Five area labels have no unambiguous Repository Area translation and are **permanently
+human-set** on the board side:
+
+| Label | Why no option maps |
+|---|---|
+| `area: cli` | CLI work spans the `developer-experience` option and the stage option of whichever subcommand is touched; no single option captures the CLI surface |
+| `area: data` | The board carves data handling finer: `acquisition`, `provenance`, `manifests`, and `splitting` are separate options the umbrella label cannot pick among |
+| `area: pipeline` | Pipeline work spans every stage option; the board deliberately offers no umbrella option |
+| `area: quality` | No counterpart at all: the board's `validation` option means data/schema validation (a pipeline stage), not this label's tests/typing/static-analysis scope |
+| `area: repository` | Splits between `governance` and `developer-experience` depending on the item (live examples: issues #236 and #237 both carry it with a human-set Repository Area of `governance`) |
+
+The label-less Repository Area options (`acquisition`, `provenance`, `manifests`, `splitting`,
+`reproducibility`, `governance`, `notebooks`, `developer-experience`) remain board-only routing
+values — the single-select field costs nothing to keep specific, while a label for each would
+dilute the taxonomy (the #210 minting discipline). `notebooks` keeps its dedicated mapping rule
+(see the [notebook-surface label mapping](#notebook-surface-label-mapping-207) above).
+
+On the portfolio side, the audit minted one label: **`portfolio: governance`**, mapped to the
+board's pre-existing Governance option. Demand evidence, per the #210 minting bar: the signal was
+carried by 57 board items at audit time (second only to Operational Maturity's 59), and the
+filing of #237 itself bounced on the missing label. A label addition reshapes nothing — the
+option and its ID are unchanged. `portfolio: case-study` and `portfolio: release` stay unmapped:
+they mark narrative/lifecycle context, not one of the board's signal dimensions.
+
+Four other label-less Portfolio Signal options also exceed the #210 item-count bar
+(Documentation at 38 items, Developer Experience at 19, Reproducibility at 17, Data Engineering
+at 13) but have produced no filing friction, so the audit did not mint labels for them; the
+remaining two, Systems Thinking (4 items) and Ownership (5), sit below the bar as the near-orphan
+options the #210 section above already documents. As with the #210 additions and the governance
+label itself, the revisit trigger is demonstrated friction: when a filing actually wants one of
+these signals as a label, propose it through the normal label-sync workflow (#241 is the
+standing record).
 
 ## Completed legacy-label migration (#105, #113)
 

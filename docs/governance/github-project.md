@@ -32,6 +32,14 @@ work carries `area: documentation` on the label side; see the
 [notebook-surface label mapping](label-taxonomy.md#notebook-surface-label-mapping-207) in the
 label taxonomy.
 
+The label taxonomy and the board's option sets are deliberately not isomorphic. The 2026-07-15
+alignment audit (#237) reviewed every gap in both directions and recorded a per-label decision:
+five area labels (`cli`, `data`, `pipeline`, `quality`, `repository`) are permanently human-set
+on the board side, the label-less Repository Area options remain finer-grained board-only routing
+values, and `portfolio: governance` was minted for the pre-existing Governance signal option. See
+the [label-to-board-field alignment](label-taxonomy.md#label-to-board-field-alignment-237)
+section of the label taxonomy for the full decision table.
+
 ### Portfolio Signal boundaries (#210)
 
 The 2026-07-14 portfolio-signal audit (#210) added `Testing Rigor` and `Agentic Engineering` to
@@ -63,7 +71,10 @@ table (field ID `PVTSSF_lAHOAQEwMM4BcY39zhXJtrU`):
 
 The matching contextual labels are `portfolio: testing-rigor` and `portfolio: agentic-engineering`
 (see the [label taxonomy](label-taxonomy.md#portfolio-signal-extension-210), which also records
-the deliberately deferred third candidate, CI supply-chain hardening / meta-CI).
+the deliberately deferred third candidate, CI supply-chain hardening / meta-CI). The 2026-07-15
+alignment audit (#237) later minted `portfolio: governance` for the pre-existing Governance
+option — a label addition only, requiring no board change (see the
+[label-to-board-field alignment](label-taxonomy.md#label-to-board-field-alignment-237) section).
 
 ### Bundling pull requests
 

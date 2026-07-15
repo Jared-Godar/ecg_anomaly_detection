@@ -518,8 +518,8 @@ The workflow fires on `issues: [opened, labeled]` and `pull_request: [opened, la
    | `priority:*` | Priority | `p0` → Critical, `p1` → High, `p2` → Medium, `p3` → Low (the taxonomy ladder rung-for-rung; verified live against board items) |
    | `risk:*` | Risk | `risk: low` → Low; the domain labels (`data-integrity`, `evaluation`, `security`) → High per the historical mapping precedent above; Medium has no label source |
    | `size:*` | Size | Direct ladder match `xs`/`s`/`m`/`l` → XS/S/M/L; the board's XL has no label source |
-   | `area:*` | Repository Area | Exact same-named options only (`ci-cd`, `documentation`, `evaluation`, `modeling`, `validation`); `cli`/`data`/`pipeline`/`quality`/`repository` have no same-named option and stay human-set |
-   | `portfolio:*` | Portfolio Signal | Direct name matches (`operational-maturity`, `testing-rigor`, `agentic-engineering`); `case-study`/`release` have no same-named option |
+   | `area:*` | Repository Area | Exact same-named options only (`ci-cd`, `documentation`, `evaluation`, `modeling`, `validation`); `cli`/`data`/`pipeline`/`quality`/`repository` were audited per-label by #237 and recorded as **permanently human-set** (rationale in the mapping module and the [label taxonomy](label-taxonomy.md#label-to-board-field-alignment-237)) |
+   | `portfolio:*` | Portfolio Signal | Direct name matches (`operational-maturity`, `testing-rigor`, `agentic-engineering`, plus `governance`, minted by #237 for the board's pre-existing Governance option); `case-study`/`release` are lifecycle markers with no same-named option and stay human-set (#237) |
 
    The authoritative table is code, not this summary:
    `scripts/github/project_label_mapping.py`, whose unit tests enforce that every label in

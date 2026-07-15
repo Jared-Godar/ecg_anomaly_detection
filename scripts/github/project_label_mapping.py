@@ -109,17 +109,25 @@ LABEL_TO_FIELD_OPTION: Mapping[str, tuple[str, str]] = MappingProxyType(
         # Only exact same-named options are mapped; the taxonomy's other area
         # labels (cli, data, pipeline, quality, repository) have no
         # same-named Repository Area option, and picking a "closest" option
-        # would be exactly the heuristic inference issue #233 rules out.
+        # would be exactly the heuristic inference issue #233 rules out. The
+        # #237 alignment audit examined all five and recorded each as
+        # permanently human-set -- see UNMAPPED_LABELS for the per-label
+        # rationale.
         "area: ci-cd": ("Repository Area", "ci-cd"),
         "area: documentation": ("Repository Area", "documentation"),
         "area: evaluation": ("Repository Area", "evaluation"),
         "area: modeling": ("Repository Area", "modeling"),
         "area: validation": ("Repository Area", "validation"),
         # --- portfolio:* -> Portfolio Signal ------------------------------------------
-        # Direct name matches (including the two options added by #210).
-        # `portfolio: case-study` and `portfolio: release` have no same-named
-        # option and stay human-set.
+        # Direct name matches: the original taxonomy overlap, the two options
+        # added by #210, and `portfolio: governance`, minted by the #237
+        # alignment audit for the board's pre-existing Governance option
+        # (demand evidence: the signal is carried by 57 board items, and
+        # filing #237 itself bounced on the missing label). `portfolio:
+        # case-study` and `portfolio: release` have no same-named option and
+        # stay human-set (see UNMAPPED_LABELS).
         "portfolio: agentic-engineering": ("Portfolio Signal", "Agentic Engineering"),
+        "portfolio: governance": ("Portfolio Signal", "Governance"),
         "portfolio: operational-maturity": ("Portfolio Signal", "Operational Maturity"),
         "portfolio: testing-rigor": ("Portfolio Signal", "Testing Rigor"),
     }
@@ -135,13 +143,34 @@ UNMAPPED_LABELS: frozenset[str] = frozenset(
     {
         # Ambiguous between the Issue Type options "Feature" and "Enhancement".
         "type: modernization",
-        # No same-named Repository Area option exists for any of these.
+        # The five area labels below were audited one-by-one by issue #237
+        # and each recorded as PERMANENTLY human-set: no same-named
+        # Repository Area option exists, and no existing option is an
+        # unambiguous translation, so deriving any of them would reintroduce
+        # the heuristic inference issue #233 rules out.
+        #
+        # CLI work spans the board's developer-experience option and the
+        # stage option of whichever subcommand is touched; no single option
+        # captures "the CLI surface".
         "area: cli",
+        # The board carves data handling finer than the label: acquisition,
+        # provenance, manifests, and splitting are separate options, and the
+        # umbrella label cannot pick among them.
         "area: data",
+        # Pipeline work spans every stage option (acquisition through
+        # evaluation); the board deliberately offers no umbrella option.
         "area: pipeline",
+        # No counterpart option at all: the board's validation option means
+        # data/schema validation (a pipeline stage), while this label covers
+        # tests, typing, and static analysis.
         "area: quality",
+        # Splits between the governance and developer-experience options
+        # depending on the item (e.g. issues #236 and #237 both carry this
+        # label with a human-set Repository Area of governance).
         "area: repository",
-        # No same-named Portfolio Signal option exists for either of these.
+        # Lifecycle/artifact-type markers with no same-named Portfolio
+        # Signal option; #237's portfolio-side sweep kept them human-set
+        # rather than reshaping the board's signal dimensions around them.
         "portfolio: case-study",
         "portfolio: release",
     }
