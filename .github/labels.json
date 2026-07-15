@@ -38,6 +38,7 @@
 
     {"name": "portfolio: agentic-engineering", "color": "b388ff", "description": "Demonstrates governed AI-agent engineering workflow for the case-study audience"},
     {"name": "portfolio: case-study", "color": "d4c5f9", "description": "Improves the responsible modernization narrative"},
+    {"name": "portfolio: governance", "color": "6f42c1", "description": "Demonstrates repository governance and process discipline for the case-study audience"},
     {"name": "portfolio: operational-maturity", "color": "5319e7", "description": "Demonstrates repository operational rigor for the case-study audience"},
     {"name": "portfolio: release", "color": "7057ff", "description": "Required for a portfolio release milestone"},
     {"name": "portfolio: testing-rigor", "color": "8250df", "description": "Demonstrates layered test design and coverage discipline for the case-study audience"},

@@ -111,6 +111,31 @@ def test_mapping_only_targets_the_declared_derivable_fields() -> None:
     assert "Status" not in targeted
 
 
+def test_area_and_portfolio_exclusions_record_the_237_alignment_decision() -> None:
+    """The #237 alignment audit's permanent exclusions are all present in UNMAPPED_LABELS.
+
+    Issue #237 audited every area label without a same-named Repository Area
+    option and both lifecycle portfolio labels, recording each as permanently
+    human-set. This test pins that decision: removing any of these from
+    UNMAPPED_LABELS (without mapping it) must be a deliberate, reviewed
+    reversal, not an incidental edit.
+    """
+
+    decided_unmapped = {
+        # The five area labels with no unambiguous Repository Area translation.
+        "area: cli",
+        "area: data",
+        "area: pipeline",
+        "area: quality",
+        "area: repository",
+        # The two lifecycle/artifact-type portfolio labels with no same-named
+        # Portfolio Signal option.
+        "portfolio: case-study",
+        "portfolio: release",
+    }
+    assert decided_unmapped <= plm.UNMAPPED_LABELS
+
+
 def test_mapping_table_is_immutable() -> None:
     """The mapping is a read-only view: consumers cannot mutate the shared table."""
 
@@ -154,6 +179,19 @@ def test_derive_maps_a_full_taxonomy_label_set() -> None:
         "Repository Area": "ci-cd",
         "Portfolio Signal": "Operational Maturity",
     }
+
+
+def test_derive_maps_the_governance_portfolio_label_minted_by_237() -> None:
+    """`portfolio: governance` derives the board's pre-existing Governance signal.
+
+    The label was minted by the #237 alignment audit for the option that
+    already existed on the board (57 carrying items at audit time), so the
+    derivation is a direct name match like the other portfolio mappings.
+    """
+
+    derived, conflicts = plm.derive_field_options(["portfolio: governance"])
+    assert conflicts == ()
+    assert derived == {"Portfolio Signal": "Governance"}
 
 
 def test_derive_ignores_unmapped_and_unknown_labels() -> None:

@@ -326,6 +326,19 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   mechanism. Alongside this bundle (#182, handled as board edits with no repository diff),
   divergent Project #5 Target Release values on delivered issue↔PR pairs were reconciled to
   their curated pair-partner values with read-back verification.
+- Aligned the `area:*`/`portfolio:*` label taxonomy with the Project #5 board's Repository Area
+  and Portfolio Signal option sets (#237): each of the five area labels with no same-named board
+  option (`cli`, `data`, `pipeline`, `quality`, `repository`) now carries a recorded per-label
+  decision — all five are permanently human-set, with the rationale enumerated in
+  `scripts/github/project_label_mapping.py`'s `UNMAPPED_LABELS` and pinned by a regression test.
+  The portfolio-side sweep minted one label, `portfolio: governance`, mapped to the board's
+  pre-existing Governance option (57 carrying items at audit time; filing #237 itself bounced on
+  the missing label) — a label addition only, no board option was created or modified.
+  `portfolio: case-study` and `portfolio: release` stay human-set as lifecycle markers. A new
+  "Label-to-board-field alignment (#237)" section in `docs/governance/label-taxonomy.md` records
+  the full decision table, the board-only option rationale, and the friction-based revisit
+  trigger for the remaining label-less Portfolio Signal options;
+  `docs/governance/github-project.md` and `github-metadata-automation.md` cross-reference it.
 
 ### Documentation
 
