@@ -39,8 +39,11 @@ should never have to name a step to get it done.
     `MERGED` and issues are `CLOSED` via `gh`; set Project status to `Merged`
     and issues to `Closed` (read-back verified); strip `status: in-progress`
     label from closed issues; check milestone emptiness; `git switch main`,
-    `git pull --ff-only`; prune merged local branches with `git branch -D`
-    and remove corresponding worktrees.
+    `git pull --ff-only`; copy any files under each worktree's
+    `artifacts/session-handoffs/` into the primary checkout's
+    `artifacts/session-handoffs/` (pruning must never delete the only copy of
+    a handoff); then prune merged local branches with `git branch -D` and
+    remove corresponding worktrees.
 11. **Milestone discipline:** verify a work item's milestone live against
     `docs/evaluation-policy.md` and `docs/benchmark-governance.md` rather
     than pattern-matching.
