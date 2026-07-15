@@ -61,9 +61,9 @@ modernized pipeline uses record/patient-grouped evaluation.
 
 ## Dataset
 
-PhysioNet Computing in Cardiology Challenge 2017 (AF classification).
-DOI and citation requirements must remain visible in documentation.
-Raw data is never committed to Git.
+MIT-BIH Arrhythmia Database v1.0.0 (`mitdb`), distributed by PhysioNet
+(DOI: 10.13026/C2F305). DOI and citation requirements must remain visible in
+documentation. Raw data is never committed to Git.
 
 ## Engineering discipline
 
