@@ -40,6 +40,14 @@ Add these only when they communicate useful routing or review context:
 - `size:*` estimates review surface from `xs` through `l`; it does not encode priority.
 - `dependency:*` records an external, repository-setting, or maintainer-decision dependency.
 
+Since issue #233, taxonomy labels are also the machine source for Project #5 board fields: the
+`project-item-autofill` workflow mirrors `type:`/`priority:`/`risk:`/`size:`/`area:`/`portfolio:`
+labels onto the corresponding board fields via the explicit table in
+`scripts/github/project_label_mapping.py`, filling only unset fields — see
+[Creation-time board population](github-metadata-automation.md#creation-time-board-population-issue-233).
+Assigning these labels is therefore the reviewable judgment step; the board transcription is
+mechanical.
+
 GitHub automation labels `bug` and `question` may remain when useful; they supplement this taxonomy and are
 not declared by the manifest. `duplicate`, `good first issue`, `help wanted`, `invalid`, and `wontfix` were
 retired in the #105/#113 migration pass (zero usage, not applicable to a single-maintainer repository).

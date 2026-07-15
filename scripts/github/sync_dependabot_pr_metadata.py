@@ -176,22 +176,20 @@ def ensure_project_item(
     client: github_api.ProjectClient,
     repo: str,
     pr_number: int,
-    owner: str,
-    project_number: int,
 ) -> github_api.ProjectItemRef:
     """Return the PR's project item, adding it to the board first when absent.
 
-    The add is never assumed to have worked: it is verified by a fresh
-    targeted re-lookup (the read-back-verified mutation rule from #164/#170),
-    and a re-lookup that still cannot find the item is a hard failure --
-    required data is unreadable, so the field sync cannot proceed.
+    Since issue #233 this is a thin delegation to the shared
+    `ProjectClient.ensure_item` primitive (the add-then-verify logic this
+    script originally owned was extracted so the creation-time board
+    automation could reuse it for issues); the behavior -- targeted lookup,
+    add if absent, verifying re-lookup as the only accepted evidence -- is
+    unchanged.
 
     Args:
         client: The Project access layer bound to the target project.
         repo: The pull request's "OWNER/REPO" slug.
         pr_number: The pull request's number in that repository.
-        owner: The project owner's login, for the item-add invocation.
-        project_number: The project's user-visible number, for item-add.
 
     Returns:
         The item and project node ids for the (possibly just-added) item.
@@ -201,34 +199,7 @@ def ensure_project_item(
             verifying re-lookup still cannot find the item (exit code 2).
     """
 
-    # Targeted lookup first: most re-runs (synchronize events) find the item
-    # already on the board, costing one GraphQL point and no mutation.
-    item = client.fetch_pull_request_item(repo, pr_number)
-    # Absent from the board: add it, then verify the add by re-looking it up
-    # rather than trusting item-add's exit status or output.
-    if item is None:
-        github_api.run_gh(
-            [
-                "project",
-                "item-add",
-                str(project_number),
-                "--owner",
-                owner,
-                "--url",
-                f"https://github.com/{repo}/pull/{pr_number}",
-                "--format",
-                "json",
-            ]
-        )
-        item = client.fetch_pull_request_item(repo, pr_number)
-        # The re-lookup is the only accepted evidence the add worked; without
-        # it there is no item id to mutate, so the run cannot continue.
-        if item is None:
-            raise github_api.GitHubApiError(
-                f"added pull request #{pr_number} to Project #{project_number} but the "
-                "verifying re-lookup still cannot find its item; refusing to proceed"
-            )
-    return item
+    return client.ensure_item(repo, pr_number, content_kind="pull-request")
 
 
 def set_field_default(
@@ -236,23 +207,23 @@ def set_field_default(
     item: github_api.ProjectItemRef,
     field_name: str,
     option_name: str,
-    project_number: int,
 ) -> bool:
     """Set one field to its bot-PR default unless a curated value already exists.
 
-    Reads the field's current value first: any existing value is preserved
-    untouched (curated values win -- house rule from AGENTS.md), because a
-    maintainer's manual triage must never be overwritten by bot defaults.
-    A blank field is mutated and then verified by a fresh targeted read-back,
-    with one bounded retry; the mutation's exit status is never treated as
-    proof of success (#164/#170).
+    Since issue #233 this is a thin delegation to the shared
+    `ProjectClient.set_single_select_if_unset` primitive (extracted from this
+    script so the creation-time board automation shares one precedence rule):
+    any existing value is preserved untouched (curated values win -- house
+    rule from AGENTS.md), and a blank field's write is verified by a fresh
+    targeted read-back with one bounded retry (#164/#170). The only local
+    behavior is translating an unconfirmed read-back into this script's
+    policy error so main() maps it to exit code 1.
 
     Args:
         client: The Project access layer bound to the target project.
         item: The project item to mutate, with its owning project's node id.
         field_name: The single-select field's display name, e.g. "Priority".
         option_name: The bot-PR default option to set, e.g. "Low".
-        project_number: The project's user-visible number, for log messages.
 
     Returns:
         True when the field was actually mutated (and verified); False when
@@ -263,69 +234,14 @@ def set_field_default(
             requested value within the bounded retry (exit code 1).
     """
 
-    # Fresh targeted read of the current value; this doubles as the
-    # idempotency pre-check, so a rerun over an already-stamped PR costs one
-    # read per field and zero mutations.
-    current = client.fetch_item_single_select(item.item_id, field_name)
-    # Non-blank means curated (a human, a built-in workflow, or a previous
-    # run already chose a value): preserve it and say so in the log.
-    if current is not None:
-        print(f"Project #{project_number} field {field_name!r} preserved (already {current!r}).")
-        return False
-    # Only a blank field earns the default; resolve the ids now (the
-    # field-list read behind this is cached on the client, so nine fields
-    # cost one schema read total).
-    field = client.single_select_option(field_name, option_name)
-    mutation_args = [
-        "project",
-        "item-edit",
-        "--id",
-        item.item_id,
-        "--project-id",
-        item.project_id,
-        "--field-id",
-        field.field_id,
-        "--single-select-option-id",
-        field.option_id,
-    ]
-    # Two attempts bound recovery from gh's misleading no-change response and
-    # from a stale first read-back, while ensuring every attempted write
-    # receives its own authoritative verification read.
-    for attempt in range(2):
-        # Only the observed false no-change response is eligible for
-        # read-back recovery; unrelated CLI failures (auth, schema, the
-        # primary rate limit) retain their fail-fast propagation.
-        try:
-            github_api.run_gh(mutation_args)
-        except github_api.GitHubApiError as error:
-            # A different error carries no evidence the mutation was
-            # accepted, so preserve it rather than masking the real fault.
-            if "no changes to make" not in str(error).lower():
-                raise
-
-        # Fresh targeted read of exactly this item's field -- never cached,
-        # never a board scan; only this read, not gh's exit status, proves
-        # the mutation landed.
-        observed = client.fetch_item_single_select(item.item_id, field_name)
-        # The requested option coming back verbatim is the success condition.
-        if observed == option_name:
-            print(
-                f"Project #{project_number} field {field_name!r} set to {option_name!r} "
-                "(verified by read-back)."
-            )
-            return True
-        # Any other read-back (absent or a different value) earns one retry;
-        # the second failure reports the exact observed value so operators
-        # see what actually won.
-        if attempt == 1:
-            observed_text = observed if observed is not None else "unset"
-            raise DependabotSyncPolicyError(
-                f"Project item {item.item_id} field {field_name!r} read back as "
-                f"{observed_text!r} after 2 attempts; expected {option_name!r}"
-            )
-    # Unreachable: the loop above always returns on success or raises on the
-    # final attempt. Kept only so a static checker sees every path resolve.
-    raise AssertionError("unreachable: set_field_default's retry loop returns or raises")
+    # The shared primitive raises its own unverified-mutation error class;
+    # re-raise it as this script's policy error so the house exit-code
+    # convention (unconfirmed mutation -> 1, unreadable data -> 2) that
+    # predates the extraction is preserved exactly.
+    try:
+        return client.set_single_select_if_unset(item, field_name, option_name)
+    except github_api.FieldMutationUnverifiedError as error:
+        raise DependabotSyncPolicyError(str(error)) from error
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -408,12 +324,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         # non-Dependabot PR exits 1 having issued zero mutations (including
         # the item-add, which is itself a mutation).
         require_dependabot_author(repo, args.pr_number)
-        item = ensure_project_item(client, repo, args.pr_number, args.owner, args.project_number)
+        item = ensure_project_item(client, repo, args.pr_number)
         # Sync the nine fields in their fixed documented order; each is
         # independently preserved-or-set with its own verification read.
         for field_name, option_name in _BOT_PR_FIELD_DEFAULTS:
             # Tally each outcome for the closing summary line.
-            if set_field_default(client, item, field_name, option_name, args.project_number):
+            if set_field_default(client, item, field_name, option_name):
                 fields_set += 1
             else:
                 fields_preserved += 1

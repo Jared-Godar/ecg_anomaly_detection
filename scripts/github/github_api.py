@@ -16,9 +16,13 @@ quota safeguards added by issue #173:
   reporting;
 - `ProjectClient`, an operation-scoped Project V2 accessor that caches
   schema lookups (field and option ids) and at most one full item snapshot
-  per instance, performs a bounded *targeted* pull-request -> project-item
-  lookup instead of scanning a full board read, and reads one item's
-  single-select field back via a targeted GraphQL `node(id:)` query.
+  per instance, performs bounded *targeted* pull-request/issue ->
+  project-item lookups instead of scanning a full board read, and reads one
+  item's single-select field back via a targeted GraphQL `node(id:)` query.
+  Since issue #233 it also owns the two shared mutation primitives the
+  board-population scripts previously duplicated: `ensure_item` (add to the
+  board with a verifying re-lookup) and `set_single_select_if_unset` (the
+  curated-values-win precedence rule with a read-back-verified write).
 
 Consumption model this module enforces (docs/governance/github-project.md):
 schema/identity lookups and the optional full snapshot are cached for the
@@ -68,6 +72,17 @@ class GraphQLQuotaInsufficientError(GitHubApiError):
     Raised by `QuotaMonitor.preflight` *before* any expensive or mutating work
     starts, so a run stops safely rather than half-completing a mutation phase
     on a nearly drained pool.
+    """
+
+
+class FieldMutationUnverifiedError(GitHubApiError):
+    """A single-select field mutation's targeted read-back never confirmed the value.
+
+    Raised by `ProjectClient.set_single_select_if_unset` when, after the
+    bounded two-attempt mutation loop, the fresh targeted read-back still does
+    not show the requested option. Distinct from the base error so script
+    callers can map an unconfirmed write to their policy/validation exit code
+    (house convention: 1) instead of the required-data-unreadable code (2).
     """
 
 
@@ -397,6 +412,34 @@ query($owner: String!, $name: String!, $number: Int!, $first: Int!) {
 }
 """
 
+# Targeted lookup, issue flavor: identical shape to the pull-request query
+# above, resolving one *issue's* Project V2 item memberships from the issue
+# side (issue #233's creation-time board automation needs both content kinds).
+# Kept as its own literal rather than a runtime template substitution so the
+# query text stays greppable and reviewable exactly as sent.
+_ISSUE_PROJECT_ITEMS_QUERY: str = """
+query($owner: String!, $name: String!, $number: Int!, $first: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      projectItems(first: $first) {
+        pageInfo { hasNextPage }
+        nodes {
+          id
+          project {
+            id
+            number
+            owner {
+              ... on User { login }
+              ... on Organization { login }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
 # Targeted read-back: read exactly one field's current value on exactly one
 # already-known Project item. This is the per-mutation verification read that
 # replaces the full-board `item-list` scan (issue #173): the read-back-verified
@@ -554,6 +597,76 @@ class ProjectClient:
                 (making "not tracked" unknowable from this page alone).
         """
 
+        return self._fetch_content_item(
+            repo,
+            pr_number,
+            query=_PULL_REQUEST_PROJECT_ITEMS_QUERY,
+            payload_key="pullRequest",
+            content_description=f"pull request #{pr_number}",
+        )
+
+    def fetch_issue_item(self, repo: str, issue_number: int) -> ProjectItemRef | None:
+        """Find one issue's item on this project via a bounded targeted lookup.
+
+        The issue-side twin of `fetch_pull_request_item` (issue #233): resolves
+        from `repository.issue.projectItems`, so the cost is one GraphQL point
+        regardless of how many items the board holds.
+
+        Args:
+            repo: The issue's "OWNER/REPO" slug.
+            issue_number: The issue's number in that repository.
+
+        Returns:
+            The item and project node ids, or None when the issue is not
+            tracked on this client's project at all.
+
+        Raises:
+            GitHubApiError: The repo slug is malformed, or the issue belongs
+                to more project items than the bounded page requested (making
+                "not tracked" unknowable from this page alone).
+        """
+
+        return self._fetch_content_item(
+            repo,
+            issue_number,
+            query=_ISSUE_PROJECT_ITEMS_QUERY,
+            payload_key="issue",
+            content_description=f"issue #{issue_number}",
+        )
+
+    def _fetch_content_item(
+        self,
+        repo: str,
+        number: int,
+        *,
+        query: str,
+        payload_key: str,
+        content_description: str,
+    ) -> ProjectItemRef | None:
+        """Run one targeted content -> project-item lookup and scan its memberships.
+
+        Shared implementation behind `fetch_pull_request_item` and
+        `fetch_issue_item`; the two public methods differ only in which GraphQL
+        query they send and which repository sub-key carries the result.
+
+        Args:
+            repo: The content's "OWNER/REPO" slug.
+            number: The issue or pull-request number in that repository.
+            query: The targeted projectItems GraphQL query to send.
+            payload_key: The repository sub-key holding the result
+                ("pullRequest" or "issue").
+            content_description: Human-readable content name for error text,
+                e.g. "pull request #117".
+
+        Returns:
+            The item and project node ids, or None when the content is not
+            tracked on this client's project at all.
+
+        Raises:
+            GitHubApiError: The repo slug is malformed, or the content belongs
+                to more project items than the bounded page requested.
+        """
+
         # The GraphQL repository() field takes owner and name separately, so
         # the conventional OWNER/REPO slug is split here.
         repo_owner, separator, repo_name = repo.partition("/")
@@ -564,30 +677,30 @@ class ProjectClient:
             "api",
             "graphql",
             "-f",
-            f"query={_PULL_REQUEST_PROJECT_ITEMS_QUERY}",
+            f"query={query}",
             "-f",
             f"owner={repo_owner}",
             "-f",
             f"name={repo_name}",
             "-F",
-            f"number={pr_number}",
+            f"number={number}",
             "-F",
             f"first={_PULL_REQUEST_PROJECT_ITEMS_BOUND}",
         ]
         payload = json.loads(run_gh(args))
-        memberships = payload["data"]["repository"]["pullRequest"]["projectItems"]
+        memberships = payload["data"]["repository"][payload_key]["projectItems"]
         # A truncated page makes absence unprovable: the sought project could
         # be on the next page. Fail loudly instead of silently reporting the
-        # PR as untracked -- the bound is a page size, not a coverage cap.
+        # content as untracked -- the bound is a page size, not a coverage cap.
         if memberships["pageInfo"]["hasNextPage"]:
             raise GitHubApiError(
-                f"pull request #{pr_number} belongs to more than "
+                f"{content_description} belongs to more than "
                 f"{_PULL_REQUEST_PROJECT_ITEMS_BOUND} project items; bounded targeted "
                 "lookup is inconclusive"
             )
-        # Scan the PR's own (small) membership list for this client's project,
-        # matching both number and owner login since numbers are only unique
-        # per owner.
+        # Scan the content's own (small) membership list for this client's
+        # project, matching both number and owner login since numbers are only
+        # unique per owner.
         for node in memberships["nodes"]:
             project = node["project"]
             # casefold comparison tolerates login-case differences between the
@@ -598,6 +711,174 @@ class ProjectClient:
             ):
                 return ProjectItemRef(item_id=node["id"], project_id=project["id"])
         return None
+
+    def ensure_item(self, repo: str, number: int, *, content_kind: str) -> ProjectItemRef:
+        """Return the content's project item, adding it to the board first when absent.
+
+        Extracted from `sync_dependabot_pr_metadata.py`'s pull-request-only
+        version so the creation-time board automation (issue #233) can share
+        it for issues. The add is never assumed to have worked: it is verified
+        by a fresh targeted re-lookup (the read-back-verified mutation rule
+        from #164/#170), and a re-lookup that still cannot find the item is a
+        hard failure -- required data is unreadable, so field work cannot
+        proceed.
+
+        Args:
+            repo: The content's "OWNER/REPO" slug.
+            number: The issue or pull-request number in that repository.
+            content_kind: Either "issue" or "pull-request"; selects both the
+                targeted-lookup flavor and the content URL shape item-add needs.
+
+        Returns:
+            The item and project node ids for the (possibly just-added) item.
+
+        Raises:
+            GitHubApiError: The content kind is unknown, or the item-add
+                reported success but the verifying re-lookup still cannot find
+                the item.
+        """
+
+        # The two content kinds differ in the lookup query and the URL path
+        # segment GitHub uses for them; everything else is shared.
+        if content_kind == "issue":
+            fetch = self.fetch_issue_item
+            content_url = f"https://github.com/{repo}/issues/{number}"
+        elif content_kind == "pull-request":
+            fetch = self.fetch_pull_request_item
+            content_url = f"https://github.com/{repo}/pull/{number}"
+        else:
+            raise GitHubApiError(
+                f"unknown content kind {content_kind!r}; expected 'issue' or 'pull-request'"
+            )
+        # Targeted lookup first: most re-runs (converge-on-labeled events,
+        # reruns) find the item already on the board, costing one GraphQL
+        # point and no mutation.
+        item = fetch(repo, number)
+        # Absent from the board: add it, then verify the add by re-looking it
+        # up rather than trusting item-add's exit status or output.
+        if item is None:
+            run_gh(
+                [
+                    "project",
+                    "item-add",
+                    str(self._project_number),
+                    "--owner",
+                    self._owner,
+                    "--url",
+                    content_url,
+                    "--format",
+                    "json",
+                ]
+            )
+            item = fetch(repo, number)
+            # The re-lookup is the only accepted evidence the add worked;
+            # without it there is no item id to mutate, so the run cannot
+            # continue.
+            if item is None:
+                raise GitHubApiError(
+                    f"added {content_kind} #{number} to Project "
+                    f"#{self._project_number} but the verifying re-lookup still "
+                    "cannot find its item; refusing to proceed"
+                )
+        return item
+
+    def set_single_select_if_unset(
+        self, item: ProjectItemRef, field_name: str, option_name: str
+    ) -> bool:
+        """Set one field's value unless any value already exists, verified by read-back.
+
+        Extracted from `sync_dependabot_pr_metadata.py`'s bot-default version
+        so the creation-time board automation (issue #233) shares one
+        precedence rule: a field that already holds ANY value is preserved
+        untouched (curated values win -- house rule from AGENTS.md), because a
+        maintainer's manual triage must never be overwritten by automation.
+        A blank field is mutated and then verified by a fresh targeted
+        read-back, with one bounded retry; the mutation's exit status is never
+        treated as proof of success (#164/#170).
+
+        Args:
+            item: The project item to mutate, with its owning project's node id.
+            field_name: The single-select field's display name, e.g. "Priority".
+            option_name: The option to set when the field is blank, e.g. "Low".
+
+        Returns:
+            True when the field was actually mutated (and verified); False
+            when an existing curated value was preserved.
+
+        Raises:
+            FieldMutationUnverifiedError: The read-back never confirmed the
+                requested value within the bounded retry.
+        """
+
+        # Fresh targeted read of the current value; this doubles as the
+        # idempotency pre-check, so a rerun over an already-populated item
+        # costs one read per field and zero mutations.
+        current = self.fetch_item_single_select(item.item_id, field_name)
+        # Non-blank means curated (a human, a built-in workflow, or a previous
+        # run already chose a value): preserve it and say so in the log.
+        if current is not None:
+            print(
+                f"Project #{self._project_number} field {field_name!r} preserved "
+                f"(already {current!r})."
+            )
+            return False
+        # Only a blank field earns a write; resolve the ids now (the
+        # field-list read behind this is cached on the client, so many fields
+        # cost one schema read total).
+        field = self.single_select_option(field_name, option_name)
+        mutation_args = [
+            "project",
+            "item-edit",
+            "--id",
+            item.item_id,
+            "--project-id",
+            item.project_id,
+            "--field-id",
+            field.field_id,
+            "--single-select-option-id",
+            field.option_id,
+        ]
+        # Two attempts bound recovery from gh's misleading no-change response
+        # and from a stale first read-back, while ensuring every attempted
+        # write receives its own authoritative verification read.
+        for attempt in range(2):
+            # Only the observed false no-change response is eligible for
+            # read-back recovery; unrelated CLI failures (auth, schema, the
+            # primary rate limit) retain their fail-fast propagation.
+            try:
+                run_gh(mutation_args)
+            except GitHubApiError as error:
+                # A different error carries no evidence the mutation was
+                # accepted, so preserve it rather than masking the real fault.
+                if "no changes to make" not in str(error).lower():
+                    raise
+
+            # Fresh targeted read of exactly this item's field -- never
+            # cached, never a board scan; only this read, not gh's exit
+            # status, proves the mutation landed.
+            observed = self.fetch_item_single_select(item.item_id, field_name)
+            # The requested option coming back verbatim is the success condition.
+            if observed == option_name:
+                print(
+                    f"Project #{self._project_number} field {field_name!r} set to "
+                    f"{option_name!r} (verified by read-back)."
+                )
+                return True
+            # Any other read-back (absent or a different value) earns one
+            # retry; the second failure reports the exact observed value so
+            # operators see what actually won.
+            if attempt == 1:
+                observed_text = observed if observed is not None else "unset"
+                raise FieldMutationUnverifiedError(
+                    f"Project item {item.item_id} field {field_name!r} read back as "
+                    f"{observed_text!r} after 2 attempts; expected {option_name!r}"
+                )
+        # Unreachable: the loop above always returns on success or raises on
+        # the final attempt. Kept only so a static checker sees every path
+        # resolve.
+        raise AssertionError(
+            "unreachable: set_single_select_if_unset's retry loop returns or raises"
+        )
 
     def fetch_item_single_select(self, item_id: str, field_name: str) -> str | None:
         """Read one item's current single-select value via a targeted node(id:) query.

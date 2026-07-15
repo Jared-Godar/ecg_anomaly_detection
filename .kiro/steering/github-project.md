@@ -63,12 +63,21 @@ Every issue and PR added to the project must populate:
 
 ## Status lifecycle
 
-- New items: Backlog
+- New items: Backlog (set automatically by `project-item-autofill.yml` when unset)
 - Implementation PR linked: In Progress
 - PR open and awaiting merge: Review
 - PR merged: Merged (set by `project-status-sync.yml`; verify with read-back)
 - Issue completed and closed: Closed
 - Issue closed as "not planned": Not Planned
+
+## Creation-time autofill (issue #233)
+
+`project-item-autofill.yml` adds every human-authored issue/PR to the board on
+`opened`/`labeled` events and mirrors label-derivable fields (`type:` → Issue
+Type, `priority:` → Priority, `risk:` → Risk, `size:` → Size, `area:` →
+Repository Area, `portfolio:` → Portfolio Signal), filling only UNSET fields —
+curated values win. Workstream and Target Release stay human-set. Still verify
+with a read-back; automation is a default, not a substitute for verification.
 
 ## CLI patterns (Fish)
 

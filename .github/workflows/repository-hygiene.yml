@@ -38,6 +38,37 @@ jobs:
         run: |
           uv run python scripts/detect_label_drift.py --repo "${{ github.repository }}"
 
+  board-drift:
+    name: Detect Project board membership/field drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@f98e06938123ccabd21905ea5d0069192241f9f1 # v8.3.1
+        with:
+          enable-cache: true
+
+      - name: Create locked environment
+        run: uv sync --locked --dev
+
+      # The backstop behind project-item-autofill.yml (issue #233): flags open
+      # items the creation-time automation missed (outages, races, fork PRs,
+      # UI-created items) -- missing board membership or label-derivable
+      # fields left unset. Read-only; remediation stays manual. Needs the
+      # Projects-scoped classic PAT because the board snapshot is a Projects
+      # V2 GraphQL read the default GITHUB_TOKEN cannot perform for a
+      # user-owned project (docs/governance/github-metadata-automation.md).
+      - name: Detect open items missing board membership or label-derived fields
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_METADATA_TOKEN }}
+        run: |
+          uv run python scripts/detect_board_drift.py --repo "${{ github.repository }}"
+
   held-out-trigger-safety:
     name: Check held-out execution trigger safety
     runs-on: ubuntu-latest

@@ -216,9 +216,21 @@ merge, release-tag) require an explicit go-ahead; everything else here is standi
 
 ### Project planning metadata
 
-- Add every issue and pull request to the `ECG Pipeline Modernization` Project #5.
+- **Canonical rule: every issue and pull request must be on Project #5 with the mandatory label
+  set** (one `type:*`, at least one `area:*`, plus the applicable priority/risk/size/portfolio
+  labels). This is not optional per item; the automation below exists to make it the default,
+  not to make it someone else's job.
+- Add every issue and pull request to the `ECG Pipeline Modernization` Project #5. The
+  `project-item-autofill` workflow (issue #233) does the creation-time leg automatically on
+  `opened`/`labeled` events: board membership, Status → Backlog when unset, and every
+  label-derivable field (`type:` → Issue Type, `priority:` → Priority, `risk:` → Risk,
+  `size:` → Size, `area:` → Repository Area, `portfolio:` → Portfolio Signal), filling only
+  UNSET fields — curated values always win. Agents still verify the result with a read-back and
+  still set the fields the automation deliberately never touches (see
+  [Creation-time board population](docs/governance/github-metadata-automation.md#creation-time-board-population-issue-233)).
 - Populate Status, Workstream, Issue Type, Priority, Risk, Size, Repository Area, Portfolio Signal,
-  and Target Release for every project item.
+  and Target Release for every project item. Workstream and Target Release have no label source
+  and are always set by a human or agent judgment call, never inferred by automation.
 - Set new issues to `Backlog`, active pull requests to `In Progress` while implementation is
   underway and `Review` once open and awaiting merge, merged pull requests to `Merged`
   (`project-status-sync.yml` sets this automatically; correct manually if it ever doesn't -- see

@@ -9,6 +9,24 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Added
 
+- Automated Project #5 membership and label-derived field population at item-creation time for
+  #233. A new `project-item-autofill` workflow fires on `issues`/`pull_request`
+  `opened`/`labeled` events and runs `scripts/github/populate_project_item.py`, which
+  idempotently adds the item to the board (verified by targeted re-lookup), defaults Status to
+  Backlog only when unset, and fills every field derivable from the item's labels via the new
+  shared mapping table `scripts/github/project_label_mapping.py` (`type:` → Issue Type,
+  `priority:` → Priority, `risk:` → Risk, `size:` → Size, `area:` → Repository Area,
+  `portfolio:` → Portfolio Signal) — converging as labels land, only ever filling unset fields
+  (curated values win), resolving option IDs by name at runtime, and skipping governed-bot
+  (Dependabot) items whose stamping the Dependabot autofill path owns. Workstream and Target
+  Release remain deliberately human-set. A scheduled hygiene backstop
+  (`scripts/detect_board_drift.py`, new `board-drift` job in `repository-hygiene.yml`) flags
+  open items with missing board membership or unset label-derivable fields; the shared access
+  layer gained the issue-side targeted lookup, `ensure_item`, and `set_single_select_if_unset`
+  primitives (extracted from the Dependabot sync, which now delegates to them). Documented in
+  `docs/governance/github-metadata-automation.md`, `docs/governance/github-project.md`, and
+  `AGENTS.md`; unit tests cover the mapping table's manifest-completeness invariant,
+  precedence, idempotency, conflict withholding, and the house exit-code mapping.
 - Added a sanctioned non-closing issue reference marker to the automated PR metadata gate for
   #216: a pull request body line of the form `Non-closing ref: #N — <reason>` (case-insensitive,
   em-dash or hyphen, reason mandatory) now satisfies the closing-reference requirement without

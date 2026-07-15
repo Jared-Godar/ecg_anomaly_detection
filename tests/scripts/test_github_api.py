@@ -680,3 +680,304 @@ def test_fetch_item_single_select_is_never_cached() -> None:
         assert client.fetch_item_single_select("PVTI_target", "Status") == "Closed"
         assert client.fetch_item_single_select("PVTI_target", "Status") == "Merged"
     assert mock_run.call_count == 2
+
+
+# --- ProjectClient targeted issue item lookup (issue #233) ------------------------------
+
+
+def _issue_items_payload(nodes: list[dict[str, object]], *, has_next_page: bool = False) -> str:
+    """Build a fake targeted projectItems GraphQL response for one issue.
+
+    Args:
+        nodes: The issue's project-item memberships, each shaped like the query's nodes.
+        has_next_page: Whether the response claims more memberships exist.
+
+    Returns:
+        JSON text matching `gh api graphql`'s response envelope.
+    """
+
+    return json.dumps(
+        {
+            "data": {
+                "repository": {
+                    "issue": {
+                        "projectItems": {
+                            "pageInfo": {"hasNextPage": has_next_page},
+                            "nodes": nodes,
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+
+def test_fetch_issue_item_matches_project_number_and_owner() -> None:
+    """The issue-side lookup matches on project number and owner, like the PR twin."""
+
+    nodes = [
+        {
+            "id": "PVTI_issue",
+            "project": {"id": "PVT_project", "number": 5, "owner": {"login": "Jared-Godar"}},
+        },
+    ]
+    client = gha.ProjectClient("Jared-Godar", 5)
+    # One targeted issue-side lookup serves the whole match.
+    with patch.object(
+        subprocess, "run", return_value=_completed(_issue_items_payload(nodes))
+    ) as mock_run:
+        item = client.fetch_issue_item("Jared-Godar/ecg_anomaly_detection", 233)
+    assert item is not None
+    assert item.item_id == "PVTI_issue"
+    assert item.project_id == "PVT_project"
+    # The query must resolve from the issue side of the repository object,
+    # never the pull-request side (the two content kinds have distinct fields).
+    query_arg = next(arg for arg in mock_run.call_args_list[0].args[0] if "query=" in arg)
+    assert "issue(number: $number)" in query_arg
+
+
+def test_fetch_issue_item_returns_none_when_not_tracked() -> None:
+    """An issue with no membership on this project returns None, not an error."""
+
+    client = gha.ProjectClient("Jared-Godar", 5)
+    # An empty membership list means the issue was never added to the project.
+    with patch.object(subprocess, "run", return_value=_completed(_issue_items_payload([]))):
+        assert client.fetch_issue_item("Jared-Godar/ecg_anomaly_detection", 233) is None
+
+
+def test_fetch_issue_item_fails_loudly_on_a_truncated_page() -> None:
+    """A truncated membership page makes absence unprovable, so the lookup raises."""
+
+    client = gha.ProjectClient("Jared-Godar", 5)
+    # hasNextPage means the sought project could be beyond the bounded page.
+    with (
+        patch.object(
+            subprocess,
+            "run",
+            return_value=_completed(_issue_items_payload([], has_next_page=True)),
+        ),
+        pytest.raises(gha.GitHubApiError, match="inconclusive"),
+    ):
+        client.fetch_issue_item("Jared-Godar/ecg_anomaly_detection", 233)
+
+
+# --- ProjectClient ensure_item (issue #233) ---------------------------------------------
+
+
+def test_ensure_item_returns_an_existing_member_without_adding() -> None:
+    """A content item already on the board is returned from the one targeted lookup."""
+
+    nodes = [
+        {
+            "id": "PVTI_existing",
+            "project": {"id": "PVT_project", "number": 5, "owner": {"login": "Jared-Godar"}},
+        },
+    ]
+    client = gha.ProjectClient("Jared-Godar", 5)
+    # The truncated page arrives on the one lookup this test performs.
+    with patch.object(
+        subprocess, "run", return_value=_completed(_issue_items_payload(nodes))
+    ) as mock_run:
+        item = client.ensure_item("Jared-Godar/ecg_anomaly_detection", 233, content_kind="issue")
+    assert item.item_id == "PVTI_existing"
+    # Exactly one lookup, zero mutations: the idempotent fast path.
+    assert mock_run.call_count == 1
+    assert all("item-add" not in call.args[0] for call in mock_run.call_args_list)
+
+
+def test_ensure_item_adds_and_verifies_an_absent_member() -> None:
+    """An absent item is added and the verifying re-lookup is the accepted evidence."""
+
+    found = _issue_items_payload(
+        [
+            {
+                "id": "PVTI_added",
+                "project": {"id": "PVT_project", "number": 5, "owner": {"login": "Jared-Godar"}},
+            }
+        ]
+    )
+    responses = [
+        _completed(_issue_items_payload([])),
+        _completed("{}"),
+        _completed(found),
+    ]
+    client = gha.ProjectClient("Jared-Godar", 5)
+    # The single scripted response is the one targeted lookup (fast path).
+    with patch.object(subprocess, "run", side_effect=responses) as mock_run:
+        item = client.ensure_item("Jared-Godar/ecg_anomaly_detection", 233, content_kind="issue")
+    assert item.item_id == "PVTI_added"
+    # The add carried the issue-flavored content URL to the right board.
+    add_call = mock_run.call_args_list[1].args[0]
+    assert "item-add" in add_call
+    assert "https://github.com/Jared-Godar/ecg_anomaly_detection/issues/233" in add_call
+
+
+def test_ensure_item_uses_the_pull_flavored_url_for_pull_requests() -> None:
+    """The pull-request kind drives the PR lookup query and the /pull/ content URL."""
+
+    pr_found = json.dumps(
+        {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "projectItems": {
+                            "pageInfo": {"hasNextPage": False},
+                            "nodes": [
+                                {
+                                    "id": "PVTI_pr",
+                                    "project": {
+                                        "id": "PVT_project",
+                                        "number": 5,
+                                        "owner": {"login": "Jared-Godar"},
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                }
+            }
+        }
+    )
+    pr_empty = json.dumps(
+        {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "projectItems": {"pageInfo": {"hasNextPage": False}, "nodes": []}
+                    }
+                }
+            }
+        }
+    )
+    responses = [_completed(pr_empty), _completed("{}"), _completed(pr_found)]
+    client = gha.ProjectClient("Jared-Godar", 5)
+    # Scripted exchange: empty lookup, item-add, verifying re-lookup.
+    with patch.object(subprocess, "run", side_effect=responses) as mock_run:
+        item = client.ensure_item(
+            "Jared-Godar/ecg_anomaly_detection", 155, content_kind="pull-request"
+        )
+    assert item.item_id == "PVTI_pr"
+    add_call = mock_run.call_args_list[1].args[0]
+    assert "https://github.com/Jared-Godar/ecg_anomaly_detection/pull/155" in add_call
+
+
+def test_ensure_item_raises_when_the_verifying_re_lookup_finds_nothing() -> None:
+    """An add whose re-lookup still finds nothing is a hard failure, not a success."""
+
+    responses = [
+        _completed(_issue_items_payload([])),
+        _completed("{}"),
+        _completed(_issue_items_payload([])),
+    ]
+    client = gha.ProjectClient("Jared-Godar", 5)
+    # item-add's own exit status is never accepted as evidence the add worked.
+    with (
+        patch.object(subprocess, "run", side_effect=responses),
+        pytest.raises(gha.GitHubApiError, match="verifying re-lookup"),
+    ):
+        client.ensure_item("Jared-Godar/ecg_anomaly_detection", 233, content_kind="issue")
+
+
+def test_ensure_item_rejects_an_unknown_content_kind() -> None:
+    """An unknown content kind is rejected before any gh call is made."""
+
+    client = gha.ProjectClient("Jared-Godar", 5)
+    # No subprocess call may happen: the kind is rejected up front.
+    with (
+        patch.object(subprocess, "run") as mock_run,
+        pytest.raises(gha.GitHubApiError, match="unknown content kind"),
+    ):
+        client.ensure_item("Jared-Godar/ecg_anomaly_detection", 233, content_kind="discussion")
+    mock_run.assert_not_called()
+
+
+# --- ProjectClient set_single_select_if_unset (issue #233) -------------------------------
+
+
+def _single_field_list_payload() -> str:
+    """Build a fake field-list payload holding one Status field with a Backlog option.
+
+    Returns:
+        JSON text matching gh's field-list output shape.
+    """
+
+    return json.dumps(
+        {
+            "fields": [
+                {
+                    "id": "PVTSSF_status",
+                    "name": "Status",
+                    "options": [{"id": "backlog", "name": "Backlog"}],
+                }
+            ]
+        }
+    )
+
+
+def test_set_single_select_if_unset_preserves_an_existing_value() -> None:
+    """Any existing value short-circuits the write: curated values win.
+
+    This is the precedence rule the creation-time automation depends on -- a
+    lane or field a human already chose is never regressed or overwritten.
+    """
+
+    client = gha.ProjectClient("Jared-Godar", 5)
+    item = gha.ProjectItemRef(item_id="PVTI_target", project_id="PVT_project")
+    already_set = _completed(_read_back_payload({"fieldValueByName": {"name": "In Progress"}}))
+    # The one scripted response is the idempotency pre-check read.
+    with patch.object(subprocess, "run", return_value=already_set) as mock_run:
+        mutated = client.set_single_select_if_unset(item, "Status", "Backlog")
+    assert mutated is False
+    # One read, zero mutations.
+    assert mock_run.call_count == 1
+    assert all("item-edit" not in call.args[0] for call in mock_run.call_args_list)
+
+
+def test_set_single_select_if_unset_writes_and_verifies_a_blank_field() -> None:
+    """A blank field is mutated and the fresh read-back is the proof of success."""
+
+    responses = [
+        # Pre-check: unset.
+        _completed(_read_back_payload({"fieldValueByName": None})),
+        # One-time schema read to resolve the field and option ids by name.
+        _completed(_single_field_list_payload()),
+        # The item-edit mutation itself.
+        _completed(""),
+        # Verifying read-back observes the requested option.
+        _completed(_read_back_payload({"fieldValueByName": {"name": "Backlog"}})),
+    ]
+    client = gha.ProjectClient("Jared-Godar", 5)
+    item = gha.ProjectItemRef(item_id="PVTI_target", project_id="PVT_project")
+    # Scripted exchange: pre-check, schema read, mutation, read-back.
+    with patch.object(subprocess, "run", side_effect=responses) as mock_run:
+        mutated = client.set_single_select_if_unset(item, "Status", "Backlog")
+    assert mutated is True
+    # The mutation carried the ids resolved by name from the schema read.
+    edit_call = mock_run.call_args_list[2].args[0]
+    assert "item-edit" in edit_call
+    assert "PVTSSF_status" in edit_call
+    assert "backlog" in edit_call
+
+
+def test_set_single_select_if_unset_raises_after_two_unconfirmed_attempts() -> None:
+    """A read-back that never confirms raises the distinct unverified-mutation error."""
+
+    responses = [
+        # Pre-check: unset.
+        _completed(_read_back_payload({"fieldValueByName": None})),
+        _completed(_single_field_list_payload()),
+        # First attempt: edit accepted, read-back still unset.
+        _completed(""),
+        _completed(_read_back_payload({"fieldValueByName": None})),
+        # Second attempt: same outcome, which must fail loudly.
+        _completed(""),
+        _completed(_read_back_payload({"fieldValueByName": None})),
+    ]
+    client = gha.ProjectClient("Jared-Godar", 5)
+    item = gha.ProjectItemRef(item_id="PVTI_target", project_id="PVT_project")
+    # Scripted exchange: both mutation attempts read back still-unset.
+    with (
+        patch.object(subprocess, "run", side_effect=responses),
+        pytest.raises(gha.FieldMutationUnverifiedError, match="after 2 attempts"),
+    ):
+        client.set_single_select_if_unset(item, "Status", "Backlog")

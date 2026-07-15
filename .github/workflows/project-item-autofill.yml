@@ -1,0 +1,83 @@
+name: Project item autofill
+
+# Creation-time Project #5 board population (issue #233): every human-authored
+# issue and pull request is added to the board on `opened` with Status
+# defaulted to Backlog, and its label-derivable fields (type:/priority:/
+# risk:/size:/area:/portfolio:) converge as `labeled` events land. The script
+# only ever fills UNSET fields -- curated values always win -- and resolves
+# option IDs by name at runtime, never from hardcoded IDs. Workstream and
+# Target Release have no label source and stay human-set; the PR metadata
+# gate remains the completeness enforcement point.
+#
+# IMPORTANT testing caveat: `issues:`-triggered workflows execute the
+# definition on the DEFAULT branch, so changes to this file only take effect
+# after merge -- verify post-merge with a disposable probe issue (see
+# docs/governance/github-metadata-automation.md).
+on:
+  issues:
+    types: [opened, labeled]
+  pull_request:
+    types: [opened, labeled]
+
+permissions:
+  contents: read
+
+# One group per item: bursts of `labeled` events (an agent applying a full
+# label set fires one event per label) queue behind the running job, and
+# GitHub keeps only the newest pending run. cancel-in-progress stays false so
+# a mid-flight population is never killed half-done (the interrupted-batch
+# failure mode issue #233 exists to end); the surviving pending run converges
+# on whatever labels exist by the time it starts.
+concurrency:
+  group: project-item-autofill-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  populate:
+    name: Populate Project #5 membership and label-derived fields
+    # Governed-bot (Dependabot) items are excluded here AND server-side in the
+    # script: dependabot-autofill.yml owns their board stamping with
+    # bot-specific defaults. Fork pull requests are excluded because plain
+    # pull_request events from forks receive no repository secrets, so the
+    # Projects-scoped token below would resolve empty and the run could only
+    # fail; fork PRs fall to the scheduled board-drift backstop instead.
+    if: >-
+      (github.event_name == 'issues' &&
+       github.event.issue.user.login != 'dependabot[bot]') ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.user.login != 'dependabot[bot]' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@f98e06938123ccabd21905ea5d0069192241f9f1 # v8.3.1
+        with:
+          enable-cache: true
+
+      - name: Create locked environment
+        run: uv sync --locked --dev
+
+      # PROJECT_METADATA_TOKEN is the CLASSIC PAT (scopes: project +
+      # public_repo + read:org) shared with project-status-sync.yml and the
+      # metadata gate; fine-grained tokens cannot access user-owned Projects
+      # -- see docs/governance/github-metadata-automation.md. Every dynamic
+      # value crosses into the run body via env, never inline expression
+      # interpolation, matching the repository's privileged-workflow
+      # conventions even though this workflow runs without PR-head content.
+      - name: Populate board membership and label-derived fields
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_METADATA_TOKEN }}
+          CONTENT_TYPE: ${{ github.event_name == 'issues' && 'issue' || 'pull-request' }}
+          ITEM_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          TARGET_REPO: ${{ github.repository }}
+        run: |
+          uv run python scripts/github/populate_project_item.py \
+            --content-type "$CONTENT_TYPE" \
+            --number "$ITEM_NUMBER" \
+            --repo "$TARGET_REPO"
