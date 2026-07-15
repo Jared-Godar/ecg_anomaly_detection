@@ -235,6 +235,20 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Amended the **session-handoff continuity** contract for worktree-isolated sessions (#236): a
+  session confined to a `.claude/worktrees/` worktree often cannot write to the primary
+  checkout's `artifacts/session-handoffs/` (its file-editing tools are confined to the
+  worktree), so its handoff previously landed in the worktree's own ignored
+  artifacts zone — exactly the directory deleted when the closure pass prunes the worktree (hit
+  live during #233). The contract's three surfaces (`AGENTS.md` standing commitments plus
+  canonical-workflow step 10, the `.claude/CLAUDE.md` Claude addendum, and
+  `.kiro/steering/agent-conduct.md` with `workflow-rules.md` step 10) now codify the fallback
+  chain: write the handoff worktree-local first as the checkpoint, copy it into the primary
+  checkout's `artifacts/session-handoffs/` in the same turn when that checkout is writable, and
+  fall back to one fenced in-chat markdown block when no checkout is writable at all; the
+  closure pass copies any remaining handoff files out of a worktree before removing it, so
+  pruning never deletes the only copy. Project memory records the primary-checkout path, which
+  survives pruning, never the worktree path.
 - Codified a **session-handoff continuity** contract in `AGENTS.md`'s standing commitments, with
   a Claude-specific addendum in `.claude/CLAUDE.md` (#211): when a working session approaches the
   maintainer's usage limit — signaled explicitly ("wrap up", "session limit approaching") or via

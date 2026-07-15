@@ -31,7 +31,15 @@ defect, not a style choice.
   time, an unusually long session) — the agent produces a Markdown handoff walkthrough BEFORE the
   session ends, so the maintainer can continue the in-flight work locally with no agent at all.
   Write it to the gitignored `artifacts/session-handoffs/<UTC-timestamp>-<slug>.md` (create the
-  directory if absent; never commit handoff files) and point the maintainer at it. Required
+  directory if absent; never commit handoff files) and point the maintainer at it. A session
+  isolated in a `.claude/worktrees/` worktree typically cannot edit files outside its worktree
+  (file-editing tools are confined there; a plain shell copy out may still be permitted): write
+  the handoff to the worktree's own `artifacts/session-handoffs/` first (that is the
+  checkpoint), copy it into the primary checkout's `artifacts/session-handoffs/` in the same
+  turn when the environment permits the copy, and say plainly which copy is the one to read. The closure pass
+  copies any remaining handoff files out of a worktree before pruning it (canonical workflow
+  step 10), so pruning never deletes the only copy. A session with no writable checkout at all
+  falls back to one fenced markdown block in-chat (see the `.claude/CLAUDE.md` addendum). Required
   contents: a state snapshot (branch, commits, PR/issue numbers, which gates ran with their
   results, and a plain done / queued / owed accounting); numbered next steps in which every
   action is a copy-pasteable **Fish** code block runnable from the repository root (see Local
@@ -114,7 +122,10 @@ merge, release-tag) require an explicit go-ahead; everything else here is standi
     check whether the milestone is now empty and close it only if genuinely so; `git switch main`
     and `git pull --ff-only`; and **prune** — `git fetch --prune`, then delete every fully-merged
     local branch with `git branch -D` (squash merges break `-d`'s ancestry check) and remove the
-    corresponding worktrees, not just the branch from the PR just closed.
+    corresponding worktrees, not just the branch from the PR just closed. Before removing any
+    worktree, copy every file under its `artifacts/session-handoffs/` into the primary
+    checkout's `artifacts/session-handoffs/` (the session-handoff contract's copy-out step —
+    pruning must never delete the only copy of a handoff).
 11. **Milestone discipline:** verify a work item's milestone live against the actual scope docs
     (`docs/evaluation-policy.md`, `docs/benchmark-governance.md`) rather than pattern-matching;
     an issue found mid-implementation of already-milestoned work should generally join that

@@ -211,6 +211,16 @@ mechanics:
   Code. In a web/cloud Claude session with no access to this local checkout, fall back to one
   fenced markdown block in-chat that the maintainer can save — never push handoff files to the
   repository to deliver them.
+- In a worktree-isolated session (working directory under `.claude/worktrees/`), the Write tool
+  can only reach the worktree's own `artifacts/session-handoffs/` — write the handoff there
+  first, then copy it into the primary checkout's `artifacts/session-handoffs/` in the same turn
+  if the environment permits (a plain `cp` via the Bash tool; both zones are gitignored), and
+  link the copy the maintainer should open. If the copy-out is blocked, say so explicitly and
+  rely on the closure pass, which copies handoff files out of a worktree before pruning it
+  (AGENTS.md canonical workflow step 10).
+- When recording the handoff's existence in project memory (below), record the primary
+  checkout's path, not the worktree path — the worktree path stops existing once the worktree is
+  pruned.
 - The Bash tool runs zsh in this environment, but the handoff's code blocks are for the
   maintainer's interactive shell and must be **Fish** (same rule as the Shell section above).
 - When a wind-down request arrives mid-task, finish or cleanly checkpoint the current atomic step

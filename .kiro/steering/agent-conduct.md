@@ -80,6 +80,16 @@ Markdown handoff walkthrough BEFORE the session ends:
 - Contents: state snapshot (branch, commits, PR/issues, gate results,
   done/queued/owed accounting), numbered Fish-syntax next steps, links,
   open risks
+- Worktree-isolated sessions (working directory under `.claude/worktrees/`)
+  typically cannot edit files outside the worktree, though a plain shell copy
+  out may still be permitted: write the handoff to the worktree's own
+  `artifacts/session-handoffs/` first (the checkpoint), copy it into the
+  primary checkout's `artifacts/session-handoffs/` in the same turn when the
+  environment permits, and say which copy is the one to read. The closure
+  pass copies any remaining handoff files out of a worktree before pruning it
+  (workflow step 10), so pruning never deletes the only copy. A session with
+  no writable checkout at all falls back to one fenced markdown block
+  in-chat.
 
 ## Scope boundaries
 
