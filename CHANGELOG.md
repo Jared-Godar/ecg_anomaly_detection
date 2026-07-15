@@ -171,6 +171,26 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Fixed
 
+- Corrected three v1.1.0 release-gate documentation and metadata defects surfaced by the #218
+  release-readiness audit, all landing before the deliberate tag/publish step (#180). (1) The
+  tracked Kiro steering file `.kiro/steering/project-context.md` named the wrong dataset in its
+  `## Dataset` section — "PhysioNet Computing in Cardiology Challenge 2017 (AF classification)" —
+  which would seed every Kiro session with a false premise; it now names the actual dataset, the
+  MIT-BIH Arrhythmia Database v1.0.0 (`mitdb`, PhysioNet, DOI 10.13026/C2F305), matching
+  `configs/mitdb-v1.0.0.toml`, `docs/data-provenance.md`, and `README.md` (#223). A repo-wide
+  sweep confirmed this was the only 2017/CinC/AF residue. (2) `docs/governance/releases.md`
+  asserted the package was already "tagged as the `v1.1.0` GitHub release," contradicting
+  `versioning.md`'s metadata-is-not-a-tag rule and the same file's own following sentences; the
+  paragraph now states accurately that the metadata is `1.1.0` while no `v1.1.0` tag or release
+  exists yet, and records that the separately authorized tag step updates it to released state at
+  that time (#224). (3) `CITATION.cff` lacked a `version` field and carried a stale
+  `date-released: 2022-01-18`, so it could not satisfy `versioning.md`'s requirement that package
+  metadata, changelog heading, tag, and citation identify the same version; it now declares
+  `version: 1.1.0` (matching `pyproject.toml`) and intentionally omits `date-released` — with a
+  documented in-file comment — until the tag is cut, deferring the release-date stamp to #180
+  rather than asserting a date for a release that has not occurred. Validated with `cffconvert`
+  (schema 1.2.0). Documentation and metadata only; no supported pipeline code, tests, or
+  notebooks changed.
 - Folded `http.client.IncompleteRead` into acquisition's single-exception contract and transient
   retry classification for #206: a server closing a known-`Content-Length` response mid-body makes
   `response.read()` raise `IncompleteRead` — an `http.client.HTTPException`, outside the previously
