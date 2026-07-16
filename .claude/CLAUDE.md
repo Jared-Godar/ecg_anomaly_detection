@@ -217,7 +217,9 @@ mechanics:
   if the environment permits (a plain `cp` via the Bash tool; both zones are gitignored), and
   link the copy the maintainer should open. If the copy-out is blocked, say so explicitly and
   rely on the closure pass, which copies handoff files out of a worktree before pruning it
-  (AGENTS.md canonical workflow step 10).
+  (AGENTS.md canonical workflow step 10). The same write-locally-then-copy-out mechanics apply
+  to the proactive continuity walkthrough's `artifacts/walkthroughs/` zone (AGENTS.md standing
+  commitments — #251).
 - When recording the handoff's existence in project memory (below), record the primary
   checkout's path, not the worktree path — the worktree path stops existing once the worktree is
   pruned.

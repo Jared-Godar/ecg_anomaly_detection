@@ -19,6 +19,28 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Codified the **proactive continuity walkthrough** and **merge green-light** contracts in
+  `AGENTS.md` (#251). Every implementation session now writes a fill-in-the-rails walkthrough —
+  numbered mechanical steps as copy-pasteable Fish blocks, each followed by its verification
+  command — immediately after branching (not on wind-down request), refreshed at the PR-open and
+  awaiting-merge checkpoints, to the gitignored `artifacts/walkthroughs/<UTC-timestamp>-issue-<n>-<slug>.md`;
+  worktree sessions follow the same write-locally-then-copy-out flow as session handoffs, and the
+  closure pass's pre-prune copy-out now covers walkthroughs alongside handoffs. A new tracked
+  template, `docs/governance/templates/continuity-walkthrough-template.md`, generalizes the #246
+  exemplar (executed end-to-end by hand as PR #249), keeping its load-bearing traits
+  (verification after every action step, Fish-only syntax with `printf` instead of heredocs, the
+  no-changes-needed early exit, the #100 issue-lane quirk and cancelled-duplicate-check
+  watch-items, the gh `--jq` `[0:7]` slice) while pointing at the canonical board-ID table in
+  `docs/governance/github-project.md` instead of freezing IDs (the #213 option-ID regeneration
+  lesson) and reflecting the verification-graduation-ladder tier placements in its board blocks.
+  The canonical PR workflow additionally requires an explicit merge signal: a HOLD from the first
+  push naming what is still running, then an unprompted "GREEN LIGHT: clear to squash-merge
+  PR #N via the GUI" the moment post-open verification completes — GUI check status and
+  merge-button eligibility are never the authoritative merge signal, and merge-independent work
+  never delays the green light (origin: the #217→#219 mid-run merge preemption and the PR #250
+  duplicated parallel closure pass). The session-handoff contract now links the walkthrough for
+  command rails instead of repeating them.
+
 ### Documentation
 
 ### Security

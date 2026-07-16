@@ -43,13 +43,30 @@ defect, not a style choice.
   contents: a state snapshot (branch, commits, PR/issue numbers, which gates ran with their
   results, and a plain done / queued / owed accounting); numbered next steps in which every
   action is a copy-pasteable **Fish** code block runnable from the repository root (see Local
-  environment), each followed by its verification command; relevant links (PR, issues, project
+  environment), each followed by its verification command — when a continuity walkthrough
+  already exists for the work item (next commitment), the handoff links it for the command
+  rails instead of repeating them; relevant links (PR, issues, project
   board); and open risks or watch-items. Never include secrets or tokens. Checkpoint the current
   atomic step first; producing the handoff is wind-down priority one after that — owed in the
   moment, like the changelog gate, not archaeology. Agents cannot observe the maintainer's actual
   usage limits, so the maintainer's request is always the authoritative trigger; the wind-down
   signals above justify producing one proactively. (Codified 2026-07-14 at the maintainer's
   request — #211.)
+- **Proactive continuity walkthrough.** Every implementation session that works an issue through
+  the branch/PR workflow writes a fill-in-the-rails walkthrough — copy
+  `docs/governance/templates/continuity-walkthrough-template.md` and fill its ⟨slots⟩ —
+  **immediately after branching**, not on wind-down request: numbered mechanical steps as
+  copy-pasteable **Fish** blocks (sync, branch, gates, commit, push, PR creation with full
+  required metadata, CI/board verification, merge verification, closure and cleanup), each
+  followed by its verification command, with values not yet known left as ⟨slots⟩. Refresh it
+  at two checkpoints — **PR opened** (real PR number, checks, board commands) and **awaiting
+  merge** (concrete closure block). Destination: the gitignored
+  `artifacts/walkthroughs/<UTC-timestamp>-issue-<n>-<slug>.md` (create the directory if
+  absent; never commit walkthrough files); worktree-isolated sessions follow the same
+  write-to-the-worktree-then-copy-out flow as session handoffs. Scope is rails only — the
+  work-state narrative remains the wind-down handoff's job, and the handoff links the
+  walkthrough instead of repeating its commands. (Origin: the #246 exemplar walkthrough,
+  executed end-to-end by hand as PR #249; codified 2026-07-16 — #251.)
 - **Log the issue before touching the repo.** For any work item, the tracking GitHub issue is
   the FIRST artifact — create it before branching, before editing files, before running anything.
   The order is: issue → branch → implement → gate → document → open PR. Filing the issue after
@@ -108,12 +125,22 @@ merge, release-tag) require an explicit go-ahead; everything else here is standi
 7. **On the maintainer's go-ahead: push and open the PR** with full metadata (assignee, labels,
    milestone when applicable, Project #5 membership with all nine fields). Verify every piece with
    `gh` afterward; never infer success from the creation command. Set the closing issue's own
-   `status:` label to `status: in-progress`.
+   `status:` label to `status: in-progress`. The first push starts an explicit **merge HOLD**
+   (step 8): from this moment every status update names what is still running and why merging
+   now would be premature, until the green light is announced.
 8. **Immediately verify PR-readiness with tooling yourself** — run `gh pr checks <N>` and
    `uv run python scripts/github/validate_project_metadata.py --pr-number <N> --strict-project-checks`
    and quote the actual result. Never say "let me know when CI is green." A cancelled duplicate
    check can block the merge box after a real pass — re-run it or push an empty commit.
-9. **The maintainer merges via the GUI.** Do not merge.
+   When — and only when — post-open verification is complete (CI checks read back green, board
+   fields written and read back, any work requiring the branch to stay unmerged finished),
+   announce unprompted: **GREEN LIGHT: clear to squash-merge PR #N via the GUI.** Until that
+   announcement the merge stays under the HOLD from step 7, whatever the GUI shows — the GUI's
+   check status and merge-button eligibility are never the authoritative merge signal; the
+   session's announcement is. Work that does not depend on the branch staying unmerged (e.g.
+   walkthrough refresh, extract drafting) must never delay the green light — note that it
+   continues after the merge instead.
+9. **The maintainer merges via the GUI, on the session's green light.** Do not merge.
 10. **Closure pass, unprompted, after the maintainer confirms merge:** verify via `gh` that the PR
     is `MERGED` and every closed issue is `CLOSED`; set the PR Project status to `Merged` and each
     issue to `Closed`, each confirmed with a read-back (an action-gating read the
@@ -125,9 +152,10 @@ merge, release-tag) require an explicit go-ahead; everything else here is standi
     and `git pull --ff-only`; and **prune** — `git fetch --prune`, then delete every fully-merged
     local branch with `git branch -D` (squash merges break `-d`'s ancestry check) and remove the
     corresponding worktrees, not just the branch from the PR just closed. Before removing any
-    worktree, copy every file under its `artifacts/session-handoffs/` into the primary
-    checkout's `artifacts/session-handoffs/` (the session-handoff contract's copy-out step —
-    pruning must never delete the only copy of a handoff).
+    worktree, copy every file under its `artifacts/session-handoffs/` and
+    `artifacts/walkthroughs/` into the same paths in the primary checkout (the session-handoff
+    and continuity-walkthrough contracts' copy-out step — pruning must never delete the only
+    copy of a handoff or walkthrough).
 11. **Milestone discipline:** verify a work item's milestone live against the actual scope docs
     (`docs/evaluation-policy.md`, `docs/benchmark-governance.md`) rather than pattern-matching;
     an issue found mid-implementation of already-milestoned work should generally join that
