@@ -19,6 +19,29 @@ This project is for research, education, and software-engineering demonstration
 only. It is **not** medical software, has not been clinically validated, and must
 not be used for diagnosis, monitoring, treatment, or patient-care decisions.
 
+## Why this project
+
+Most of my client-facing consulting work has been in heavily regulated public- and
+private-sector environments, where security concerns have historically limited the use of
+cloud-based LLMs. This project is an exercise in working as a project manager and software
+engineer with a cloud LLM — demonstrating that rigorous governance, reproducibility, and
+operational maturity are achievable in a modern ML pipeline. The deliberate
+overengineering of governance and compliance began as an unrelated goal, but over the
+course of the work it became instrumental in enabling an agent to work effectively and
+safely in a cloud environment. It is also the first project where I established governance
+and stewardship first, rather than bolting them on after the fact.
+
+Automated metadata tagging on every issue and pull request, merge gates that block any PR
+lacking complete metadata or a changelog entry, and scheduled drift detection have
+lightened the manual load of important-but-tedious tasks — letting the
+[GitHub project board](https://github.com/users/Jared-Godar/projects/5) serve as a true
+project-management tool rather than a simple issue tracker. The result is a project that
+is auditable, reproducible, and safe to run in a cloud environment, and a showcase of
+working with LLMs in a disciplined, responsible way.
+
+- **Project board (live):** [ECG Pipeline Modernization — GitHub Project](https://github.com/users/Jared-Godar/projects/5)
+- **Milestones:** [Milestone dashboard](https://github.com/Jared-Godar/ecg_anomaly_detection/milestones)
+
 ## Agentic Engineering
 
 Development is governed by a tracked operating contract
@@ -39,8 +62,7 @@ commitments:
 - **Standing authorization with four gated actions** — agents run the full
   workflow unprompted (issue, branch, implement, gate, document, disclose) and
   pause only at push, open-PR, merge, and release-tag
-- **Model-agnostic** — the contract works identically across Claude, GPT, Codex,
-  and any future model; no vendor lock-in in the workflow
+- **Model-agnostic** — the contract works identically across Claude Code, Codex, AmazonQ, CoPIilor, and any successor.; no vendor lock-in in the workflow
 
 *Deep dive: [Agentic Engineering — the full readout](docs/portfolio/agentic-engineering.md)*
 
@@ -212,5 +234,4 @@ recorded in [NOTICE.md](NOTICE.md) and [data provenance](docs/data-provenance.md
 ---
 
 Jared Godar — open to data and ML engineering roles.
-[GitHub](https://github.com/Jared-Godar) ·
-[LinkedIn](https://www.linkedin.com/in/jared-godar/)
+[GitHub](https://github.com/Jared-Godar)
