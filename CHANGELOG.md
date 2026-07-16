@@ -9,6 +9,24 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+### Dependencies
+
+### Governance
+
+### Documentation
+
+### Security
+
+## 1.1.0 - 2026-07-16
+
+### Added
+
 - Maintainer editorial pass for #246: added a first-person "Why this project" section to
   `README.md` (regulated-sector motivation and governance-first observations), linked the
   public GitHub project board and milestone dashboard from the README, and reworded the
@@ -118,6 +136,77 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   so timing decoration is not added indiscriminately. Observational only: no change to acquisition
   ordering, retries, manifests, artifacts, models, metrics, or evaluation boundaries.
 
+- Established Graphviz as the repository's diagram toolchain: version-controlled `.dot` sources
+  under `docs/diagrams/src/`, two Python composition helpers (`docs/diagrams/compose_inset.py`,
+  `docs/diagrams/pad_svg.py`), and a design spec (`docs/diagrams/design-spec.md`) documenting the
+  approved visual language, deterministic generation commands, and per-diagram rationale.
+  Regeneration is reproducible given the same Graphviz version; Graphviz itself is a one-time
+  authoring tool, not a declared package dependency (#104, #167).
+- Implemented and executed, once, the separately governed held-out evaluation tracked by #73:
+  `src/ecg_anomaly_detection/held_out_evaluation.py` and its `ecg-data` CLI entry point implement
+  an explicitly enabled, approval-gated evaluator that verifies frozen-candidate, grouped-split,
+  model, training, dataset-index, shard, and approval lineage before any protected access, with a
+  manual-only (`workflow_dispatch`) `.github/workflows/held-out-evaluation.yml` and no routine
+  trigger. The one governed execution evaluated the frozen candidate against 16,545 protected
+  `test` windows across seven subject-grouped records, publishing aggregate-only results,
+  artifact identities, runtime and hardware context, append-only rerun evidence (including a
+  preserved pre-result output-parent failure and the policy-permitted retry), and interpretation
+  limitations in `docs/held-out-evaluation.md`; source ECG data, patient-level derived data,
+  models, predictions, and generated run artifacts remain outside Git. The result is bounded
+  evidence for one frozen candidate and one grouped split, not a claim of broader
+  generalization, clinical validity, medical utility, or production-healthcare readiness (#73).
+- Added a comprehensive internal-documentation standard across every supported Python file under
+  `src/`, `scripts/`, and `tests/`: all modules, classes, functions, methods, and nested callables
+  now carry docstrings, while control flow, resource management, setup, assertions, and other
+  meaningful blocks include intentionally explicit comments describing both behavior and design
+  intent. Added `scripts/check_code_commentary.py`, its focused test suite, an always-run
+  pre-commit hook, and `docs/code-commentary-audit.md` to preserve the complete audited inventory
+  and prevent structural coverage from regressing. The historical `archive/original_2022/` tree is
+  intentionally unchanged (#149).
+- Added CI status, license, and Python-version badges to `README.md` (`Quality gates` workflow
+  badge, MIT license, Python 3.12/3.13), confirmed green on `main` before badging (#94).
+- Added `src/ecg_anomaly_detection/benchmark_approval.py` (`ApprovalInput`, `ApprovalRecord`,
+  `BenchmarkApprovalError`, `record_benchmark_approval()`) and the `ecg-data
+  record-benchmark-approval` CLI subcommand, implementing `docs/benchmark-governance.md`'s
+  eligibility, approval-recording, and lineage-verification steps as a fail-closed gate that
+  reuses `load_benchmark_policy()` and a `RunManifest` for lineage identity. Also adds
+  `run_manifest.read_run_manifest()` as a JSON-to-dataclass counterpart to the existing
+  `write_run_manifest()`. Covers governance steps 1-2 (approval recording and lineage
+  verification) only; never opens, reads, or scores the protected `test` partition anywhere in
+  code or tests, and `evaluation.py`'s `SUPPORTED_PARTITION` is unchanged. The separately
+  reviewed execution step remains tracked by #73; a previously scoped disabled-by-default
+  execution-gating config and CI stretch item was cut to keep this change reviewable and filed
+  as #126 (#72).
+- Added `configs/evaluation-heldout.toml` and `src/ecg_anomaly_detection/held_out_config.py`
+  (`HeldOutExecutionConfig`, `HeldOutConfigError`, `load_held_out_config()`), a disabled-by-default
+  configuration schema for a future held-out execution that fails closed the same way
+  `BenchmarkPolicy` does: the loader rejects any config where `execution.execution_enabled` is not
+  `false` or `execution.requires_recorded_approval` is not `true`. Also adds
+  `scripts/check_held_out_trigger_safety.py`, a read-only governance-as-code check — wired into
+  `.github/workflows/repository-hygiene.yml` alongside label drift detection — that fails if any
+  workflow whose name matches a held-out/benchmark-execution naming convention could trigger on a
+  routine `push` or `pull_request` event instead of only `workflow_dispatch` and/or a `push`
+  restricted to `release-*` tags. Neither piece implements execution, opens the `test` partition,
+  or changes `evaluation.py`'s `SUPPORTED_PARTITION`; both exist only so the execution command
+  tracked by #73 has a validated, fail-closed place to plug into. Closes #126 (#130).
+- Added a validation-only centroid-distance margin threshold sweep: `configs/threshold-sweep-v1.toml`,
+  `evaluate_threshold_sweep_from_index()` and `load_threshold_sweep_config()` in `evaluation.py`,
+  and the standalone `ecg-data evaluate-threshold-sweep` CLI subcommand (not part of the
+  orchestrated `run-pipeline` sequence, following the `record-benchmark-approval` precedent). For
+  each configured threshold, reports covered-window count and macro-averaged precision/recall/F1
+  over only windows whose per-window nearest/second-nearest centroid distance gap is at or above
+  that threshold, against the `validation` partition only. The margin is a raw squared distance in
+  projected feature space, not a probability, and this introduces no ROC, AUC, or calibration
+  claim; the protected `test` partition is never opened. Persists a new `ThresholdSweepMetrics`
+  artifact (`threshold-sweep-metrics.json`) separate from the existing evaluator's
+  `ValidationMetrics` schema. See `docs/threshold-sweep-analysis.md`. Closes #84.
+- Added direct unit tests for the threshold-sweep evaluator's core arithmetic, which previously
+  had only end-to-end coverage: exact nearest-to-second-nearest centroid-distance margins
+  (including tied distances), threshold filtering, macro precision/recall/F1 with explicit
+  zero-division behavior, and table-driven configuration-loader validation cases (missing
+  fields, protected-`test` selection, unsorted and non-finite thresholds). Test-only; no
+  production behavior change (#147, #148).
+
 ### Changed
 
 - Reframed `README.md` as a recruiter-facing engineering showcase for #217: the modernization
@@ -186,6 +275,54 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   backoff and, on exhaustion, exit gracefully with clear remediation instead of a raw traceback.
   Surfaced by this PR's walkthrough; existing gaps are retrofitted under #201.
 
+- Prepared the repository for the v1.1.0 release: bumped the package version from `1.0.0` to
+  `1.1.0` (`pyproject.toml`, `uv.lock` via `uv lock`, and `tests/unit/test_package.py`'s version
+  assertion), backfilled this changelog's entries for all v1.1.0-milestone work, moved the
+  accumulated `Unreleased` content under this dated `1.1.0` heading with a fresh empty
+  `Unreleased` scaffold above it, and updated the three current-version statements (`README.md`,
+  `docs/governance/versioning.md`, `docs/governance/releases.md`) to describe the 1.1.0 state.
+  Creates no tag, GitHub release, or package publication — tagging remains a separate, deliberate
+  maintainer act tracked by #180 (#179).
+- Extended per-stage progress banners from `run-pipeline` to the 13 standalone `ecg-data`
+  subcommands that do real I/O (`acquire`, `inventory`, `verify`, `validate-record`,
+  `map-annotations`, `extract-windows`, `split-windows`, `index-dataset`, `create-run-manifest`,
+  `validate-benchmark-policy`, `record-benchmark-approval`, `evaluate-threshold-sweep`, and
+  `check-local-notebooks`), each wrapping its existing body in one `ProgressReporter` stage block
+  with its original completion message preserved. `list-runs`/`purge-run` are deliberately
+  excluded as near-instantaneous local operations, and `check-local-notebooks` routes banners to
+  stderr so `--json` stdout stays machine-parseable. Covered by `capsys` banner assertions across
+  8 integration-test files plus a first CLI-level test for `validate-benchmark-policy`;
+  `docs/pipeline-orchestration.md` and the 11 other affected subcommand docs updated (#61, #165).
+- Changed `ruff.toml`'s `lint.select` to add `UP` (pyupgrade), `S` (flake8-bandit), and `SIM`
+  (flake8-simplify) for ongoing regression protection, plus a `tests/**` per-file-ignore for
+  `S101` (`assert` is the test mechanism itself under pytest, not a stripped-under-`-O` production
+  guard). Of the 627 violations the expanded rule set surfaced, 577 were that `S101`-in-tests
+  case; the remainder were resolved with zero behavior change: mechanical auto-fixes
+  (`typing.Callable`/`Sequence`/`Iterator`/`Mapping` → `collections.abc`, Yoda-condition
+  rewrites, import re-sorting), hand-merged nested `with` statements where ruff couldn't
+  auto-fix due to line length, and targeted `# noqa` suppressions with one-line justifications
+  on `subprocess` calls that only ever run a fixed, hardcoded command list (`S603`/`S607`), one
+  already-validated `urllib.request.Request` call (`S310`), and one deterministic seeded shuffle
+  used for reproducible splitting rather than cryptographic purposes (`S311`). Closes #136.
+- Changed `run_manifest._capture_git_state()` to degrade gracefully instead of raising
+  `RunManifestError` when Git is unavailable or exits non-zero, matching the existing
+  `reproducibility.capture_git_metadata()` pattern: it now returns a sentinel `GitState(revision=
+  "unknown", dirty=None)` rather than failing the whole `create-run-manifest` run. `GitState.dirty`
+  is widened to `bool | None` to carry the sentinel; the existing hard-error path (Git succeeds but
+  returns a malformed, non-40-hex revision) is unchanged. `UNKNOWN_GIT_REVISION` is documented on
+  the `GitState` dataclass and in `docs/run-manifests.md`, and is provably distinguishable from a
+  real commit hash since it is not 40 hex characters (#133). Also adds a
+  `test_benchmark_approval.py` test covering `_missing_lineage_references()`'s previously-untested
+  fail-closed else-branch for a required lineage reference beyond the known 7 (#135). Bundled
+  together because a new test proves the two compose safely: a manifest whose Git state degraded
+  under #133 still fails closed on `repository_commit_hash` in `record_benchmark_approval()`,
+  so the graceful-degradation change cannot let an unverifiable-provenance run pass benchmark
+  approval (#133, #135).
+- Changed `pyproject.toml`'s `Development Status` classifier from `3 - Alpha` to `4 - Beta`,
+  reflecting the pipeline's actual maturity now that the modernization has a tagged 1.0.0 release.
+  No dependency, version, or build-backend change; `uv build` and the CI package-build job remain
+  green (#137).
+
 ### Fixed
 
 - Corrected three v1.1.0 release-gate documentation and metadata defects surfaced by the #218
@@ -244,6 +381,43 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   shared-layer consumer inherits the hardening. Also corrected `run_gh`'s docstring, which
   named a nonexistent `GraphQLQuotaExhaustedError` instead of `PrimaryRateLimitError`.
 
+- Stopped `extract_closing_issue_numbers` in `scripts/github/validate_project_metadata.py` from
+  matching closing keywords quoted as prose: the raw-text `_CLOSING_KEYWORD_PATTERN` scan treated
+  a backtick-quoted example like `` `Closes #154` `` inside a sentence as a real closing
+  directive (reproduced live by PR #160's own body, which produced a spurious "closed by a
+  non-merge event" warning about an issue the PR never closed). Fenced code blocks and inline
+  code spans are now stripped before matching — chosen over anchoring matches to dedicated
+  closing-reference lines, which would diverge from GitHub's own full-prose auto-close detection
+  and risk false negatives (#161, #163).
+- Taught `_run_gh()` in `scripts/github/validate_project_metadata.py` to distinguish GitHub's two
+  rate-limit failure modes instead of collapsing every failing `gh` call into the same
+  `MetadataValidationError`: primary (hours-long) rate-limit exhaustion now fails fast with a
+  message clearly labeled as infrastructure rather than a metadata defect, while the secondary
+  (short-lived) rate limit gets a small bounded retry with backoff. Found live when this PR's own
+  metadata check failed on a GraphQL budget exhaustion caused by same-session
+  `gh project item-edit` usage; covered by three new tests in
+  `tests/scripts/test_validate_project_metadata.py`. Closes #156 (#155).
+- Restored Pyright's built-in default excludes (`**/node_modules`, `**/__pycache__`, `**/.*`)
+  alongside the repository's custom entries (`archive`, `.venv`, `build`, `dist`) in
+  `pyproject.toml`'s `[tool.pyright]` `exclude` array: setting `exclude` explicitly replaces
+  rather than extends the defaults, which had left runtime `__pycache__` and hidden directories
+  under `src/`/`tests/` inside Pyright's analysis scope — the exact gap Pylance's
+  `missingDefaultExcludes` diagnostic warns about. Closes #154 (#155).
+- Corrected `notebook_quality.py`'s `NARRATIVE_NOTEBOOK` constant from the stale
+  `notebooks/narrative-walkthrough.ipynb` to the actual `notebooks/01-narrative-walkthrough.ipynb`:
+  the stale path made `discover_local_notebooks(..., include_narrative=True)` silently skip the
+  narrative notebook because its intentional missing-file tolerance masked the mismatch. Fixed
+  the regression test that reused the same stale synthetic filename and added
+  `test_narrative_notebook_constant_matches_real_repository_file`, backed by the real repository
+  file, so a future rename cannot drift silently again (#152, #153).
+- Fixed `create_split_quality_summary()` computing incorrect `shard_count` and `actual_ratios["shards"]` when `len(metadata.source_artifacts) > 1`: replaced the broken set-comprehension fallback (which used `record_id` as a shard path) with a direct `record_shards` lookup, and moved the total-unique-shards denominator outside the partition loop (#131).
+- Fixed `_install_without_overwrite()` in `acquisition.py` raising a confusing generic `AcquisitionError` when `os.link()` hits `EXDEV` (staging and destination on different filesystems, e.g. Docker volumes or network mounts). It now falls back to copying the source into a temporary file alongside the destination (guaranteed same filesystem) and hard-linking from there, preserving the atomic no-overwrite guarantee that a plain copy-and-replace would have lost (#132).
+- Stopped `quality.yml`'s `pre-commit` job failing on every push to `main`: the
+  `no-commit-to-branch` hook always fails on the `push`-to-`main` CI trigger, whose checkout
+  legitimately is `main`. The CI job's existing `SKIP` list now includes `no-commit-to-branch`
+  (CI invocation only); `.pre-commit-config.yaml` is unchanged, so the hook still protects local
+  commits against landing directly on `main` (#90, #95).
+
 ### Removed
 
 ### Dependencies
@@ -252,6 +426,16 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Executed the v1.1.0 pre-tag release deliverables for #180 in this final pull request:
+  promoted every accumulated `## Unreleased` entry into this `## 1.1.0` section and re-dated
+  its heading to the tag date (2026-07-16), stamped `date-released: 2026-07-16` into
+  `CITATION.cff` (removing the documented tag-time deferral comment), flipped
+  `docs/governance/releases.md` from its pending-state paragraph to the released state, and
+  filled the tag-session slots in `docs/releases/v1.1.0.md` (tag date, changelog anchor, the
+  #236/#237 and #245/#246 greatest-hits lines, and a fresh clean-checkout verification
+  receipt). Release-facing metadata and notes only; no supported pipeline code, tests, or
+  notebooks changed. The annotated `v1.1.0` tag lands on this pull request's merge commit so
+  the tagged tree and its release-facing metadata agree (`docs/governance/versioning.md`).
 - Codified the **automation verification graduation ladder** (#248) in `AGENTS.md`'s
   project-planning rules and `docs/governance/github-metadata-automation.md` (the detailed
   policy home, with a pointer from `docs/governance/github-project.md`'s Automation section):
@@ -374,198 +558,6 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   the full decision table, the board-only option rationale, and the friction-based revisit
   trigger for the remaining label-less Portfolio Signal options;
   `docs/governance/github-project.md` and `github-metadata-automation.md` cross-reference it.
-
-### Documentation
-
-- Refreshed the Project #5 Status option-ID table in `docs/governance/github-project.md` (#212)
-  to the post-#208 generation — all eight pre-existing IDs plus the new `Not Planned` row, re-verified
-  against the live field schema at fix time — and documented the `updateProjectV2Field` footgun
-  discovered during that work: the mutation's `singleSelectOptions` argument replaces the whole
-  option set and regenerates every option ID (even for options resent unchanged by name),
-  orphaning every item's stored Status value board-wide; options must be added through the
-  project web UI, with the per-item read-back-verified `gh project item-edit` loop as the
-  restore path (the route used for the verified 209/209 board restore recorded on PR #209).
-  Completes the follow-up commit PR #209's body promised but did not land before merge.
-- Added a release-time changelog-coverage backstop to
-  `docs/governance/release-checklist.md` (#186): enumerate the full
-  `git log <last-release-tag>..main` commit range and confirm every commit's issue or pull
-  request is represented in the changelog section being frozen, mapping PR-citing commit
-  subjects to issue-citing entries before flagging gaps (the naive number match produced false
-  positives), complementing #184's per-PR gate by also catching direct commits.
-- Corrected `.claude/CLAUDE.md`'s directory-boundaries bullet (#183): the generated data,
-  artifact, and report zones track not only `.gitkeep` placeholders but also `data/README.md`
-  and the deliberately allowlisted `reports/figures/modern-pipeline-lineage.svg`, verified
-  against `git ls-files data artifacts reports`.
-
-### Security
-
-## 1.1.0 - 2026-07-13
-
-### Added
-
-- Established Graphviz as the repository's diagram toolchain: version-controlled `.dot` sources
-  under `docs/diagrams/src/`, two Python composition helpers (`docs/diagrams/compose_inset.py`,
-  `docs/diagrams/pad_svg.py`), and a design spec (`docs/diagrams/design-spec.md`) documenting the
-  approved visual language, deterministic generation commands, and per-diagram rationale.
-  Regeneration is reproducible given the same Graphviz version; Graphviz itself is a one-time
-  authoring tool, not a declared package dependency (#104, #167).
-- Implemented and executed, once, the separately governed held-out evaluation tracked by #73:
-  `src/ecg_anomaly_detection/held_out_evaluation.py` and its `ecg-data` CLI entry point implement
-  an explicitly enabled, approval-gated evaluator that verifies frozen-candidate, grouped-split,
-  model, training, dataset-index, shard, and approval lineage before any protected access, with a
-  manual-only (`workflow_dispatch`) `.github/workflows/held-out-evaluation.yml` and no routine
-  trigger. The one governed execution evaluated the frozen candidate against 16,545 protected
-  `test` windows across seven subject-grouped records, publishing aggregate-only results,
-  artifact identities, runtime and hardware context, append-only rerun evidence (including a
-  preserved pre-result output-parent failure and the policy-permitted retry), and interpretation
-  limitations in `docs/held-out-evaluation.md`; source ECG data, patient-level derived data,
-  models, predictions, and generated run artifacts remain outside Git. The result is bounded
-  evidence for one frozen candidate and one grouped split, not a claim of broader
-  generalization, clinical validity, medical utility, or production-healthcare readiness (#73).
-- Added a comprehensive internal-documentation standard across every supported Python file under
-  `src/`, `scripts/`, and `tests/`: all modules, classes, functions, methods, and nested callables
-  now carry docstrings, while control flow, resource management, setup, assertions, and other
-  meaningful blocks include intentionally explicit comments describing both behavior and design
-  intent. Added `scripts/check_code_commentary.py`, its focused test suite, an always-run
-  pre-commit hook, and `docs/code-commentary-audit.md` to preserve the complete audited inventory
-  and prevent structural coverage from regressing. The historical `archive/original_2022/` tree is
-  intentionally unchanged (#149).
-- Added CI status, license, and Python-version badges to `README.md` (`Quality gates` workflow
-  badge, MIT license, Python 3.12/3.13), confirmed green on `main` before badging (#94).
-- Added `src/ecg_anomaly_detection/benchmark_approval.py` (`ApprovalInput`, `ApprovalRecord`,
-  `BenchmarkApprovalError`, `record_benchmark_approval()`) and the `ecg-data
-  record-benchmark-approval` CLI subcommand, implementing `docs/benchmark-governance.md`'s
-  eligibility, approval-recording, and lineage-verification steps as a fail-closed gate that
-  reuses `load_benchmark_policy()` and a `RunManifest` for lineage identity. Also adds
-  `run_manifest.read_run_manifest()` as a JSON-to-dataclass counterpart to the existing
-  `write_run_manifest()`. Covers governance steps 1-2 (approval recording and lineage
-  verification) only; never opens, reads, or scores the protected `test` partition anywhere in
-  code or tests, and `evaluation.py`'s `SUPPORTED_PARTITION` is unchanged. The separately
-  reviewed execution step remains tracked by #73; a previously scoped disabled-by-default
-  execution-gating config and CI stretch item was cut to keep this change reviewable and filed
-  as #126 (#72).
-- Added `configs/evaluation-heldout.toml` and `src/ecg_anomaly_detection/held_out_config.py`
-  (`HeldOutExecutionConfig`, `HeldOutConfigError`, `load_held_out_config()`), a disabled-by-default
-  configuration schema for a future held-out execution that fails closed the same way
-  `BenchmarkPolicy` does: the loader rejects any config where `execution.execution_enabled` is not
-  `false` or `execution.requires_recorded_approval` is not `true`. Also adds
-  `scripts/check_held_out_trigger_safety.py`, a read-only governance-as-code check — wired into
-  `.github/workflows/repository-hygiene.yml` alongside label drift detection — that fails if any
-  workflow whose name matches a held-out/benchmark-execution naming convention could trigger on a
-  routine `push` or `pull_request` event instead of only `workflow_dispatch` and/or a `push`
-  restricted to `release-*` tags. Neither piece implements execution, opens the `test` partition,
-  or changes `evaluation.py`'s `SUPPORTED_PARTITION`; both exist only so the execution command
-  tracked by #73 has a validated, fail-closed place to plug into. Closes #126 (#130).
-- Added a validation-only centroid-distance margin threshold sweep: `configs/threshold-sweep-v1.toml`,
-  `evaluate_threshold_sweep_from_index()` and `load_threshold_sweep_config()` in `evaluation.py`,
-  and the standalone `ecg-data evaluate-threshold-sweep` CLI subcommand (not part of the
-  orchestrated `run-pipeline` sequence, following the `record-benchmark-approval` precedent). For
-  each configured threshold, reports covered-window count and macro-averaged precision/recall/F1
-  over only windows whose per-window nearest/second-nearest centroid distance gap is at or above
-  that threshold, against the `validation` partition only. The margin is a raw squared distance in
-  projected feature space, not a probability, and this introduces no ROC, AUC, or calibration
-  claim; the protected `test` partition is never opened. Persists a new `ThresholdSweepMetrics`
-  artifact (`threshold-sweep-metrics.json`) separate from the existing evaluator's
-  `ValidationMetrics` schema. See `docs/threshold-sweep-analysis.md`. Closes #84.
-- Added direct unit tests for the threshold-sweep evaluator's core arithmetic, which previously
-  had only end-to-end coverage: exact nearest-to-second-nearest centroid-distance margins
-  (including tied distances), threshold filtering, macro precision/recall/F1 with explicit
-  zero-division behavior, and table-driven configuration-loader validation cases (missing
-  fields, protected-`test` selection, unsorted and non-finite thresholds). Test-only; no
-  production behavior change (#147, #148).
-
-### Changed
-
-- Prepared the repository for the v1.1.0 release: bumped the package version from `1.0.0` to
-  `1.1.0` (`pyproject.toml`, `uv.lock` via `uv lock`, and `tests/unit/test_package.py`'s version
-  assertion), backfilled this changelog's entries for all v1.1.0-milestone work, moved the
-  accumulated `Unreleased` content under this dated `1.1.0` heading with a fresh empty
-  `Unreleased` scaffold above it, and updated the three current-version statements (`README.md`,
-  `docs/governance/versioning.md`, `docs/governance/releases.md`) to describe the 1.1.0 state.
-  Creates no tag, GitHub release, or package publication — tagging remains a separate, deliberate
-  maintainer act tracked by #180 (#179).
-- Extended per-stage progress banners from `run-pipeline` to the 13 standalone `ecg-data`
-  subcommands that do real I/O (`acquire`, `inventory`, `verify`, `validate-record`,
-  `map-annotations`, `extract-windows`, `split-windows`, `index-dataset`, `create-run-manifest`,
-  `validate-benchmark-policy`, `record-benchmark-approval`, `evaluate-threshold-sweep`, and
-  `check-local-notebooks`), each wrapping its existing body in one `ProgressReporter` stage block
-  with its original completion message preserved. `list-runs`/`purge-run` are deliberately
-  excluded as near-instantaneous local operations, and `check-local-notebooks` routes banners to
-  stderr so `--json` stdout stays machine-parseable. Covered by `capsys` banner assertions across
-  8 integration-test files plus a first CLI-level test for `validate-benchmark-policy`;
-  `docs/pipeline-orchestration.md` and the 11 other affected subcommand docs updated (#61, #165).
-- Changed `ruff.toml`'s `lint.select` to add `UP` (pyupgrade), `S` (flake8-bandit), and `SIM`
-  (flake8-simplify) for ongoing regression protection, plus a `tests/**` per-file-ignore for
-  `S101` (`assert` is the test mechanism itself under pytest, not a stripped-under-`-O` production
-  guard). Of the 627 violations the expanded rule set surfaced, 577 were that `S101`-in-tests
-  case; the remainder were resolved with zero behavior change: mechanical auto-fixes
-  (`typing.Callable`/`Sequence`/`Iterator`/`Mapping` → `collections.abc`, Yoda-condition
-  rewrites, import re-sorting), hand-merged nested `with` statements where ruff couldn't
-  auto-fix due to line length, and targeted `# noqa` suppressions with one-line justifications
-  on `subprocess` calls that only ever run a fixed, hardcoded command list (`S603`/`S607`), one
-  already-validated `urllib.request.Request` call (`S310`), and one deterministic seeded shuffle
-  used for reproducible splitting rather than cryptographic purposes (`S311`). Closes #136.
-- Changed `run_manifest._capture_git_state()` to degrade gracefully instead of raising
-  `RunManifestError` when Git is unavailable or exits non-zero, matching the existing
-  `reproducibility.capture_git_metadata()` pattern: it now returns a sentinel `GitState(revision=
-  "unknown", dirty=None)` rather than failing the whole `create-run-manifest` run. `GitState.dirty`
-  is widened to `bool | None` to carry the sentinel; the existing hard-error path (Git succeeds but
-  returns a malformed, non-40-hex revision) is unchanged. `UNKNOWN_GIT_REVISION` is documented on
-  the `GitState` dataclass and in `docs/run-manifests.md`, and is provably distinguishable from a
-  real commit hash since it is not 40 hex characters (#133). Also adds a
-  `test_benchmark_approval.py` test covering `_missing_lineage_references()`'s previously-untested
-  fail-closed else-branch for a required lineage reference beyond the known 7 (#135). Bundled
-  together because a new test proves the two compose safely: a manifest whose Git state degraded
-  under #133 still fails closed on `repository_commit_hash` in `record_benchmark_approval()`,
-  so the graceful-degradation change cannot let an unverifiable-provenance run pass benchmark
-  approval (#133, #135).
-- Changed `pyproject.toml`'s `Development Status` classifier from `3 - Alpha` to `4 - Beta`,
-  reflecting the pipeline's actual maturity now that the modernization has a tagged 1.0.0 release.
-  No dependency, version, or build-backend change; `uv build` and the CI package-build job remain
-  green (#137).
-
-### Fixed
-
-- Stopped `extract_closing_issue_numbers` in `scripts/github/validate_project_metadata.py` from
-  matching closing keywords quoted as prose: the raw-text `_CLOSING_KEYWORD_PATTERN` scan treated
-  a backtick-quoted example like `` `Closes #154` `` inside a sentence as a real closing
-  directive (reproduced live by PR #160's own body, which produced a spurious "closed by a
-  non-merge event" warning about an issue the PR never closed). Fenced code blocks and inline
-  code spans are now stripped before matching — chosen over anchoring matches to dedicated
-  closing-reference lines, which would diverge from GitHub's own full-prose auto-close detection
-  and risk false negatives (#161, #163).
-- Taught `_run_gh()` in `scripts/github/validate_project_metadata.py` to distinguish GitHub's two
-  rate-limit failure modes instead of collapsing every failing `gh` call into the same
-  `MetadataValidationError`: primary (hours-long) rate-limit exhaustion now fails fast with a
-  message clearly labeled as infrastructure rather than a metadata defect, while the secondary
-  (short-lived) rate limit gets a small bounded retry with backoff. Found live when this PR's own
-  metadata check failed on a GraphQL budget exhaustion caused by same-session
-  `gh project item-edit` usage; covered by three new tests in
-  `tests/scripts/test_validate_project_metadata.py`. Closes #156 (#155).
-- Restored Pyright's built-in default excludes (`**/node_modules`, `**/__pycache__`, `**/.*`)
-  alongside the repository's custom entries (`archive`, `.venv`, `build`, `dist`) in
-  `pyproject.toml`'s `[tool.pyright]` `exclude` array: setting `exclude` explicitly replaces
-  rather than extends the defaults, which had left runtime `__pycache__` and hidden directories
-  under `src/`/`tests/` inside Pyright's analysis scope — the exact gap Pylance's
-  `missingDefaultExcludes` diagnostic warns about. Closes #154 (#155).
-- Corrected `notebook_quality.py`'s `NARRATIVE_NOTEBOOK` constant from the stale
-  `notebooks/narrative-walkthrough.ipynb` to the actual `notebooks/01-narrative-walkthrough.ipynb`:
-  the stale path made `discover_local_notebooks(..., include_narrative=True)` silently skip the
-  narrative notebook because its intentional missing-file tolerance masked the mismatch. Fixed
-  the regression test that reused the same stale synthetic filename and added
-  `test_narrative_notebook_constant_matches_real_repository_file`, backed by the real repository
-  file, so a future rename cannot drift silently again (#152, #153).
-- Fixed `create_split_quality_summary()` computing incorrect `shard_count` and `actual_ratios["shards"]` when `len(metadata.source_artifacts) > 1`: replaced the broken set-comprehension fallback (which used `record_id` as a shard path) with a direct `record_shards` lookup, and moved the total-unique-shards denominator outside the partition loop (#131).
-- Fixed `_install_without_overwrite()` in `acquisition.py` raising a confusing generic `AcquisitionError` when `os.link()` hits `EXDEV` (staging and destination on different filesystems, e.g. Docker volumes or network mounts). It now falls back to copying the source into a temporary file alongside the destination (guaranteed same filesystem) and hard-linking from there, preserving the atomic no-overwrite guarantee that a plain copy-and-replace would have lost (#132).
-- Stopped `quality.yml`'s `pre-commit` job failing on every push to `main`: the
-  `no-commit-to-branch` hook always fails on the `push`-to-`main` CI trigger, whose checkout
-  legitimately is `main`. The CI job's existing `SKIP` list now includes `no-commit-to-branch`
-  (CI invocation only); `.pre-commit-config.yaml` is unchanged, so the hook still protects local
-  commits against landing directly on `main` (#90, #95).
-
-### Removed
-
-### Governance
 
 - Migrated both label-hygiene scripts — `scripts/detect_label_drift.py` and
   `scripts/sync_github_labels.py` — onto the shared GitHub API layer
@@ -704,6 +696,26 @@ Keep a Changelog. It does not claim formal compliance with that specification.
   higher-consequence than a manifest edit, and are not performed by this change).
 
 ### Documentation
+
+- Refreshed the Project #5 Status option-ID table in `docs/governance/github-project.md` (#212)
+  to the post-#208 generation — all eight pre-existing IDs plus the new `Not Planned` row, re-verified
+  against the live field schema at fix time — and documented the `updateProjectV2Field` footgun
+  discovered during that work: the mutation's `singleSelectOptions` argument replaces the whole
+  option set and regenerates every option ID (even for options resent unchanged by name),
+  orphaning every item's stored Status value board-wide; options must be added through the
+  project web UI, with the per-item read-back-verified `gh project item-edit` loop as the
+  restore path (the route used for the verified 209/209 board restore recorded on PR #209).
+  Completes the follow-up commit PR #209's body promised but did not land before merge.
+- Added a release-time changelog-coverage backstop to
+  `docs/governance/release-checklist.md` (#186): enumerate the full
+  `git log <last-release-tag>..main` commit range and confirm every commit's issue or pull
+  request is represented in the changelog section being frozen, mapping PR-citing commit
+  subjects to issue-citing entries before flagging gaps (the naive number match produced false
+  positives), complementing #184's per-PR gate by also catching direct commits.
+- Corrected `.claude/CLAUDE.md`'s directory-boundaries bullet (#183): the generated data,
+  artifact, and report zones track not only `.gitkeep` placeholders but also `data/README.md`
+  and the deliberately allowlisted `reports/figures/modern-pipeline-lineage.svg`, verified
+  against `git ls-files data artifacts reports`.
 
 - Corrected `README.md`'s "Current status" table, which still listed threshold analysis as not
   yet implemented: the validation-only centroid-distance margin threshold sweep shipped under #84

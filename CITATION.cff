@@ -8,10 +8,7 @@ authors:
 repository-code: "https://github.com/Jared-Godar/ecg_anomaly_detection"
 license: MIT
 version: 1.1.0
-# date-released is intentionally omitted until the v1.1.0 tag is cut: no such
-# tag or GitHub release exists yet, so stamping a release date here would be
-# inaccurate. The v1.1.0 tag/publish step adds `date-released` at tag time so
-# this citation agrees with the tag, package metadata, and changelog heading.
+date-released: "2026-07-16"
 abstract: >-
   A historical educational ECG beat-window classification project under
   incremental modernization as a reproducible data pipeline case study.
