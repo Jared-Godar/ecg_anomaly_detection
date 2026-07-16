@@ -18,7 +18,7 @@ pipeline modules are added only when supported behavior and tests arrive togethe
 .
 ├── .github/                    # CI workflows, issue forms, label manifest, Dependabot config
 ├── archive/original_2022/      # preserved, unsupported original project bundle
-├── artifacts/                  # ignored generated models, run outputs, session-handoff notes
+├── artifacts/                  # ignored generated models, run outputs, session handoffs/walkthroughs
 ├── configs/                    # versioned pipeline and experiment configuration
 ├── data/
 │   ├── raw/                    # immutable upstream files; ignored
