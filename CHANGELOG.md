@@ -9,6 +9,11 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Added
 
+- Maintainer editorial pass for #246: added a first-person "Why this project" section to
+  `README.md` (regulated-sector motivation and governance-first observations), linked the
+  public GitHub project board and milestone dashboard from the README, and reworded the
+  Agentic Engineering model-agnostic claim to mirror `AGENTS.md`; the #245 documentation
+  pages were reviewed end-to-end and held with no alterations.
 - Portfolio-signal deep-dive pages and in-repo release notes for #245: six curated pages under
   `docs/portfolio/` (`agentic-engineering`, `governance`, `reproducibility`, `testing-rigor`,
   `data-engineering`, `operational-maturity`), each expanding its README portfolio-signal
