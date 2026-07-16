@@ -9,15 +9,16 @@ reviewable snapshot of the repository's source, configuration, documentation,
 and reproducibility contracts. They are not a distribution channel for data,
 models, benchmark results, or medical functionality.
 
-The package metadata is versioned `1.1.0`. No `v1.1.0` Git tag or GitHub
-release exists yet: as [versioning.md](versioning.md) states, a version number
-in package metadata is not evidence that a tag, release, or published
-distribution exists. Cutting the `v1.1.0` tag and publishing the release is a
-separately authorized action tracked as its own deliberate step, which updates
-this paragraph to the released state at that time. This policy documents how
-each release should be reviewed; it does not by itself authorize a future tag,
-GitHub release, or package publication -- each still requires separately
-authorized work.
+The package metadata is versioned `1.1.0`, and the repository is tagged and
+released as `v1.1.0` (2026-07-16): the annotated tag sits on the merge commit
+of the final pre-tag pull request, so the tagged tree and its release-facing
+metadata (this paragraph, the changelog heading, and `CITATION.cff`'s
+`date-released` stamp) agree, per the [versioning.md](versioning.md) agreement
+rule. That tag-and-publish step was the separately authorized deliberate
+action tracked as #180, as this paragraph's pending-state wording committed.
+This policy documents how each release should be reviewed; it does not by
+itself authorize a future tag, GitHub release, or package publication -- each
+still requires separately authorized work.
 
 A release does not imply production readiness, clinical suitability, medical
 utility, or regulatory compliance. This project remains a research, education,
