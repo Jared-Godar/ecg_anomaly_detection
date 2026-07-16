@@ -9,6 +9,18 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Added
 
+- Portfolio-signal deep-dive pages and in-repo release notes for #245: six curated pages under
+  `docs/portfolio/` (`agentic-engineering`, `governance`, `reproducibility`, `testing-rigor`,
+  `data-engineering`, `operational-maturity`), each expanding its README portfolio-signal
+  section into a fuller readout that links into the existing deep docs, with every claim
+  traceable to repository code, configuration, documentation, or recorded evidence;
+  `docs/releases/v1.0.0.md`, a retrospective portfolio-signal reframing of the published
+  v1.0.0 release (which identifies itself as such — the published GitHub release body is
+  deliberately untouched as the honest historical record); and `docs/releases/v1.1.0.md`, the
+  canonical v1.1.0 release notes seeded from the approved draft v2 on #180 with the tag
+  session's ⟨slots⟩ intact (only relative link paths were adapted to the page's location).
+  Every README portfolio-signal section now ends with a deep-dive link to its
+  `docs/portfolio/` page, and the README Reference table links both release-notes pages.
 - Automated Project #5 membership and label-derived field population at item-creation time for
   #233. A new `project-item-autofill` workflow fires on `issues`/`pull_request`
   `opened`/`labeled` events and runs `scripts/github/populate_project_item.py`, which

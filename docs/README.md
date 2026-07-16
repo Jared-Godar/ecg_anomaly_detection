@@ -7,6 +7,12 @@ The maintained documentation is organized by the question a reader is trying to 
 | Document | Purpose |
 |---|---|
 | [Project README](../README.md) | Portfolio overview, current status, quick start, and limitations |
+| [Agentic engineering deep dive](portfolio/agentic-engineering.md) | Full readout behind the README's Agentic Engineering portfolio signal |
+| [Governance deep dive](portfolio/governance.md) | Full readout behind the README's Governance portfolio signal |
+| [Reproducibility deep dive](portfolio/reproducibility.md) | Full readout behind the README's Reproducibility portfolio signal |
+| [Testing rigor deep dive](portfolio/testing-rigor.md) | Full readout behind the README's Testing Rigor portfolio signal |
+| [Data engineering deep dive](portfolio/data-engineering.md) | Full readout behind the README's Data Engineering portfolio signal |
+| [Operational maturity deep dive](portfolio/operational-maturity.md) | Full readout behind the README's Operational Maturity portfolio signal |
 | [Public notebook workflow](../notebooks/README.md) | Canonical 00 → 01 → 02 public workflow covering artifact generation, modernization narrative, and validation-only gradient boosting example. |
 | [Environment setup and artifact generation](../notebooks/00-environment-setup-and-artifact-generation.ipynb) | Fresh-clone setup, environment verification, governed artifact generation, and Step 0 readiness evidence. |
 | [Narrative walkthrough](../notebooks/01-narrative-walkthrough.ipynb) | Package-backed explanation of the supported modernization workflow and evidence boundaries. |
@@ -53,6 +59,8 @@ The maintained documentation is organized by the question a reader is trying to 
 | [Versioning policy](governance/versioning.md) | Semantic version rules and pre-1.0 change disclosure |
 | [Release checklist](governance/release-checklist.md) | Review steps for a future, explicitly authorized release |
 | [Changelog](../CHANGELOG.md) | Unreleased changes and version history |
+| [Release notes — v1.0.0 (retrospective)](releases/v1.0.0.md) | Retrospective portfolio-signal reframing of the published first release |
+| [Release notes — v1.1.0](releases/v1.1.0.md) | Canonical second-release notes, with tag-time slots resolved at release |
 | [Contributing](../CONTRIBUTING.md) | Change scope, data safety, validation, and pull request expectations |
 | [Third-party notices](../NOTICE.md) | Dataset, dependency, tutorial, and historical asset attribution status |
 

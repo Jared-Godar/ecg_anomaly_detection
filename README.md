@@ -42,6 +42,8 @@ commitments:
 - **Model-agnostic** — the contract works identically across Claude, GPT, Codex,
   and any future model; no vendor lock-in in the workflow
 
+*Deep dive: [Agentic Engineering — the full readout](docs/portfolio/agentic-engineering.md)*
+
 ## Governance
 
 The repository enforces process discipline through CI and project-board
@@ -64,6 +66,8 @@ automation rather than trust:
   (own Project membership, nine-field completeness) instead of the
   closing-reference requirement
 
+*Deep dive: [Governance — the full readout](docs/portfolio/governance.md)*
+
 ## Reproducibility
 
 Every pipeline run produces machine-readable lineage tying code state to
@@ -82,6 +86,8 @@ artifacts:
   training, and evaluation ([`configs/`](configs/))
 - **Deterministic seeds** — `seed = 2022` in split and training configs; repeated
   runs reproduce the same subject partitions and fitted models
+
+*Deep dive: [Reproducibility — the full readout](docs/portfolio/reproducibility.md)*
 
 ## Testing Rigor
 
@@ -102,6 +108,8 @@ The test suite is structured as `unit/`, `integration/`, `scripts/`, and
   exist and are not tracked in git
 - **Code commentary gate** — a script enforces docstrings and comments on all
   supported Python, treating missing commentary as a merge-blocking failure
+
+*Deep dive: [Testing Rigor — the full readout](docs/portfolio/testing-rigor.md)*
 
 ## Data Engineering
 
@@ -127,6 +135,8 @@ in the original 2022 experiment:
   subjects/records/windows per partition, required class coverage, and maximum
   ratio deviation
 
+*Deep dive: [Data Engineering — the full readout](docs/portfolio/data-engineering.md)*
+
 ## Operational Maturity
 
 External calls follow a defensive contract: retry transient failures, fail fast
@@ -150,6 +160,8 @@ on permanent ones, and exit gracefully with bounded messaging:
   acquisition progress with qualified timing and remaining-duration estimates,
   stage banners, and a model-fit heartbeat — all flushed without per-iteration
   noise
+
+*Deep dive: [Operational Maturity — the full readout](docs/portfolio/operational-maturity.md)*
 
 ## Quick start
 
@@ -185,6 +197,8 @@ dependency groups, interpreter requirements, and notebook kernel setup.
 | Governance index | [docs/governance/](docs/governance/index.md) |
 | Modernization roadmap | [docs/modernization-roadmap.md](docs/modernization-roadmap.md) |
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
+| Release notes — v1.0.0 (retrospective) | [docs/releases/v1.0.0.md](docs/releases/v1.0.0.md) |
+| Release notes — v1.1.0 | [docs/releases/v1.1.0.md](docs/releases/v1.1.0.md) |
 | Public notebooks | [notebooks/README.md](notebooks/README.md) |
 | Historical results audit | [docs/historical-results.md](docs/historical-results.md) |
 | Known limitations | [MODEL_CARD.md#known-limitations-and-residual-risks](MODEL_CARD.md#known-limitations-and-residual-risks) |
