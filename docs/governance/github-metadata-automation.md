@@ -588,6 +588,74 @@ Fields the automation deliberately leaves blank (Workstream, Target Release, any
 unmapped derivation) are set manually with the read-back-verified `gh project item-edit` loop in
 [GitHub Project governance](github-project.md#setting-status-via-the-cli).
 
+## Automation verification graduation ladder (issue #248)
+
+How agent sessions verify the outcomes of the repository's *recurring* automation — the
+workflows above that stamp board state on their own triggers — is itself a governed,
+cost-tiered policy. Before issue #248 the discipline was flat: every automation outcome was
+re-verified with a read-back on every event, forever. That posture was right while each
+automation was new — read-backs have a real catch record here (the #100 merged-lane race, the
+inconclusive `error: no changes to make` CLI result, autofill leaving underivable fields
+unset) — but it never relaxed, so the per-event cost recurred indefinitely even for
+automations with long clean streaks. A per-event agent read-back is metered LLM inference; a
+scheduled script check is free. Verification therefore migrates down the cost ladder as trust
+accumulates, without weakening the guarantee.
+
+### The four tiers
+
+1. **Tier 1 — new or changed automation: verify every event.** Every observable outcome gets a
+   targeted read-back until the automation accumulates approximately **five consecutive clean
+   observations**. Record the streak — the observed events, with identifiers and dates — in the
+   automation's row of the [placements table below](#current-tier-placements); the streak is
+   documented evidence, not session memory. Any change to the automation's workflow or script
+   makes it "changed" and returns it here regardless of its prior tier.
+2. **Tier 2 — proven automation: sample.** Read back every **Nth** event (default **N = 3**),
+   and **always** read back — regardless of the sampling counter — when the next action depends
+   on the outcome (for example, a lane state gating a closure pass). An action-gating read is
+   never skippable at any tier; sampling only removes routine reads whose result nothing
+   consumes immediately.
+3. **Tier 3 — machine-checked automation: no routine per-event reads.** Once the automation's
+   invariant is expressible as a script check, add it to the scheduled board-drift backstop
+   ([`scripts/detect_board_drift.py`](../../scripts/detect_board_drift.py), run weekly by
+   `repository-hygiene.yml`) and drop routine per-event read-backs entirely. The weekly sweep
+   plus action-gating reads become the guarantee. Graduation to this tier is gated on the
+   check actually existing and running — announcing the intent to add a check is not the
+   check existing.
+4. **Regression rule — any observed failure, at any tier, resets that automation to tier 1**
+   and restarts its streak from zero. A failure is the automation not producing its documented
+   outcome on an event it should have handled. Deliberate non-events are not failures:
+   concurrency-cancelled duplicate runs superseded by a clean success on the same event burst,
+   a quota preflight stop (exit code 3) before any mutation, and fields the automation
+   documentedly never touches (underivable labels, Workstream, Target Release) do not reset a
+   streak.
+
+### Current tier placements
+
+Recorded 2026-07-16 with live-verified evidence; update this table whenever an automation
+changes tier (graduation or regression), citing the events that justified the move.
+
+| Automation | Tier | Evidence (verified live 2026-07-16) |
+|---|---|---|
+| `project-status-sync` (Merged lane on PR merge) | **2** | Clean streak ≥ 4: PRs #242 and #243 (2026-07-15), #247 and #249 (2026-07-16). All four workflow runs concluded `success` — and `set_merged_project_status.py` verifies its own write with a targeted read-back, so a `success` conclusion is itself lane-verified — and all four board items independently read back `Merged` via targeted GraphQL on 2026-07-16. The closure pass's lane read remains owed as an action-gating read (tier 2 never waives it). |
+| `project-item-autofill` (creation-time board population) | **1 → 2 boundary** | Post-merge probe #238 plus live observations, most recently issue #248 itself (2026-07-16): the autofill run on its creation concluded `success` and the board read-back confirmed every label-derivable field populated — including the first automatic `portfolio: governance` → Portfolio Signal derivation since #237 minted that mapping. Held at the boundary rather than graduated: the known underivable-label gaps (#237's permanently human-set `area:`/`portfolio:` labels; Workstream and Target Release never inferred) mean a per-event read-back still routinely finds genuinely-unset fields to hand to a human — value a sampled read would miss, even when the automation itself is working. Graduate to tier 2 once the derivable-field streak reaches five and #240-style backstop coverage picks up the unset-field surface. |
+| Issue lane on closure | **not on the ladder** | No repository-owned automation exists to verify: `project-status-sync` targets pull-request merge events only, and the built-in workflows' behavior on closure is exactly the #100 race this document records. Setting a closed issue's lane (and stripping its `status:*` label) is a manual closure-pass action, governed by the one-off-write read-back rules below — a verification-graduation question only arises if that step is ever automated. |
+
+### Tier-3 migrations
+
+Issue #240 (a milestone ↔ Target Release coherence check for the drift detector) is the first
+tier-3 migration instance: extending `scripts/detect_board_drift.py` is the enforcement arm
+that makes tier-3 graduation safe. This section codifies the policy; #240 and its successors
+implement the specific checks that let individual invariants graduate.
+
+### Scope boundary
+
+The ladder governs recurring automation only. One-off agent writes — field edits, label swaps,
+lane moves an agent performs itself — are unchanged: every mutation keeps the targeted
+read-back rule in the [consumption rules](#consumption-rules) and
+[GitHub Project governance](github-project.md#setting-status-via-the-cli). How a session
+batches those read-backs is session behavior, tracked in agent memory, not repository
+governance (an explicit issue #248 non-goal).
+
 ## GraphQL quota stewardship
 
 Issue #173 hardened the repository's governance automation against avoidable GraphQL

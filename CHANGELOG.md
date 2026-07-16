@@ -252,6 +252,24 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Codified the **automation verification graduation ladder** (#248) in `AGENTS.md`'s
+  project-planning rules and `docs/governance/github-metadata-automation.md` (the detailed
+  policy home, with a pointer from `docs/governance/github-project.md`'s Automation section):
+  how often agent sessions re-verify a recurring automation's outcome now migrates down a
+  four-tier cost ladder as trust accumulates — per-event read-backs for new or changed
+  automation (until ~5 consecutive clean observations, recorded as documented streak evidence),
+  sampling every 3rd event for proven automation (action-gating reads are never skipped at any
+  tier), and scheduled drift-backstop checks with no routine per-event reads once the invariant
+  is machine-checked — with an explicit regression rule: any observed failure resets that
+  automation to tier 1. Current placements were recorded with live-verified evidence
+  (2026-07-16): `project-status-sync` at tier 2 on a clean streak ≥ 4 (PRs #242/#243/#247/#249,
+  run conclusions and board lanes both read back), creation-time autofill at the tier 1→2
+  boundary (probe #238 plus live observations, including issue #248's own automatic
+  `portfolio: governance` → Portfolio Signal derivation; underivable-label gaps keep per-event
+  reads valuable), and issue-lane-on-close recorded as a manual step outside the ladder (no
+  automation exists to verify). #240 is noted as the first tier-3 migration instance. One-off
+  agent writes are explicitly unaffected — every agent-performed mutation keeps its targeted
+  read-back.
 - Amended the **session-handoff continuity** contract for worktree-isolated sessions (#236): a
   session confined to a `.claude/worktrees/` worktree often cannot write to the primary
   checkout's `artifacts/session-handoffs/` (its file-editing tools are confined to the

@@ -207,6 +207,12 @@ fills unset fields derivable from the item's labels, converging as labels land â
 for the mapping table, precedence rules, bot/fork exclusions, and the manual fallback. It never
 overwrites a populated field and never regresses a Status lane.
 
+How often agent sessions re-verify these automations' outcomes is governed by the
+[automation verification graduation ladder](github-metadata-automation.md#automation-verification-graduation-ladder-issue-248)
+(issue #248): per-event read-backs for new or changed automation, sampling once a clean streak
+is documented, and scheduled drift checks once the invariant is machine-checked â€” with any
+observed failure resetting that automation to per-event verification.
+
 Priority, Risk, Size, Repository Area, Issue Type, and Portfolio Signal are automated only as
 label *mirrors*: the reviewable engineering judgment lives in assigning the taxonomy labels
 (docs/governance/label-taxonomy.md), and the automation transcribes exactly that decision onto
