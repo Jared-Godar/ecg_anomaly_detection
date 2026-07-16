@@ -234,5 +234,4 @@ recorded in [NOTICE.md](NOTICE.md) and [data provenance](docs/data-provenance.md
 ---
 
 Jared Godar — open to data and ML engineering roles.
-[GitHub](https://github.com/Jared-Godar) ·
-[LinkedIn](https://www.linkedin.com/in/jared-godar/)
+[GitHub](https://github.com/Jared-Godar)
