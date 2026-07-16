@@ -66,7 +66,9 @@ Every issue and PR added to the project must populate:
 - New items: Backlog (set automatically by `project-item-autofill.yml` when unset)
 - Implementation PR linked: In Progress
 - PR open and awaiting merge: Review
-- PR merged: Merged (set by `project-status-sync.yml`; verify with read-back)
+- PR merged: Merged (set by `project-status-sync.yml`; verify at the cadence of
+  its current tier on the automation verification graduation ladder — the
+  closure pass's lane read is action-gating and always happens)
 - Issue completed and closed: Closed
 - Issue closed as "not planned": Not Planned
 
@@ -76,8 +78,12 @@ Every issue and PR added to the project must populate:
 `opened`/`labeled` events and mirrors label-derivable fields (`type:` → Issue
 Type, `priority:` → Priority, `risk:` → Risk, `size:` → Size, `area:` →
 Repository Area, `portfolio:` → Portfolio Signal), filling only UNSET fields —
-curated values win. Workstream and Target Release stay human-set. Still verify
-with a read-back; automation is a default, not a substitute for verification.
+curated values win. Workstream and Target Release stay human-set. Verify at the
+cadence of the automation's current tier on the automation verification
+graduation ladder (issue #248; placements and streak evidence in
+`docs/governance/github-metadata-automation.md`) — automation is a default, not
+a substitute for verification, and any observed failure resets it to per-event
+read-backs.
 
 ## CLI patterns (Fish)
 

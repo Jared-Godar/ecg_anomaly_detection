@@ -116,8 +116,10 @@ merge, release-tag) require an explicit go-ahead; everything else here is standi
 9. **The maintainer merges via the GUI.** Do not merge.
 10. **Closure pass, unprompted, after the maintainer confirms merge:** verify via `gh` that the PR
     is `MERGED` and every closed issue is `CLOSED`; set the PR Project status to `Merged` and each
-    issue to `Closed`, each confirmed with a read-back (never trust `project-status-sync`
-    automation alone — a known quirk can force `Closed` instead of `Merged`); **strip the
+    issue to `Closed`, each confirmed with a read-back (an action-gating read the
+    [verification graduation ladder](docs/governance/github-metadata-automation.md#automation-verification-graduation-ladder-issue-248)
+    never waives: don't trust `project-status-sync` automation alone here — a known quirk can
+    force `Closed` instead of `Merged`); **strip the
     `status: in-progress` label from every closed issue** (`gh issue close` does not remove it);
     check whether the milestone is now empty and close it only if genuinely so; `git switch main`
     and `git pull --ff-only`; and **prune** — `git fetch --prune`, then delete every fully-merged
@@ -219,7 +221,9 @@ merge, release-tag) require an explicit go-ahead; everything else here is standi
 - Add the pull request to the `ECG Pipeline Modernization` GitHub Project when it contributes to the tracked roadmap.
 - Set the project status to `In Progress` once implementation starts, `Review` once the pull
   request is open and awaiting merge, `Merged` after merge (`project-status-sync.yml` sets this
-  automatically; verify with a read-back and correct manually if it ever doesn't -- see
+  automatically; verify at the cadence its current tier on the automation-verification
+  graduation ladder prescribes — see the planning-metadata rules below — and correct manually if
+  it ever doesn't -- see
   [GitHub Project governance](docs/governance/github-project.md#automation)), and `Closed` when
   its linked issue is completed.
 - Verify assignee, labels, milestone, project membership, and project status after creating the pull request; do not infer success from the creation command alone.
@@ -236,9 +240,23 @@ merge, release-tag) require an explicit go-ahead; everything else here is standi
   `opened`/`labeled` events: board membership, Status → Backlog when unset, and every
   label-derivable field (`type:` → Issue Type, `priority:` → Priority, `risk:` → Risk,
   `size:` → Size, `area:` → Repository Area, `portfolio:` → Portfolio Signal), filling only
-  UNSET fields — curated values always win. Agents still verify the result with a read-back and
+  UNSET fields — curated values always win. Agents still verify the result with a read-back at
+  the cadence the graduation ladder below prescribes for this automation's current tier, and
   still set the fields the automation deliberately never touches (see
   [Creation-time board population](docs/governance/github-metadata-automation.md#creation-time-board-population-issue-233)).
+- **Automation verification graduation ladder (issue #248).** How often agents re-verify a
+  *recurring automation's* outcome is tiered, so trust earned by evidence retires routine
+  verification cost without weakening the guarantee: (1) a **new or changed** automation gets a
+  read-back on **every** event until ~5 consecutive clean observations accumulate; (2) a
+  **proven** automation is **sampled** — read back every 3rd event, but ALWAYS when the next
+  action depends on the outcome (e.g. lane state gating a closure pass); (3) a
+  **machine-checked** automation — its invariant enforced by the scheduled board-drift backstop
+  (`scripts/detect_board_drift.py`) — gets no routine per-event reads at all; and (4) **any
+  observed failure resets that automation to tier 1**. Current tier placements, their streak
+  evidence, and the full tier definitions live in
+  [github-metadata-automation.md](docs/governance/github-metadata-automation.md#automation-verification-graduation-ladder-issue-248)
+  — consult that table instead of assuming per-event verification is always owed. One-off agent
+  writes are unaffected: every mutation an agent performs itself keeps its targeted read-back.
 - Populate Status, Workstream, Issue Type, Priority, Risk, Size, Repository Area, Portfolio Signal,
   and Target Release for every project item. Workstream and Target Release have no label source
   and are always set by a human or agent judgment call, never inferred by automation.
