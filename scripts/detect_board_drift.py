@@ -9,18 +9,27 @@ This script runs from `repository-hygiene.yml` on the weekly schedule (and
 manually) and flags, for every OPEN issue and pull request:
 
 - missing Project #5 membership entirely;
-- an unset Status field (every tracked item must occupy a lane); and
+- an unset Status field (every tracked item must occupy a lane);
 - any field that is unset even though the item carries a label the shared
-  mapping table (`scripts/github/project_label_mapping.py`) derives it from.
+  mapping table (`scripts/github/project_label_mapping.py`) derives it from;
+  and
+- a milestone <-> Target Release incoherence (issue #240, the first tier-3
+  migration under the verification graduation ladder): a milestone/Target
+  Release pair outside the enumerated coherence table
+  (`scripts/github/milestone_release_mapping.py`), a milestoned item whose
+  Target Release is unset, an unmilestoned item carrying a release-vehicle
+  Target Release, or a milestone the table has no row for.
 
 It deliberately does NOT flag a populated field whose value differs from the
 label-derived one: curated values win (house rule from AGENTS.md), so a
-divergence is legitimate maintainer judgment, not drift. It also does not
-check the label-less fields (Workstream, Target Release) -- full nine-field
-completeness is the PR-time metadata gate's job
+divergence is legitimate maintainer judgment, not drift. Workstream (the
+other label-less field) stays unchecked, and Target Release is only
+cross-checked against the milestone, never required outright -- full
+nine-field completeness is the PR-time metadata gate's job
 (docs/governance/github-metadata-automation.md); this backstop watches
-exactly the surface the creation-time automation owns. Governed-bot
-(Dependabot) items are excluded, mirroring the automation's own skip.
+exactly the surface the creation-time automation owns plus the enumerated
+coherence invariant above. Governed-bot (Dependabot) items are excluded,
+mirroring the automation's own skip.
 
 This is read-only: it never adds items or mutates fields. Remediation is a
 manual `populate_project_item.py` run (or `gh project item-add`/`item-edit`)
@@ -65,6 +74,7 @@ if _GITHUB_SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _GITHUB_SCRIPTS_DIR)
 
 import github_api  # noqa: E402  (needs the sys.path insertion above)
+import milestone_release_mapping  # noqa: E402  (needs the sys.path insertion above)
 import project_label_mapping  # noqa: E402  (needs the sys.path insertion above)
 
 # This script's own preflight threshold: the board snapshot it takes measured
@@ -153,8 +163,9 @@ def find_board_drift(
 
     Args:
         open_items: Open issues/PRs as dicts with `kind` ("issue" or
-            "pull request"), `number`, `title`, `labels` (name strings), and
-            `author` (gh's author object or None).
+            "pull request"), `number`, `title`, `labels` (name strings),
+            `author` (gh's author object or None), and `milestone` (the
+            milestone title string, or None when unmilestoned).
         project_items: The Project's full item-list snapshot, in gh's
             item-list JSON shape.
 
@@ -213,6 +224,19 @@ def find_board_drift(
             # Empty/missing means unset; any populated value is curated and fine.
             if not board_item.get(_field_json_key(field_name)):
                 problems.append(f"{field_name} is unset despite a label deriving {option_name!r}")
+        # Milestone <-> Target Release coherence (issue #240): both sides are
+        # normalized to None when absent (an item created without a milestone
+        # carries no milestone key at all in some callers; an unset board
+        # field is missing from the snapshot row), then the enumerated
+        # coherence table judges the pair. The check itself lives in the
+        # shared mapping module so its table stays pinned by completeness
+        # tests, exactly like the label table this loop consumes.
+        target_release = (
+            board_item.get(_field_json_key(milestone_release_mapping.TARGET_RELEASE_FIELD)) or None
+        )
+        problems.extend(
+            milestone_release_mapping.coherence_problems(open_item.get("milestone"), target_release)
+        )
         # Zero problems means this item is fully converged; report nothing.
         if problems:
             findings.append(
@@ -239,7 +263,8 @@ def fetch_open_items(repo: str | None) -> list[dict[str, Any]]:
 
     Returns:
         One dict per open item with `kind`, `number`, `title`, `labels`
-        (name strings), and `author` (gh's author object).
+        (name strings), `author` (gh's author object), and `milestone` (the
+        milestone title, or None when unmilestoned).
     """
 
     items: list[dict[str, Any]] = []
@@ -252,7 +277,7 @@ def fetch_open_items(repo: str | None) -> list[dict[str, Any]]:
             "--state",
             "open",
             "--json",
-            "number,title,labels,author",
+            "number,title,labels,author,milestone",
             "--limit",
             "500",
         ]
@@ -261,8 +286,10 @@ def fetch_open_items(repo: str | None) -> list[dict[str, Any]]:
         if repo:
             args.extend(["--repo", repo])
         payload = json.loads(github_api.run_gh(args))
-        # Flatten gh's nested label objects into plain name strings, and tag
-        # each row with its kind, before appending to the combined items list.
+        # Flatten gh's nested label objects into plain name strings, flatten
+        # the milestone object to its title (gh reports null for an
+        # unmilestoned item), and tag each row with its kind, before
+        # appending to the combined items list.
         for row in payload:
             items.append(
                 {
@@ -271,6 +298,7 @@ def fetch_open_items(repo: str | None) -> list[dict[str, Any]]:
                     "title": row["title"],
                     "labels": [label["name"] for label in row.get("labels", [])],
                     "author": row.get("author"),
+                    "milestone": (row.get("milestone") or {}).get("title"),
                 }
             )
     return items
@@ -389,7 +417,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "\nRemediation is manual and read-back-verified: run "
             "`uv run python scripts/github/populate_project_item.py` for the "
             "flagged item, or use the fallback commands in "
-            "docs/governance/github-metadata-automation.md -- this check "
+            "docs/governance/github-metadata-automation.md. For a milestone "
+            "<-> Target Release incoherence, the maintainer decides which "
+            "side is wrong (the milestone, the field, or a missing table row "
+            "in scripts/github/milestone_release_mapping.py) -- this check "
             "never mutates the board itself.",
             file=sys.stderr,
         )

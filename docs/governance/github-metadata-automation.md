@@ -643,9 +643,15 @@ changes tier (graduation or regression), citing the events that justified the mo
 ### Tier-3 migrations
 
 Issue #240 (a milestone ↔ Target Release coherence check for the drift detector) is the first
-tier-3 migration instance: extending `scripts/detect_board_drift.py` is the enforcement arm
-that makes tier-3 graduation safe. This section codifies the policy; #240 and its successors
-implement the specific checks that let individual invariants graduate.
+tier-3 migration instance, **implemented 2026-07-16**: `scripts/detect_board_drift.py` now
+cross-checks every open item's milestone against its board Target Release using the
+enumerated, completeness-tested coherence table in
+`scripts/github/milestone_release_mapping.py` (see
+[repository hygiene § Board drift detection](repository-hygiene.md#board-drift-detection)
+for the finding taxonomy and the set-valued table design). The milestone ↔ Target Release
+invariant is therefore machine-checked by the weekly hygiene sweep; per-event agent
+read-backs of that pair are no longer owed. This section codifies the policy; #240's
+successors implement the further checks that let additional invariants graduate.
 
 ### Scope boundary
 

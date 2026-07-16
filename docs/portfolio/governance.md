@@ -47,7 +47,8 @@ the board and mirrors taxonomy labels onto their matching fields via an explicit
 fields, never regressing a Status lane, and withholding conflicting derivations for maintainer
 review. Workstream and Target Release are never inferred at all, for a stated reason: a
 confidently wrong value reads as deliberate triage. A weekly read-only board-drift check backstops
-the creation-time automation
+the creation-time automation and cross-checks each item's milestone against its Target Release
+via an enumerated coherence table
 ([repository hygiene](../governance/repository-hygiene.md#board-drift-detection)).
 
 ## Namespaced label taxonomy and the completed legacy migration
