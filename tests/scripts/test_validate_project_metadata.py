@@ -584,21 +584,33 @@ def _bot_pr_payload(
     }
 
 
-def _issue_payload(milestone: str | None = "M5", state: str = "open") -> dict[str, object]:
-    """Build a REST issue payload carrying the two fields fetch_issue_overview reads.
+def _issue_payload(
+    milestone: str | None = "M5",
+    state: str = "open",
+    is_pull_request: bool = False,
+) -> dict[str, object]:
+    """Build a REST issue payload carrying the fields fetch_issue_overview reads.
 
     Args:
-        milestone: The issue's milestone title, or None for unmilestoned.
+        milestone: The item's milestone title, or None for unmilestoned.
         state: REST's lowercase state value ("open"/"closed").
+        is_pull_request: When True, include the `pull_request` discriminator
+            key GitHub's issues endpoint attaches to pull-request payloads
+            (issue #244).
 
     Returns:
         A dict shaped like `gh api repos/.../issues/N` output.
     """
 
-    return {
+    payload: dict[str, object] = {
         "milestone": {"title": milestone} if milestone else None,
         "state": state,
     }
+    # A real PR payload nests URLs under this key; the gate only checks the
+    # key's presence, so a minimal object models the discriminator faithfully.
+    if is_pull_request:
+        payload["pull_request"] = {"url": "https://api.github.com/repos/o/r/pulls/1"}
+    return payload
 
 
 def _quota(remaining: int) -> subprocess.CompletedProcess:
@@ -751,6 +763,27 @@ def test_fetch_issue_overview_returns_none_milestone_when_absent() -> None:
         overview = vpm.fetch_issue_overview(67, repo=None)
     assert overview.milestone is None
     assert overview.is_closed is False
+
+
+def test_fetch_issue_overview_detects_the_pull_request_discriminator() -> None:
+    """The REST payload's `pull_request` key resolves the ref's content type (issue #244).
+
+    GitHub's issues endpoint models pull requests as a superset of issues and
+    marks them with a `pull_request` object; a genuine issue's payload carries
+    no such key. The overview must surface that distinction so marker refs to
+    pull requests validate as PullRequest board items.
+    """
+
+    # A PR-numbered ref: the payload carries the discriminator key.
+    with patch.object(
+        subprocess, "run", return_value=_completed(_issue_payload(is_pull_request=True))
+    ):
+        overview = vpm.fetch_issue_overview(235, repo=None)
+    assert overview.is_pull_request is True
+    # A genuine issue: no discriminator key, so the default False holds.
+    with patch.object(subprocess, "run", return_value=_completed(_issue_payload())):
+        overview = vpm.fetch_issue_overview(216, repo=None)
+    assert overview.is_pull_request is False
 
 
 def test_fetch_issue_overview_raises_on_gh_failure() -> None:
@@ -1498,6 +1531,96 @@ def test_main_non_closing_ref_fails_when_issue_not_on_board(
         exit_code = vpm.main(["--pr-number", "217", "--repo", "Jared-Godar/ecg_anomaly_detection"])
     assert exit_code == 1
     assert "issue #216 is not a member of the tracked Project" in capsys.readouterr().err
+
+
+def test_main_non_closing_ref_to_board_member_pull_request_passes(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A marker referencing a field-complete board-member PR passes validation (issue #244).
+
+    The live regression shape: PR #243's `Non-closing ref: #235 — …` failed as
+    "issue #235 is not a member" even after PR #235 was backfilled onto the
+    board with all nine fields, because the report was built with the Issue
+    content type. The ref's REST overview (already fetched) resolves the type.
+    """
+
+    # Sequence: PR read, the marker ref's overview read (a PR payload carrying
+    # the discriminator key), quota preflight, the Project snapshot holding
+    # #235 as a complete PullRequest item, quota report.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(
+                _pr_payload_non_closing(body="Non-closing ref: #235 — tracking-chain proof")
+            ),
+            _completed(_issue_payload(is_pull_request=True)),
+            _quota(4988),
+            _completed({"items": [_complete_item(235, content_type="PullRequest")]}),
+            _quota(4985),
+        ],
+    ):
+        exit_code = vpm.main(["--pr-number", "243", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 0
+    assert "passed" in capsys.readouterr().out
+
+
+def test_main_non_closing_ref_to_pull_request_not_on_board_fails_naming_the_type(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A marker referencing an off-board PR fails naming a pull request, not an issue.
+
+    Membership enforcement is unchanged; only the violation's noun and lookup
+    type follow the ref's real content type, so the report names the actual
+    constraint instead of the misleading pre-#244 "issue #N" wording.
+    """
+
+    # The snapshot is empty -- the referenced PR is not a board member.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(
+                _pr_payload_non_closing(body="Non-closing ref: #235 — tracking-chain proof")
+            ),
+            _completed(_issue_payload(is_pull_request=True)),
+            _quota(4988),
+            _completed({"items": []}),
+            _quota(4985),
+        ],
+    ):
+        exit_code = vpm.main(["--pr-number", "243", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 1
+    assert "pull request #235 is not a member of the tracked Project" in capsys.readouterr().err
+
+
+def test_main_closing_ref_to_a_pull_request_still_validates_as_an_issue(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A closing keyword naming a PR keeps the strict Issue lookup (issue #244 scope edge).
+
+    GitHub's auto-close only acts on issues, so `Closes #<PR>` is an authoring
+    error; the content-type resolution is deliberately confined to non-closing
+    marker refs and must not quietly validate a closing ref against a
+    PullRequest board item.
+    """
+
+    # The snapshot holds #235 only as a PullRequest item; the closing ref's
+    # Issue-typed lookup must not match it.
+    with patch.object(
+        subprocess,
+        "run",
+        side_effect=[
+            _completed(_pr_payload(body="Closes #235")),
+            _completed(_issue_payload(is_pull_request=True)),
+            _quota(4988),
+            _completed({"items": [_complete_item(235, content_type="PullRequest")]}),
+            _quota(4985),
+        ],
+    ):
+        exit_code = vpm.main(["--pr-number", "65", "--repo", "Jared-Godar/ecg_anomaly_detection"])
+    assert exit_code == 1
+    assert "issue #235 is not a member of the tracked Project" in capsys.readouterr().err
 
 
 def test_main_non_closing_ref_does_not_trigger_premature_closure_check(

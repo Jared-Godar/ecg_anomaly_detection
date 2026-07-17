@@ -20,6 +20,17 @@ skipped. Naming one issue with both a closing keyword and the marker is a hard
 violation, since auto-closing it and deliberately keeping it open are
 contradictory requests.
 
+A non-closing marker may also reference a pull request (issue #244): each
+marker ref's content type is resolved from the REST overview the run already
+fetches for it (GitHub's issues endpoint returns pull requests too, carrying a
+`pull_request` discriminator key), and the ref is then validated as a board
+item of the matching type -- so a marker naming a field-complete board-member
+PR passes the same tracking-chain checks instead of failing with a misleading
+"issue #N is not a member" report (the live failure PR #243 hit citing PR
+#235). Closing keywords stay issue-only: GitHub's auto-close cannot act on a
+pull request number, so a closing reference to one remains an authoring error
+this gate does not paper over.
+
 A pull request must also have a milestone -- unless every issue it closes is
 itself deliberately unmilestoned, per docs/governance/issue-workflow.md's rule
 that a milestone is a delivery commitment assigned only when work requires
@@ -201,16 +212,20 @@ class PullRequestMetadata:
 
 @dataclass(frozen=True, slots=True)
 class IssueOverview:
-    """One closing issue's native metadata, fetched once and reused across stages.
+    """One linked item's native metadata, fetched once and reused across stages.
 
     Both the milestone-inheritance check and the premature-closure check need
-    the same issue's native data; fetching it once per issue (rather than once
-    per stage) is the request-deduplication rule from issue #173.
+    the same item's native data; fetching it once per item (rather than once
+    per stage) is the request-deduplication rule from issue #173. The item is
+    usually an issue, but a non-closing marker may reference a pull request
+    (issue #244) -- is_pull_request carries the REST discriminator so the
+    Project checks can validate the ref as its actual content type.
     """
 
     number: int
     milestone: str | None
     is_closed: bool
+    is_pull_request: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -509,21 +524,24 @@ def fetch_pull_request(pr_number: int, repo: str | None) -> PullRequestMetadata:
 
 
 def fetch_issue_overview(issue_number: int, repo: str | None) -> IssueOverview:
-    """Fetch one issue's native milestone and open/closed state via REST, in one call.
+    """Fetch one linked item's native milestone and open/closed state via REST, in one call.
 
     One REST read serves both downstream consumers (milestone inheritance and
     the premature-closure check), replacing the two separate GraphQL-backed
     `gh issue view` calls the stages previously made for the same issue --
-    the request-deduplication rule from issue #173.
+    the request-deduplication rule from issue #173. GitHub's REST issues
+    endpoint models pull requests as a superset of issues, so the same call
+    also resolves a PR-numbered non-closing marker ref (issue #244), with the
+    payload's `pull_request` key as the content-type discriminator.
 
     Args:
-        issue_number: The issue to fetch.
+        issue_number: The issue or pull request number to fetch.
         repo: Optional GitHub OWNER/REPO; None lets gh infer it from the current
             directory's Git remote.
 
     Returns:
-        The issue's number, milestone title (None when unmilestoned), and
-        whether it is currently closed.
+        The item's number, milestone title (None when unmilestoned), whether
+        it is currently closed, and whether it is actually a pull request.
     """
 
     payload = json.loads(github_api.run_gh(["api", _rest_endpoint(f"issues/{issue_number}", repo)]))
@@ -533,6 +551,9 @@ def fetch_issue_overview(issue_number: int, repo: str | None) -> IssueOverview:
         milestone=milestone.get("title") if milestone else None,
         # REST reports state as lowercase "open"/"closed".
         is_closed=payload.get("state") == "closed",
+        # The REST issues endpoint marks a pull request with a `pull_request`
+        # object; a genuine issue's payload has no such key at all.
+        is_pull_request="pull_request" in payload,
     )
 
 
@@ -834,12 +855,34 @@ def _run_validation(args: argparse.Namespace, monitor: github_api.QuotaMonitor) 
                 report = build_project_field_report(pr.number, items, content_type="PullRequest")
                 violations.extend(validate_project_membership(report, subject="pull request"))
             else:
-                # Check every linked issue's Project membership/fields against
+                # Check every linked item's Project membership/fields against
                 # the one already-fetched item list, rather than re-fetching per
-                # issue. Both closing and non-closing refs run the same checks.
+                # item. Both closing and non-closing refs run the same checks.
                 for issue_number in all_linked_issues:
-                    report = build_project_field_report(issue_number, items)
-                    violations.extend(validate_project_membership(report))
+                    # A non-closing marker may sanction a pull-request ref
+                    # (issue #244): resolve the ref's actual content type from
+                    # its already-fetched REST overview so a board-member PR
+                    # validates as a PullRequest item instead of failing a
+                    # misleading Issue-membership lookup. Closing refs keep
+                    # the strict Issue assumption -- GitHub's auto-close only
+                    # acts on issues, so a PR-numbered closing keyword is an
+                    # authoring error this resolution must not paper over.
+                    is_sanctioned_pr_ref = (
+                        issue_number not in closing_issues
+                        and issue_number in overviews
+                        and overviews[issue_number].is_pull_request
+                    )
+                    report = build_project_field_report(
+                        issue_number,
+                        items,
+                        content_type="PullRequest" if is_sanctioned_pr_ref else "Issue",
+                    )
+                    violations.extend(
+                        validate_project_membership(
+                            report,
+                            subject="pull request" if is_sanctioned_pr_ref else "issue",
+                        )
+                    )
 
     # Observational warnings (issue #158) are printed unconditionally, separately
     # from violations, and never affect the exit code -- they exist to surface an
