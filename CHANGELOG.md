@@ -19,6 +19,15 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Metadata gate: the sanctioned non-closing marker can now reference a **pull request**
+  (#244). `validate_project_metadata.py` resolves each marker ref's content type from the
+  REST overview it already fetches (the `pull_request` discriminator key on GitHub's issues
+  endpoint — zero additional API calls) and validates the ref as a board item of the matching
+  type, so a marker naming a field-complete board-member PR passes the tracking-chain checks
+  instead of failing with the misleading "issue #N is not a member" report (hit live on
+  PR #243 citing PR #235), and an off-board PR ref now fails naming the real constraint.
+  Closing keywords stay issue-only — `Closes #<PR>` remains an authoring error the gate
+  reports rather than papers over.
 - Extended the weekly board-drift backstop (`scripts/detect_board_drift.py`) with a read-only
   **milestone ↔ Target Release coherence check** (#240) — the first tier-3 migration under the
   automation verification graduation ladder (#248). A new enumerated, completeness-tested

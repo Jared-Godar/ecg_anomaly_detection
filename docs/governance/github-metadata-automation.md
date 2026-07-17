@@ -205,6 +205,16 @@ reason (or whitespace-only after the separator) is deliberately not recognized.
   since those issues are *supposed* to remain open past merge.
 - Fenced code blocks and inline code spans are stripped before matching, so a marker quoted as
   prose or example text is not mistaken for a real directive.
+- **A marker may reference a pull request** (issue #244). The gate resolves each marker ref's
+  content type from the REST overview it already fetches for the ref (GitHub's issues
+  endpoint returns pull requests too, marked with a `pull_request` discriminator key) and
+  validates the ref as a board item of the matching type — so a marker naming a
+  field-complete board-member PR passes the same tracking-chain checks, and a marker naming
+  an off-board PR fails with a message that says *pull request* `#N` is not a member (before
+  #244 it misleadingly failed as "issue #N is not a member" even when the PR was fully
+  field-complete on the board — hit live on PR #243 citing PR #235). Closing keywords remain
+  issue-only: GitHub's auto-close cannot act on a pull request, so `Closes #<PR-number>` is
+  an authoring error the gate still reports under the strict Issue lookup.
 
 **Ambiguity is a hard violation:** naming the same issue number via both a closing keyword
 (`Closes #N`) and a non-closing marker (`Non-closing ref: #N — reason`) in the same PR body
