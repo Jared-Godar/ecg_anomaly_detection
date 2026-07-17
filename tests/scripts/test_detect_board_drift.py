@@ -38,6 +38,7 @@ def _open_item(
     kind: str = "issue",
     labels: list[str] | None = None,
     author: dict[str, Any] | None = None,
+    milestone: str | None = None,
 ) -> dict[str, Any]:
     """Build one open-item row in the shape fetch_open_items produces.
 
@@ -46,6 +47,7 @@ def _open_item(
         kind: "issue" or "pull request".
         labels: The item's label names; defaults to none.
         author: gh's author object; defaults to a human maintainer.
+        milestone: The item's milestone title; defaults to unmilestoned.
 
     Returns:
         The open-item dict find_board_drift consumes.
@@ -57,6 +59,7 @@ def _open_item(
         "title": f"Item {number}",
         "labels": labels or [],
         "author": author if author is not None else {"login": "Jared-Godar", "is_bot": False},
+        "milestone": milestone,
     }
 
 
@@ -171,6 +174,73 @@ def test_draft_board_items_are_ignored_by_the_index() -> None:
     findings = dbd.find_board_drift([_open_item(240)], [draft])
     # The open issue is still (correctly) reported as a non-member.
     assert len(findings) == 1
+
+
+# --- milestone <-> Target Release coherence (issue #240) --------------------------------
+
+
+def test_coherent_milestone_and_target_release_pass() -> None:
+    """A member whose milestone and Target Release agree with the table is clean."""
+
+    # M12's enumerated coherence set is exactly {Future}.
+    board = [_board_item(240, fields={"status": "Backlog", "target Release": "Future"})]
+    open_items = [_open_item(240, milestone="M12 — Optional Future Enhancements")]
+    assert dbd.find_board_drift(open_items, board) == ()
+
+
+def test_milestoned_item_with_unset_target_release_is_flagged() -> None:
+    """A milestoned member whose Target Release is unset reports the gap."""
+
+    board = [_board_item(240, fields={"status": "Backlog"})]
+    open_items = [_open_item(240, milestone="M12 — Optional Future Enhancements")]
+    findings = dbd.find_board_drift(open_items, board)
+    assert len(findings) == 1
+    assert any("Target Release is unset" in problem for problem in findings[0].problems)
+
+
+def test_incoherent_milestone_target_release_pair_is_flagged() -> None:
+    """A pair outside the milestone's enumerated envelope is reported as drift."""
+
+    # v1.1.0's envelope is {Portfolio Release, Stewardship}; Future is outside it.
+    board = [_board_item(240, fields={"status": "Backlog", "target Release": "Future"})]
+    open_items = [_open_item(240, milestone="v1.1.0 — Second Portfolio Release")]
+    findings = dbd.find_board_drift(open_items, board)
+    assert len(findings) == 1
+    assert any("incoherent" in problem for problem in findings[0].problems)
+
+
+def test_unmilestoned_item_with_release_vehicle_bucket_is_flagged() -> None:
+    """An unmilestoned member carrying a release-arc Target Release is drift.
+
+    This is the reverse direction: the field claims a delivery vehicle that
+    does not exist. The long-horizon buckets (Stewardship, Future) stay fine.
+    """
+
+    board = [_board_item(240, fields={"status": "Backlog", "target Release": "Portfolio Release"})]
+    findings = dbd.find_board_drift([_open_item(240)], board)
+    assert len(findings) == 1
+    assert any("no milestone" in problem for problem in findings[0].problems)
+
+
+def test_unmilestoned_item_with_long_horizon_bucket_passes() -> None:
+    """An unmilestoned member in a long-horizon bucket is coherent, not drift."""
+
+    board = [_board_item(240, fields={"status": "Backlog", "target Release": "Stewardship"})]
+    assert dbd.find_board_drift([_open_item(240)], board) == ()
+
+
+def test_unknown_milestone_title_is_flagged_for_a_table_row() -> None:
+    """A milestone absent from the coherence table is itself reported as drift.
+
+    Minting a milestone without adding its table row would otherwise silently
+    exempt every item on it from the coherence check.
+    """
+
+    board = [_board_item(240, fields={"status": "Backlog", "target Release": "Future"})]
+    open_items = [_open_item(240, milestone="M99 — Not A Real Milestone")]
+    findings = dbd.find_board_drift(open_items, board)
+    assert len(findings) == 1
+    assert any("milestone_release_mapping.py" in problem for problem in findings[0].problems)
 
 
 # --- main() orchestration and exit codes ------------------------------------------------

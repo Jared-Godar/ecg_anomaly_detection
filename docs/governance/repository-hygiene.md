@@ -80,6 +80,27 @@ flagged — curated values win — and full nine-field completeness stays the PR
 metadata gate's job. Like its label sibling, it is read-only: remediation is a manual
 `populate_project_item.py` run or the documented `gh` fallback commands.
 
+Since issue #240 — the first
+[tier-3 migration](github-metadata-automation.md#automation-verification-graduation-ladder-issue-248)
+— the same run also cross-checks each open item's **milestone against its Target Release**,
+using the enumerated coherence table in
+`scripts/github/milestone_release_mapping.py` (one row per live milestone, each mapping to
+the set of Target Release options the maintainer's curated record supports; pinned by
+completeness tests the same way the label table is pinned by the manifest). It reports
+four coherence findings: a milestone/Target Release pair outside the table's envelope, a
+milestoned item whose Target Release is unset, an unmilestoned item carrying a
+release-vehicle Target Release (`Modernization Foundation`/`Portfolio Release` claim a
+delivery vehicle; only `Stewardship`/`Future` are coherent without a milestone), and a
+milestone title with no table row — so minting a milestone forces a reviewed table
+addition rather than silently exempting its items. The sets are deliberately
+**set-valued**, not single-valued: the
+[bundling convention](github-project.md#bundling-pull-requests) lets an item keep a broad
+triage-time bucket after being milestoned into a concrete vehicle, so the
+post-reconciliation record (issue #182) is legitimately heterogeneous for several
+milestones. Like every other check in the script, coherence findings are report-only —
+which side is wrong (the milestone, the field, or a missing table row) is the
+maintainer's call.
+
 ```fish
 uv run python scripts/detect_board_drift.py
 ```

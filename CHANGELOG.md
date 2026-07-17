@@ -19,6 +19,17 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Extended the weekly board-drift backstop (`scripts/detect_board_drift.py`) with a read-only
+  **milestone ↔ Target Release coherence check** (#240) — the first tier-3 migration under the
+  automation verification graduation ladder (#248). A new enumerated, completeness-tested
+  mapping table (`scripts/github/milestone_release_mapping.py`, beside the label table it
+  mirrors) maps every live milestone to the set of Target Release options the curated,
+  post-#182-reconciliation board record supports (set-valued deliberately: the bundling
+  convention keeps triage-time buckets legitimate on milestoned items). The check reports four
+  finding shapes — a pair outside the milestone's envelope, a milestoned item with Target
+  Release unset, an unmilestoned item carrying a release-vehicle Target Release, and a
+  milestone title with no table row (so minting a milestone forces a reviewed table addition).
+  Report-only, like every other drift check: the maintainer decides which side is wrong.
 - Codified the **proactive continuity walkthrough** and **merge green-light** contracts in
   `AGENTS.md` (#251). Every implementation session now writes a fill-in-the-rails walkthrough —
   numbered mechanical steps as copy-pasteable Fish blocks, each followed by its verification
