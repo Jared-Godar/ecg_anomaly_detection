@@ -62,7 +62,7 @@ commitments:
 - **Standing authorization with four gated actions** — agents run the full
   workflow unprompted (issue, branch, implement, gate, document, disclose) and
   pause only at push, open-PR, merge, and release-tag
-- **Model-agnostic** — the contract works identically across Claude Code, Codex, AmazonQ, CoPIilor, and any successor.; no vendor lock-in in the workflow
+- **Model-agnostic** — the contract works identically across Claude Code, Codex, AmazonQ, Copilot, and any successor — no vendor lock-in in the workflow
 
 *Deep dive: [Agentic Engineering — the full readout](docs/portfolio/agentic-engineering.md)*
 
