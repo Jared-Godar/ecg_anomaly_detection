@@ -29,7 +29,7 @@ An adaptation-extent audit is complete; see [`archive/original_2022/PROVENANCE.m
 
 The `archive/original_2022/images/` directory and historical notebooks contain diagrams, photographs, and background material assembled for the original educational presentation. Their authorship and reuse terms are not consistently recorded.
 
-An attribution audit is complete; see [`archive/original_2022/ATTRIBUTION.md`](archive/original_2022/ATTRIBUTION.md) for the per-file inventory and [`archive/original_2022/PROVENANCE.md`](archive/original_2022/PROVENANCE.md) for the audit method and evidence. Of the 16 images audited, 7 are attributed to a specific external source (Christopher Olah's "Understanding LSTM Networks"), 2 are assessed as author-original, and 7 remain of unresolved provenance — disclosed explicitly rather than guessed at.
+An attribution audit and a maintainer-decided disposition are complete; see [`archive/original_2022/ATTRIBUTION.md`](archive/original_2022/ATTRIBUTION.md) for the per-file inventory and [`archive/original_2022/PROVENANCE.md`](archive/original_2022/PROVENANCE.md) for the audit method and evidence. Of the 16 images audited, 9 are attributed to a specific external source (8 to Christopher Olah's "Understanding LSTM Networks", 1 to a 2021 How-To Geek article), 2 are assessed as author-original, 3 are retained by recorded maintainer decision with provenance unresolved after a dedicated research pass — disclosed explicitly rather than guessed at — and 2 (`ecg.jpeg`, `clinic.jpeg`) were removed from HEAD by the 2026-07-19 disposition, with git history retained.
 
 Regardless of attribution status:
 
@@ -38,7 +38,7 @@ Regardless of attribution status:
 - retain them only as historical project material; and
 - prefer replacement figures generated directly from appropriately licensed data.
 
-The archive's [preservation policy](archive/original_2022/README.md#preservation-policy) excludes replacing or removing archived images. Attribution documentation, not replacement, is how this repository closes the gap for imagery that predates the modernization.
+The archive's [preservation policy](archive/original_2022/README.md#preservation-policy) excludes replacing or removing archived images, apart from the two recorded exceptions removed by the 2026-07-19 disposition noted above. Attribution documentation, not replacement, is how this repository closes the gap for imagery that predates the modernization.
 
 ## Documentation banner images
 
