@@ -13,8 +13,12 @@ Known limitations include:
 - random beat-window splitting that can place records and overlapping windows across train, validation, and test sets;
 - a saved validation cell that compares predictions with themselves;
 - duplicated exploratory code and saved notebook errors; and
-- unresolved provenance for 7 of the 16 presentation images, disclosed explicitly in
-  [`ATTRIBUTION.md`](ATTRIBUTION.md) rather than concealed.
+- historically incomplete image provenance, disclosed explicitly in
+  [`ATTRIBUTION.md`](ATTRIBUTION.md) rather than concealed. Final state after the 2026-07-19
+  research pass and maintainer disposition decision: of the 16 original presentation images,
+  9 attributed / 2 author-original / 3 retained-by-decision / 2 removed. The two removed
+  files (`images/ecg.jpeg`, `images/clinic.jpeg`) remain in git history, and the archived
+  notebooks' references to them now dangle as part of the historical record.
 
 See [historical results](../../docs/historical-results.md) for the evaluation audit and [data provenance](../../docs/data-provenance.md) for dataset licensing and attribution.
 
@@ -37,7 +41,10 @@ See [historical results](../../docs/historical-results.md) for the evaluation au
 
 - Preserve these files rather than modernizing them in place.
 - Record known defects instead of silently changing historical outputs.
-- Keep the bundle together so its existing relative `images/` references continue to resolve.
+- Keep the bundle together so its existing relative `images/` references continue to resolve
+  (two deliberate exceptions: the 2026-07-19 disposition removed `images/ecg.jpeg` and
+  `images/clinic.jpeg` from HEAD, so their notebook references dangle — see
+  [`ATTRIBUTION.md`](ATTRIBUTION.md)).
 - Do not add downloaded ECG recordings, derived CSV files, environments, or model artifacts.
 - Build all supported replacement behavior under `src/`, `notebooks/`, and `tests/` at the repository root.
 

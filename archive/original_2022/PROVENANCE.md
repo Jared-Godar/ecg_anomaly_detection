@@ -100,13 +100,29 @@ below), and this document supplies the fuller attribution the header comment alo
 name, the source repository URL, and the specific functions and values adapted. `wrangle.py` is
 historical archive material only; the supported modern pipeline does not import or reuse it.
 
-## Unresolved provenance
+## Unresolved provenance and disposition
 
 Seven files — `ecg.jpeg`, `clinic.jpeg`, `watch.jpeg`, `labelec_ecg.png`, `thanks.png`, `RNN5.png`,
-and `fft.png` — have no citation, caption, or naming evidence tying them to a specific source. This
-audit does not guess at their origin. They remain historical artifacts of unknown provenance,
-disclosed as such in `ATTRIBUTION.md` and governed by the same non-reuse guidance in `NOTICE.md`
-that already applied to all archive imagery before this audit.
+and `fft.png` — originally had no citation, caption, or naming evidence tying them to a specific
+source, and the initial audit did not guess at their origin. A dedicated provenance research pass
+on 2026-07-19 (PR #258) then resolved two of them to the inventory's confirmed-match standard —
+`RNN5.png` (exact SHA-256 match to Christopher Olah's "Understanding LSTM Networks") and
+`watch.jpeg` (visual match to a 2021 How-To Geek article) — and recorded an honest failed attempt
+for the other five.
 
-If provenance for any of these files is discovered later (for example, from the original author's
-own records), update `ATTRIBUTION.md` and this file rather than the archived notebooks themselves.
+The maintainer's 2026-07-19 disposition decision (recorded in the portfolio program's control
+workspace, a private repo: <https://github.com/Jared-Godar/github-portfolio-modernization/issues/35>)
+then settled those five, bringing the inventory to its final state of
+9 attributed / 2 author-original / 3 retained-by-decision / 2 removed:
+
+- **Retained by decision (3):** `labelec_ecg.png`, `thanks.png`, `fft.png` — low-risk residuals,
+  kept as historical artifacts of unknown provenance: disclosed in `ATTRIBUTION.md`, excluded
+  from the MIT license per `NOTICE.md`, research attempts documented per file.
+- **Removed from HEAD (2):** `ecg.jpeg`, `clinic.jpeg` — unidentifiable stock-style photos whose
+  licensing exposure could not be resolved by attribution. Both intentionally remain in git
+  history (no history rewrite); their `ATTRIBUTION.md` rows are the removal record, and the
+  archived notebooks' references to them now dangle as part of the historical record.
+
+If provenance for any retained or removed file is discovered later (for example, from the original
+author's own records), update `ATTRIBUTION.md` and this file rather than the archived notebooks
+themselves.
