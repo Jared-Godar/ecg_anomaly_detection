@@ -9,9 +9,22 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Added
 
+- CI: recurring full-history secret scan (`full-history-scan.yml`, #264) — runs the
+  `gitleaks` CLI directly over every ref's complete history (`--log-opts="--all"`,
+  `--redact`, `--exit-code 1`) on a weekly schedule and via `workflow_dispatch`,
+  mirroring the pattern landed for the portfolio control workspace under
+  `github-portfolio-modernization#48`. Pinned to `gitleaks` `8.30.1`, matching the
+  existing `quality.yml` and `.pre-commit-config.yaml` pins.
+
 ### Changed
 
 ### Fixed
+
+- CI: corrected a comment in `quality.yml`'s `pre-commit` job that overclaimed the
+  per-push `secrets` job (`gitleaks-action`, event-scoped even with
+  `fetch-depth: 0`) as performing "the full-history secret scan" (#264). The comment
+  now names that job's coverage accurately as incremental/event-scoped and points to
+  `full-history-scan.yml` for the genuine full-history layer.
 
 ### Removed
 
