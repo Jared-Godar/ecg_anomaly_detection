@@ -30,6 +30,8 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Dependencies
 
+- Bump `https://github.com/astral-sh/ruff-pre-commit` from v0.15.20 to 0.15.21 (pre_commit) via Dependabot (#266).
+
 ### Governance
 
 - Metadata gate: the sanctioned non-closing marker can now reference a **pull request**
