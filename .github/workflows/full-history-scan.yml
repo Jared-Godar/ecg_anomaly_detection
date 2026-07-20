@@ -1,0 +1,77 @@
+name: Full-history secret scan
+
+# Recurring full-history secret scan (issue #264). The per-push "Secret scan"
+# job in quality.yml uses gitleaks-action, which scopes its scan to the
+# triggering event's commits even with fetch-depth: 0 — valuable incremental
+# coverage, but NOT a full-history re-scan. This job runs the gitleaks CLI
+# directly over every ref's complete history (`--log-opts=--all`), giving the
+# genuine recurring full-history layer the per-push job's comment used to
+# claim it already delivered. It runs weekly on a schedule and on demand via
+# workflow_dispatch. Findings are redacted — only counts and rule IDs ever
+# reach the logs.
+on:
+  schedule:
+    # Monday 06:00 UTC — low-traffic hour.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-history-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Full-history secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Pinned to match the repo's other gitleaks pins (quality.yml's
+      # gitleaks-action GITLEAKS_VERSION, .pre-commit-config.yaml's hook rev).
+      GITLEAKS_VERSION: 8.30.1
+    steps:
+      - name: Check out complete history
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Report history depth
+        # Makes full-history coverage verifiable at a glance in the run log.
+        run: |
+          echo "Commits reachable from all refs: $(git rev-list --all --count)"
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          # Defensive external call (AGENTS.md): curl --retry retries only
+          # transient failures (timeouts, connection resets, 5xx) with backoff,
+          # while --fail makes permanent errors (404/auth) fail fast without
+          # retry. On exhaustion, emit a clear message naming it an external
+          # condition rather than a repo/setup defect — never a raw error.
+          if ! curl --fail --show-error --silent --location \
+              --retry 4 --retry-max-time 120 --connect-timeout 30 \
+              --output gitleaks.tar.gz "$url"; then
+            echo "::error::Could not download gitleaks ${GITLEAKS_VERSION} — this is an external/connectivity condition, not a repository or setup defect. Re-run the workflow; if it persists, verify the gitleaks ${GITLEAKS_VERSION} linux_x64 release asset is reachable at ${url}." >&2
+            exit 1
+          fi
+          tar -xzf gitleaks.tar.gz gitleaks
+          install -m 0755 gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan complete history (all refs)
+        run: |
+          set -euo pipefail
+          # Direct CLI over every ref's full history — NOT the event-scoped
+          # action used by quality.yml's per-push job. --redact keeps secret
+          # material out of the log (only counts and rule IDs are emitted);
+          # --exit-code 1 fails the run on any finding. A failure here is a
+          # stop-and-report signal, not something to suppress.
+          gitleaks detect \
+            --source . \
+            --log-opts="--all" \
+            --redact \
+            --exit-code 1
