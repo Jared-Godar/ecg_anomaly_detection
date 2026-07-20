@@ -143,7 +143,9 @@ credentials/
 /training2017/
 /training2017.zip
 
-# Generated artifacts and reports
+# Session-specific artifacts and reports
+# Tracked artifacts (executor prompts, ADRs) live in prompts/ and docs/
+# Session artifacts (continuity walkthroughs, PM handoff extracts) go here but are gitignored
 /artifacts/**
 !/artifacts/.gitkeep
 /reports/figures/**
