@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(uv *)",
+      "Bash(python3 *)",
+      "Bash(bash *)",
+      "Bash(fish *)",
+      "Bash(scripts/*)",
+      "Bash(pre-commit *)",
+      "Bash(shellcheck *)",
+      "Bash(actionlint *)",
+      "Bash(gitleaks *)",
+      "Bash(plutil *)",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Skill(artifact-design)",
+      "Skill(artifact-design:*)"
+    ],
+    "defaultMode": "auto",
+    "additionalDirectories": [
+      "/Users/jaredgodar/Developer/portfolio/ecg_anomaly_detection"
+    ]
+  }
+}
