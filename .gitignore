@@ -148,6 +148,9 @@ credentials/
 # Session artifacts (continuity walkthroughs, PM handoff extracts) go here but are gitignored
 /artifacts/**
 !/artifacts/.gitkeep
+
+# Temporary git worktrees
+.claude/worktrees/
 /reports/figures/**
 !/reports/figures/.gitkeep
 !/reports/figures/modern-pipeline-lineage.svg
