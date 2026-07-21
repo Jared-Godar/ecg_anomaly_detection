@@ -68,3 +68,43 @@ A pull request should:
 Any new data workflow should record source version, checksums, configuration, code revision,
 schema version, row counts, and record-level split membership. Tests must use synthetic fixtures or
 inputs with explicit redistribution permission.
+
+## Executor prompts and durable contracts
+
+All executor task specifications (`prompts/*.md`) must begin with an explicit instruction to read and follow durable contracts:
+CLAUDE.md, AGENTS.md, CONTRIBUTING.md, memory files, and GOVERNANCE.md.
+
+This ensures every executor session reads the latest contracts before proceeding. Executor prompts are
+task-specific and can become stale; durable contracts live in version control and evolve with the project.
+
+## Post-merge closure pass
+
+After a pull request is squash-merged via GitHub GUI, perform the following automated cleanup
+(this is a standing contract, not a one-off ask):
+
+1. **Verify merge and issue closure:** Confirm the PR shows as `MERGED` and all linked issues
+   (referenced as `Fixes #N` in the commit message) are `CLOSED`.
+
+2. **Pull main locally:** Fetch and fast-forward your local `main` to match `origin/main`.
+
+   ```fish
+   git fetch origin
+   git switch main
+   git pull --ff-only origin main
+   ```
+
+3. **Delete merged branches:** Prune remote tracking and delete the local topic branch.
+
+   ```fish
+   git fetch --prune
+   git branch -D <branch-name>  # Use -D (not -d) because squash merges break ancestry checks
+   ```
+
+4. **Preserve session artifacts (if using worktrees):** Before removing a worktree, copy any
+   files under `artifacts/walkthroughs/` and `artifacts/session-handoffs/` to the primary checkout.
+
+5. **Produce PM handoff (if applicable):** When the work originated from a PM/spec thread, produce
+   a brief handoff extract (what merged, PR/issue numbers, what's next).
+
+6. **Verify clean state:** Run `git status` to confirm the working tree is clean and session
+   artifacts are gitignored.
