@@ -32,6 +32,7 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 - Bump `astral-sh/setup-uv` from 8.3.1 to 8.3.2 (github_actions) via Dependabot (#267).
 - Bump `https://github.com/astral-sh/ruff-pre-commit` from v0.15.20 to 0.15.21 (pre_commit) via Dependabot (#266).
+- Bump `actions/checkout` from 7.0.0 to 7.0.1 (github_actions) via Dependabot (#276).
 
 ### Governance
 
