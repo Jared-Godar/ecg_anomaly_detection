@@ -35,6 +35,7 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 - Bump `https://github.com/DavidAnson/markdownlint-cli2` from v0.23.0 to 0.23.1 (pre_commit) via Dependabot (#275).
 - Bump `https://github.com/astral-sh/ruff-pre-commit` from v0.15.21 to 0.15.22 (pre_commit) via Dependabot (#275).
 - Bump `https://github.com/woodruffw/zizmor-pre-commit` from v1.26.1 to 1.27.0 (pre_commit) via Dependabot (#275).
+- Bump `jupyterlab` from 4.6.1 to 4.6.2 (uv) via Dependabot (#274).
 
 ### Governance
 
