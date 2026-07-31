@@ -38,6 +38,16 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 
 ### Governance
 
+- Dependabot auto-closure foundation (ADR `docs/adr/0001-dependabot-auto-closure.md`, #278).
+  Added the missing `uv`/python ecosystem block to `.github/dependabot.yml` so Dependabot PRs in
+  that ecosystem arrive with `type:`/`area:` labels and an assignee like the `github-actions` and
+  `pre-commit` blocks already do — the root cause of PR #274 (a jupyterlab **security** patch)
+  sitting red for a week on a missing-metadata gate. Recorded ADR 0001 (the tiered auto-closure
+  design, the five autonomous-merge guardrails, and the rationale for running the Claude audit
+  outside the privileged `pull_request_target` job) and two AGENTS.md commitments: the bounded
+  Dependabot merge waiver (work-item workflow step 9) and "guardrails constrain the agent, not the
+  maintainer."
+
 - Metadata gate: the sanctioned non-closing marker can now reference a **pull request**
   (#244). `validate_project_metadata.py` resolves each marker ref's content type from the
   REST overview it already fetches (the `pull_request` discriminator key on GitHub's issues
