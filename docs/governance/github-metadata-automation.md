@@ -393,7 +393,11 @@ Everything Dependabot can attach natively is configured declaratively rather tha
 - **Labels** (per ecosystem, because the gate requires one `type:*` **and** one `area:*`
   label): the `github-actions` ecosystem gets `dependency: external`, `type: maintenance`, and
   `area: ci-cd`; the `pre-commit` ecosystem gets `dependency: external`, `type: maintenance`,
-  and `area: quality`.
+  and `area: quality`; the `uv` (Python) ecosystem gets `dependency: external`,
+  `type: maintenance`, and `area: repository`. Every PR-opening ecosystem MUST carry a block —
+  a missing block does not mean "no PRs": Dependabot *security* updates open PRs even with no
+  matching `updates` entry, and those inherit no labels/assignee and stall the metadata gate
+  (root cause of PR #274; see [ADR 0001](../adr/0001-dependabot-auto-closure.md)).
 - **Assignee**: `Jared-Godar`, satisfying the gate's assignee requirement.
 - **Milestone**: deliberately none. Bot dependency pull requests are unmilestoned by design — a
   milestone is a delivery commitment ([issue workflow](issue-workflow.md)), and routine
@@ -486,18 +490,30 @@ by the maintainer always wins over the defaults.
 | Workstream | Stewardship | Dependency currency is standing repository stewardship |
 | Issue Type | Technical Debt | Version drift is debt paid down routinely |
 | Priority | Low | Routine grouped bumps; a security advisory escalates manually |
-| Risk | Low | SHA-pinned, gate-validated, human-merged changes |
+| Risk | Low | SHA-pinned, gate-validated changes; auto-merged only within the ADR 0001 guardrail tier |
 | Size | XS | A grouped version bump is the smallest reviewable unit |
-| Repository Area | ci-cd | Both managed ecosystems are CI/quality tooling |
+| Repository Area | ci-cd | Default for the CI-tooling ecosystems (github-actions, pre-commit); the `uv` Python ecosystem instead carries `area: repository` |
 | Portfolio Signal | Operational Maturity | Automated dependency governance is itself the demonstrated signal |
 | Target Release | Stewardship | Unmilestoned by design; tracked in the standing stewardship lane |
 
-### Auto-merge: considered and deferred
+### Auto-merge: accepted under bounded guardrails (ADR 0001)
 
-Issue #193's third scope item — enabling auto-merge for green bot pull requests — was
-considered and **deferred**. No auto-merge is configured: every bot pull request still requires
-the maintainer's explicit merge click, keeping a human decision on every change that reaches
-`main`. Revisiting that decision is tracked separately from this policy.
+Issue #193's third scope item — auto-merge for green bot pull requests — was initially
+**deferred**, then **accepted** on 2026-07-31 (ADR
+[`0001-dependabot-auto-closure.md`](../adr/0001-dependabot-auto-closure.md), #278). A green
+Dependabot pull request is audited for repo-wide and documentation impact, then squash-merged
+**without a maintainer click** when all five guardrails hold: (1) author is `dependabot[bot]`,
+(2) patch or minor bump, (3) changed files ⊆ {lockfiles, `.pre-commit-config.yaml`,
+`.github/workflows/*` action pins, `CHANGELOG.md`}, (4) no tracked doc pins the bumped version,
+(5) no security-audit hook reports a new finding. Any miss → the audit comments what is needed
+and holds for the maintainer; every autonomous merge emits a notification. The waiver is
+recorded in AGENTS.md (work-item workflow step 9) and never extends to human-authored or
+infrastructure pull requests.
+
+Rollout is phased (tracked in #278): the audit, guardrail check, and merge are currently
+performed by an agent **in-session**; full automation — a scheduled routine plus SNS/GitHub
+notification — is the remaining work. **This section is the canonical merge policy and
+supersedes any "deferred" or "requires a manual click" statement elsewhere in the docs.**
 
 ## Creation-time board population (issue #233)
 

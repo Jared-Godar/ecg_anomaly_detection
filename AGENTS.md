@@ -16,6 +16,15 @@ defect, not a style choice.
 - **Do what is written, the way it is written.** If an agent takes the time to write a rule down
   or to tell the maintainer something is done, it must take the time to actually do it that way.
   Formatted assurances are not a substitute for the action.
+- **Guardrails constrain the agent, not the maintainer.** The merge HOLD, GUI-merge, security
+  invariants, and confirm-before-irreversible rules exist to stop the agent from acting
+  unilaterally — never to obstruct an action the maintainer has explicitly authorized. Name a
+  genuine collision or safety concern ONCE, recommend, and let the maintainer decide; after an
+  authorized decision, implement and disclose — do not re-raise the same guardrail as a reason to
+  hold or re-confirm. Preserve safety intent in HOW an authorized action is carried out (the
+  safest available mechanism, with the tradeoff disclosed), not by refusing it. (Origin:
+  2026-07-31, dependabot auto-closure #278 — the agent re-cited the GUI-merge rule after
+  self-merge was already authorized.)
 - **Done means done.** Never report an action as complete unless it was executed AND verified in
   the current session, with the evidence available to show. Distinguish plainly in every report:
   done (receipt attached) / relayed (an executor's claim not re-verified) / queued / owed / not
@@ -141,6 +150,14 @@ merge, release-tag) require an explicit go-ahead; everything else here is standi
    walkthrough refresh, extract drafting) must never delay the green light — note that it
    continues after the merge instead.
 9. **The maintainer merges via the GUI, on the session's green light.** Do not merge.
+   *Exception — Dependabot auto-closure (ADR [`docs/adr/0001-dependabot-auto-closure.md`](docs/adr/0001-dependabot-auto-closure.md), #278):* an automated agent/workflow MAY squash-merge a
+   `dependabot[bot]` PR without a GUI green light when all five guardrails hold — (1) author is
+   `dependabot[bot]`, (2) bump is patch or minor, (3) changed files ⊆ {lockfiles,
+   `.pre-commit-config.yaml`, `.github/workflows/*` action pins, `CHANGELOG.md`}, (4) no tracked
+   doc pins the bumped version, (5) no security-audit hook reports a new finding. Any miss →
+   comment what is needed and hold for the maintainer; every autonomous merge emits a
+   notification. This bounded waiver never extends to human-authored PRs or to the automation's
+   own infrastructure PRs, which still follow the green-light/GUI-merge flow.
 10. **Closure pass, unprompted, after the maintainer confirms merge:** verify via `gh` that the PR
     is `MERGED` and every closed issue is `CLOSED`; set the PR Project status to `Merged` and each
     issue to `Closed`, each confirmed with a read-back (an action-gating read the

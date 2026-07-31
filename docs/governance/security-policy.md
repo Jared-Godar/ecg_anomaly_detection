@@ -61,10 +61,14 @@ promise remediation of archived or superseded states.
 
 ## Dependency risk management
 
-The existing Dependabot configuration manages GitHub Actions and pre-commit
-dependencies. Updates for both ecosystems are grouped weekly and scheduled for
-Monday at 09:00 America/New_York. Security updates take priority over routine
-maintenance updates, while still receiving review and repository validation.
+The existing Dependabot configuration manages GitHub Actions, pre-commit, and uv
+(Python) dependencies. Updates for all three ecosystems are grouped weekly and
+scheduled for Monday at 09:00 America/New_York. Security updates take priority over
+routine maintenance updates, while still receiving review and repository validation.
+Green Dependabot pull requests that meet the ADR 0001 guardrails are audited for
+repo-wide and documentation impact, then auto-merged without a manual click; anything
+outside that guardrail tier is held for the maintainer. See ADR 0001
+([`docs/adr/0001-dependabot-auto-closure.md`](../adr/0001-dependabot-auto-closure.md), #278).
 Dependabot pull requests pass the same required merge gates as human-authored
 changes — their changelog entries and board metadata are supplied by governed
 automation rather than gate exemptions; see [bot-authored pull

@@ -6,6 +6,13 @@ version: 2
 # under the legacy [dependencies, automation] pair. The metadata gate
 # requires BOTH a type:* and an area:* label on every PR, so each entry
 # carries an area label matched to what that ecosystem touches.
+#
+# EVERY ecosystem that can open a PR here must carry labels + assignees. A
+# missing block is not "no updates": Dependabot SECURITY updates open PRs for
+# a manifest even with no matching `updates` entry, and those PRs inherit no
+# labels/assignee, so they fail the metadata gate and stall. That is exactly
+# what happened to PR #274 (jupyterlab security patch, uv ecosystem, no uv
+# block) -- see docs/adr/0001-dependabot-auto-closure.md and issue #278.
 updates:
   - package-ecosystem: github-actions
     directory: /
@@ -35,4 +42,19 @@ updates:
       pre-commit-hooks:
         patterns: ["*"]
     labels: ["dependency: external", "type: maintenance", "area: quality"]
+    assignees: ["Jared-Godar"]
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/New_York
+    cooldown:
+      default-days: 7
+    groups:
+      uv:
+        patterns: ["*"]
+    labels: ["dependency: external", "type: maintenance", "area: repository"]
     assignees: ["Jared-Godar"]
