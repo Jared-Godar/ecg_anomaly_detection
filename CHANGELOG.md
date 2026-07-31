@@ -36,6 +36,11 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 - Bump `https://github.com/astral-sh/ruff-pre-commit` from v0.15.21 to 0.15.22 (pre_commit) via Dependabot (#275).
 - Bump `https://github.com/woodruffw/zizmor-pre-commit` from v1.26.1 to 1.27.0 (pre_commit) via Dependabot (#275).
 - Bump `jupyterlab` from 4.6.1 to 4.6.2 (uv) via Dependabot (#274).
+- Bump `hatchling` to 1.31.0 (uv) via Dependabot (#282).
+- Bump `lightgbm` from 4.6.0 to 4.7.0 (uv) via Dependabot (#282).
+- Bump `matplotlib` from 3.11.0 to 3.11.1 (uv) via Dependabot (#282).
+- Bump `numpy` from 2.5.0 to 2.5.1 (uv) via Dependabot (#282).
+- Bump `pre-commit` from 4.6.0 to 4.6.1 (uv) via Dependabot (#282).
 
 ### Governance
 
