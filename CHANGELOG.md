@@ -39,6 +39,8 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 - Bump `https://github.com/DavidAnson/markdownlint-cli2` from v0.23.1 to 0.23.2 (pre_commit) via Dependabot (#284).
 - Bump `https://github.com/astral-sh/ruff-pre-commit` from v0.15.22 to 0.16.0 (pre_commit) via Dependabot (#284).
 - Bump `https://github.com/woodruffw/zizmor-pre-commit` from v1.27.0 to 1.28.0 (pre_commit) via Dependabot (#284).
+- Bump `actions/checkout` from 7.0.0 to 7.0.1 (github_actions) via Dependabot (#280).
+- Bump `astral-sh/setup-uv` from 8.3.2 to 9.0.0 (github_actions) via Dependabot (#280).
 
 ### Governance
 
