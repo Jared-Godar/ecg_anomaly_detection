@@ -38,6 +38,13 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 - Bump `jupyterlab` from 4.6.1 to 4.6.2 (uv) via Dependabot (#274).
 - Bump `actions/checkout` from 7.0.0 to 7.0.1 (github_actions) via Dependabot (#280).
 - Bump `astral-sh/setup-uv` from 8.3.2 to 9.0.0 (github_actions) via Dependabot (#280).
+- Bump `ipython` from 9.15.0 to 9.16.1 (uv) via Dependabot (#289).
+- Bump `lightgbm` from 4.6.0 to 4.7.0 (uv) via Dependabot (#289).
+- Bump `matplotlib` from 3.11.0 to 3.11.1 (uv) via Dependabot (#289).
+- Bump `nbformat` from 5.10.4 to 5.11.1 (uv) via Dependabot (#289).
+- Bump `numpy` from 2.5.0 to 2.5.2 (uv) via Dependabot (#289).
+- Bump `pre-commit` from 4.6.0 to 4.6.2 (uv) via Dependabot (#289).
+- Bump `xgboost` from 3.3.0 to 3.4.1 (uv) via Dependabot (#289).
 
 ### Governance
 
