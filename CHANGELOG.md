@@ -38,6 +38,7 @@ Keep a Changelog. It does not claim formal compliance with that specification.
 - Bump `jupyterlab` from 4.6.1 to 4.6.2 (uv) via Dependabot (#274).
 - Bump `actions/checkout` from 7.0.0 to 7.0.1 (github_actions) via Dependabot (#280).
 - Bump `astral-sh/setup-uv` from 8.3.2 to 9.0.0 (github_actions) via Dependabot (#280).
+- Bump `multidict` from 6.7.1 to 6.9.1 (uv) via Dependabot (#300).
 
 ### Governance
 
